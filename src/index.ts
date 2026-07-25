@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { URL } from "node:url";
 
@@ -10,6 +11,7 @@ const serverName =
   process.env.MCP_SERVER_NAME ?? "app-creacion-asignaturas";
 const serverVersion =
   process.env.MCP_SERVER_VERSION ?? "1.0.0";
+const formFileUrl = new URL("../public/index.html", import.meta.url);
 
 function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -90,6 +92,17 @@ const httpServer = createServer(async (request, response) => {
       request.url ?? "/",
       `http://${request.headers.host ?? "localhost"}`,
     );
+    if (request.method === "GET" && requestUrl.pathname === "/") {
+      const formHtml = await readFile(formFileUrl, "utf8");
+
+      response.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+
+      response.end(formHtml);
+      return;
+    }
 
     if (request.method === "GET" && requestUrl.pathname === "/health") {
       response.writeHead(200, {
