@@ -1,504 +1,438 @@
-<!doctype html>
+<!DOCTYPE doctype html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
-    <meta
-      name="description"
-      content="Formulario inicial para registrar los datos de una asignatura."
-    />
-    <title>Creación de asignaturas</title>
-
-    <style>
-      :root {
-        color-scheme: light;
-        font-family:
-          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
-        background: #f4f7fa;
-        color: #172b3a;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background:
-          linear-gradient(135deg, rgba(0, 57, 90, 0.08), transparent 45%),
-          #f4f7fa;
-      }
-
-      button,
-      input,
-      select,
-      textarea {
-        font: inherit;
-      }
-
-      .page {
-        width: min(100%, 960px);
-        margin: 0 auto;
-        padding: 32px 20px 48px;
-      }
-
-      .header {
-        margin-bottom: 24px;
-        padding: 28px;
-        border-radius: 18px;
-        background: #00395a;
-        color: #ffffff;
-        box-shadow: 0 14px 34px rgba(0, 57, 90, 0.18);
-      }
-
-      .header__eyebrow {
-        margin: 0 0 8px;
-        color: #f6c344;
-        font-size: 0.82rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-
-      .header h1 {
-        margin: 0;
-        font-size: clamp(1.7rem, 5vw, 2.5rem);
-        line-height: 1.15;
-      }
-
-      .header p {
-        max-width: 700px;
-        margin: 12px 0 0;
-        color: #e7f1f6;
-        line-height: 1.6;
-      }
-
-      .card {
-        padding: 28px;
-        border: 1px solid #d8e2e8;
-        border-radius: 18px;
-        background: #ffffff;
-        box-shadow: 0 12px 30px rgba(31, 54, 70, 0.08);
-      }
-
-      .form-section + .form-section {
-        margin-top: 32px;
-        padding-top: 28px;
-        border-top: 1px solid #e2e9ed;
-      }
-
-      .form-section h2 {
-        margin: 0 0 6px;
-        color: #00395a;
-        font-size: 1.15rem;
-      }
-
-      .form-section__help {
-        margin: 0 0 20px;
-        color: #526675;
-        font-size: 0.92rem;
-        line-height: 1.5;
-      }
-
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 20px;
-      }
-
-      .field {
-        display: flex;
-        flex-direction: column;
-        gap: 7px;
-      }
-
-      .field--full {
-        grid-column: 1 / -1;
-      }
-
-      label {
-        color: #243b4a;
-        font-size: 0.9rem;
-        font-weight: 700;
-      }
-
-      .required {
-        color: #b42318;
-      }
-
-      input,
-      select,
-      textarea {
-        width: 100%;
-        border: 1px solid #aebdc7;
-        border-radius: 10px;
-        background: #ffffff;
-        color: #172b3a;
-        outline: none;
-        transition:
-          border-color 150ms ease,
-          box-shadow 150ms ease;
-      }
-
-      input,
-      select {
-        min-height: 46px;
-        padding: 10px 12px;
-      }
-
-      textarea {
-        min-height: 120px;
-        padding: 12px;
-        line-height: 1.5;
-        resize: vertical;
-      }
-
-      input:focus,
-      select:focus,
-      textarea:focus {
-        border-color: #006fa6;
-        box-shadow: 0 0 0 3px rgba(0, 111, 166, 0.16);
-      }
-
-      .hint {
-        margin: 0;
-        color: #637783;
-        font-size: 0.8rem;
-        line-height: 1.45;
-      }
-
-      .actions {
-        display: flex;
-        align-items: center;
-        justify-content: flex-end;
-        gap: 14px;
-        margin-top: 30px;
-      }
-
-      .button {
-        min-height: 46px;
-        padding: 11px 22px;
-        border: 0;
-        border-radius: 10px;
-        background: #005f8f;
-        color: #ffffff;
-        font-weight: 800;
-        cursor: pointer;
-        transition:
-          background 150ms ease,
-          transform 150ms ease;
-      }
-
-      .button:hover {
-        background: #004d75;
-      }
-
-      .button:active {
-        transform: translateY(1px);
-      }
-
-      .button:focus-visible {
-        outline: 3px solid rgba(0, 111, 166, 0.3);
-        outline-offset: 2px;
-      }
-
-      .status {
-        display: none;
-        margin-top: 22px;
-        padding: 14px 16px;
-        border: 1px solid #8cc9a5;
-        border-radius: 10px;
-        background: #edf9f1;
-        color: #14532d;
-        line-height: 1.5;
-      }
-
-      .status[data-visible="true"] {
-        display: block;
-      }
-
-      @media (max-width: 700px) {
-        .page {
-          padding: 18px 12px 32px;
-        }
-
-        .header,
-        .card {
-          padding: 22px 18px;
-          border-radius: 14px;
-        }
-
-        .grid {
-          grid-template-columns: 1fr;
-        }
-
-        .field--full {
-          grid-column: auto;
-        }
-
-        .actions {
-          align-items: stretch;
-          flex-direction: column;
-        }
-
-        .button {
-          width: 100%;
-        }
-      }
-    </style>
-  </head>
-
-  <body>
-    <main class="page">
-      <header class="header">
-        <p class="header__eyebrow">Diseño académico</p>
-        <h1>Creación de asignaturas</h1>
-        <p>
-          Registre la información académica básica que se utilizará para
-          estructurar y revisar la propuesta de la asignatura.
-        </p>
-      </header>
-
-      <section class="card" aria-labelledby="form-title">
-        <form id="subject-form">
-          <section class="form-section">
-            <h2 id="form-title">1. Identificación de la asignatura</h2>
-            <p class="form-section__help">
-              Complete los datos institucionales y curriculares principales.
-            </p>
-
-            <div class="grid">
-              <div class="field">
-                <label for="level">
-                  Nivel de formación <span class="required">*</span>
-                </label>
-                <select id="level" name="level" required>
-                  <option value="">Seleccione una opción</option>
-                  <option value="grado">Grado</option>
-                  <option value="posgrado">Posgrado</option>
-                  <option value="doctorado">Doctorado</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label for="modality">
-                  Modalidad <span class="required">*</span>
-                </label>
-                <select id="modality" name="modality" required>
-                  <option value="">Seleccione una opción</option>
-                  <option value="presencial">Presencial</option>
-                  <option value="distancia">A distancia</option>
-                  <option value="en-linea">En línea</option>
-                  <option value="semipresencial">Semipresencial</option>
-                  <option value="hibrida">Híbrida</option>
-                </select>
-              </div>
-
-              <div class="field field--full">
-                <label for="faculty">
-                  Facultad <span class="required">*</span>
-                </label>
-                <input
-                  id="faculty"
-                  name="faculty"
-                  type="text"
-                  maxlength="150"
-                  autocomplete="organization"
-                  placeholder="Ejemplo: Facultad de Ciencias Sociales"
-                  required
-                />
-              </div>
-
-              <div class="field field--full">
-                <label for="program">
-                  Carrera o programa <span class="required">*</span>
-                </label>
-                <input
-                  id="program"
-                  name="program"
-                  type="text"
-                  maxlength="150"
-                  placeholder="Ejemplo: Administración de Empresas"
-                  required
-                />
-              </div>
-
-              <div class="field">
-                <label for="subject-code">Código de la asignatura</label>
-                <input
-                  id="subject-code"
-                  name="subjectCode"
-                  type="text"
-                  maxlength="40"
-                  placeholder="Ejemplo: ADM-101"
-                />
-              </div>
-
-              <div class="field">
-                <label for="academic-period">
-                  Periodo académico <span class="required">*</span>
-                </label>
-                <input
-                  id="academic-period"
-                  name="academicPeriod"
-                  type="text"
-                  maxlength="50"
-                  placeholder="Ejemplo: Oct. 2026–Feb. 2027"
-                  required
-                />
-              </div>
-
-              <div class="field field--full">
-                <label for="subject-name">
-                  Nombre de la asignatura <span class="required">*</span>
-                </label>
-                <input
-                  id="subject-name"
-                  name="subjectName"
-                  type="text"
-                  maxlength="180"
-                  placeholder="Ingrese el nombre oficial de la asignatura"
-                  required
-                />
-              </div>
-
-              <div class="field">
-                <label for="weeks">
-                  Número de semanas <span class="required">*</span>
-                </label>
-                <input
-                  id="weeks"
-                  name="weeks"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value="8"
-                  required
-                />
-              </div>
-
-              <div class="field">
-                <label for="credits">Número de créditos</label>
-                <input
-                  id="credits"
-                  name="credits"
-                  type="number"
-                  min="1"
-                  max="30"
-                  step="0.5"
-                  placeholder="Ejemplo: 3"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section class="form-section">
-            <h2>2. Información curricular</h2>
-            <p class="form-section__help">
-              Transcriba la información aprobada en la planificación
-              microcurricular sin modificar su sentido.
-            </p>
-
-            <div class="grid">
-              <div class="field field--full">
-                <label for="learning-outcome">
-                  Resultado de aprendizaje <span class="required">*</span>
-                </label>
-                <textarea
-                  id="learning-outcome"
-                  name="learningOutcome"
-                  maxlength="2000"
-                  placeholder="Copie el resultado de aprendizaje oficial de la asignatura."
-                  required
-                ></textarea>
-                <p class="hint">
-                  Mantenga la redacción oficial del resultado de aprendizaje.
+    <head>
+        <meta charset="utf-8"/>
+        <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+        <meta content="Formulario inicial para registrar los datos de una asignatura." name="description"/>
+        <title>
+            Creación de asignaturas
+        </title>
+        <link href="styles.css" rel="stylesheet"/>
+    </head>
+    <body>
+        <main class="page">
+            <header class="header">
+                <p class="header__eyebrow">
+                    Diseño académico
                 </p>
-              </div>
+                <h1>
+                    Creación de asignaturas
+                </h1>
+                <p>
+                    Registre la información académica básica que se utilizará para estructurar y revisar la propuesta de la asignatura.
+                </p>
+            </header>
+            <section aria-labelledby="form-title" class="card">
+                <form id="subject-form">
+                    <section class="form-section">
+                        <h2 id="form-title">
+                            1. Identificación de la asignatura
+                        </h2>
+                        <p class="form-section__help">
+                            Complete los datos institucionales y curriculares principales.
+                        </p>
+                        <div class="grid">
+                            <div class="field">
+                                <label for="level">
+                                    Nivel de formación
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <select id="level" name="level" required="">
+                                    <option value="">
+                                        Seleccione una opción
+                                    </option>
+                                    <option value="tecnologia">
+                                        Tecnología
+                                    </option>
+                                    <option value="grado">
+                                        Grado
+                                    </option>
+                                    <option value="posgrado">
+                                        Posgrado
+                                    </option>
+                                    <option value="doctorado">
+                                        Doctorado
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="modality">
+                                    Modalidad
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <select disabled="" id="modality" name="modality" required="">
+                                    <option value="">
+                                        Seleccione primero el nivel
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="field field--full">
+                                <label for="faculty">
+                                    Facultad
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <select disabled="" id="faculty" name="faculty" required="">
+                                    <option value="">
+                                        Seleccione primero el nivel y la modalidad
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="field field--full">
+                                <label for="program">
+                                    Carrera o programa
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <select disabled="" id="program" name="program" required="">
+                                    <option value="">
+                                        Seleccione primero una facultad
+                                    </option>
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label for="subject-code">
+                                    Código de la asignatura
+                                </label>
+                                <input id="subject-code" maxlength="40" name="subjectCode" placeholder="Ejemplo: ADM-101" type="text"/>
+                            </div>
+                            <div class="field">
+                                <label for="academic-period">
+                                    Periodo académico
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <input id="academic-period" maxlength="50" name="academicPeriod" placeholder="Ejemplo: Oct. 2026–Feb. 2027" required="" type="text"/>
+                            </div>
+                            <div class="field field--full">
+                                <label for="subject-name">
+                                    Nombre de la asignatura
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <input id="subject-name" maxlength="180" name="subjectName" placeholder="Ingrese el nombre oficial de la asignatura" required="" type="text"/>
+                            </div>
+                            <div class="field">
+                                <label for="weeks">
+                                    Número de semanas
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <input id="weeks" max="20" min="1" name="weeks" required="" type="number" value="8"/>
+                            </div>
+                            <div class="field">
+                                <label for="credits">
+                                    Número de créditos
+                                </label>
+                                <input id="credits" max="30" min="1" name="credits" placeholder="Ejemplo: 3" step="0.5" type="number"/>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="form-section">
+                        <h2>
+                            2. Información curricular
+                        </h2>
+                        <p class="form-section__help">
+                            Transcriba la información aprobada en la planificación microcurricular sin modificar su sentido.
+                        </p>
+                        <div class="grid">
+                            <div class="field field--full">
+                                <label for="learning-outcome">
+                                    Resultado de aprendizaje
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <textarea id="learning-outcome" maxlength="2000" name="learningOutcome" placeholder="Copie el resultado de aprendizaje oficial de la asignatura." required="">
+                                </textarea>
+                                <p class="hint">
+                                    Mantenga la redacción oficial del resultado de aprendizaje.
+                                </p>
+                            </div>
+                            <div class="field field--full">
+                                <label for="contents">
+                                    Unidades y contenidos
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <textarea id="contents" maxlength="6000" name="contents" placeholder="Enumere las unidades, temas y subtemas previstos." required="">
+                                </textarea>
+                            </div>
+                            <div class="field field--full">
+                                <label for="methodology">
+                                    Metodología de aprendizaje
+                                    <span class="required">
+                                        *
+                                    </span>
+                                </label>
+                                <textarea id="methodology" maxlength="3000" name="methodology" placeholder="Describa la metodología activa o estrategia didáctica seleccionada." required="">
+                                </textarea>
+                            </div>
+                            <div class="field field--full">
+                                <label for="bibliography">
+                                    Bibliografía disponible
+                                </label>
+                                <textarea id="bibliography" maxlength="6000" name="bibliography" placeholder="Ingrese las referencias bibliográficas disponibles, preferentemente en formato APA.">
+                                </textarea>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="actions">
+                        <button class="button" type="submit">
+                            Revisar información
+                        </button>
+                    </div>
+                    <div aria-live="polite" class="status" id="form-status" role="status">
+                        La información obligatoria está completa y preparada para su revisión.
+                    </div>
+                </form>
+            </section>
+            <section aria-labelledby="review-title" class="review-panel" hidden="" id="review-panel">
+                <header class="review-panel__header">
+                    <p class="header__eyebrow">
+                        Verificación previa
+                    </p>
+                    <h2 id="review-title">
+                        Resumen de la asignatura
+                    </h2>
+                    <p>
+                        Revise la información antes de enviarla al par académico.
+                    </p>
+                </header>
+                <dl class="review-summary" id="review-summary">
+                </dl>
+                <div class="review-panel__actions">
+                    <button class="button button--secondary" id="edit-information" type="button">
+                        Volver y corregir
+                    </button>
+                    <button class="button" id="confirm-review" type="button">
+                        Confirmar y enviar a revisión
+                    </button>
+                </div>
+            </section>
+            <section
+  id="generation-panel"
+  class="generation-panel"
+  aria-labelledby="generation-title"
+  hidden
+>
+  <header class="generation-panel__header">
+    <p class="header__eyebrow">Elaboración docente</p>
+    <h2 id="generation-title">Generación de contenidos</h2>
+    <p>
+      Los contenidos se generarán progresivamente, una semana a la vez,
+      para permitir su revisión, ajuste y aprobación docente.
+    </p>
+  </header>
 
-              <div class="field field--full">
-                <label for="contents">
-                  Unidades y contenidos <span class="required">*</span>
-                </label>
-                <textarea
-                  id="contents"
-                  name="contents"
-                  maxlength="6000"
-                  placeholder="Enumere las unidades, temas y subtemas previstos."
-                  required
-                ></textarea>
-              </div>
+  <div class="generation-progress">
+    <div>
+      <span class="generation-progress__label">Progreso</span>
+      <strong id="generation-progress-text">
+        0 semanas aprobadas
+      </strong>
+    </div>
 
-              <div class="field field--full">
-                <label for="methodology">
-                  Metodología de aprendizaje <span class="required">*</span>
-                </label>
-                <textarea
-                  id="methodology"
-                  name="methodology"
-                  maxlength="3000"
-                  placeholder="Describa la metodología activa o estrategia didáctica seleccionada."
-                  required
-                ></textarea>
-              </div>
+    <div
+      class="generation-progress__track"
+      role="progressbar"
+      aria-valuemin="0"
+      aria-valuemax="100"
+      aria-valuenow="0"
+    >
+      <span id="generation-progress-bar"></span>
+    </div>
+  </div>
 
-              <div class="field field--full">
-                <label for="bibliography">Bibliografía disponible</label>
-                <textarea
-                  id="bibliography"
-                  name="bibliography"
-                  maxlength="6000"
-                  placeholder="Ingrese las referencias bibliográficas disponibles, preferentemente en formato APA."
-                ></textarea>
-              </div>
-            </div>
-          </section>
+  <article class="week-workspace">
+    <header class="week-workspace__header">
+      <div>
+        <p class="week-workspace__eyebrow">Semana actual</p>
+        <h3 id="current-week-title">Semana 1</h3>
+      </div>
 
-          <div class="actions">
-            <button class="button" type="submit">
-              Revisar información
-            </button>
-          </div>
+      <span
+        class="workflow-step__status workflow-step__status--active"
+      >
+        Pendiente de generación
+      </span>
+    </header>
 
-          <div
-            id="form-status"
-            class="status"
-            role="status"
-            aria-live="polite"
-          >
-            La información obligatoria está completa y preparada para su
-            revisión.
-          </div>
-        </form>
-      </section>
-    </main>
+    <div id="week-content" class="week-content">
+      <p>
+        La información de la asignatura está lista. En el siguiente paso
+        se conectará este espacio con el servicio encargado de generar los
+        contenidos de la primera semana.
+      </p>
+    </div>
 
-    <script>
-      const form = document.querySelector("#subject-form");
-      const status = document.querySelector("#form-status");
+    <div class="week-workspace__actions">
+      <button
+        id="return-to-review"
+        class="button button--secondary"
+        type="button"
+      >
+        Volver al resumen
+      </button>
 
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-
-        if (!form.reportValidity()) {
-          return;
-        }
-
-        status.dataset.visible = "true";
-        status.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-        });
-      });
-
-      form.addEventListener("input", () => {
-        status.dataset.visible = "false";
-      });
-    </script>
-  </body>
+      <button id="generate-week" class="button" type="button">
+        Generar semana 1
+      </button>
+    </div>
+  </article>
+</section>
+            <section aria-labelledby="workflow-title" class="workflow">
+                <header class="workflow__header">
+                    <p class="header__eyebrow">
+                        Flujo institucional
+                    </p>
+                    <h2 id="workflow-title">
+                        Revisión y aprobación de la asignatura
+                    </h2>
+                    <p>
+                        La propuesta avanzará por seis etapas de elaboración, revisión, aprobación y seguimiento institucional.
+                    </p>
+                </header>
+                <ol class="workflow__steps">
+                    <li class="workflow-step workflow-step--active">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            1
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Elaboración docente
+                                </h3>
+                                <span class="workflow-step__status workflow-step__status--active">
+                                    Etapa actual
+                                </span>
+                            </div>
+                            <p>
+                                El docente registra la identificación de la asignatura, la información curricular y los demás elementos requeridos para iniciar el proceso.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Responsable: docente
+                            </p>
+                        </div>
+                    </li>
+                    <li class="workflow-step">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            2
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Revisión del par académico
+                                </h3>
+                                <span class="workflow-step__status">
+                                    Pendiente
+                                </span>
+                            </div>
+                            <p>
+                                El par académico verifica la coherencia disciplinar, la pertinencia de los contenidos y la alineación entre los resultados de aprendizaje y la metodología.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Responsable: par académico
+                            </p>
+                        </div>
+                    </li>
+                    <li class="workflow-step">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            3
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Revisión del Equipo de Calidad
+                                </h3>
+                                <span class="workflow-step__status">
+                                    Pendiente
+                                </span>
+                            </div>
+                            <p>
+                                El Equipo de Calidad comprueba el cumplimiento de los criterios académicos, curriculares y metodológicos establecidos institucionalmente.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Responsable: Equipo de Calidad
+                            </p>
+                        </div>
+                    </li>
+                    <li class="workflow-step">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            4
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Aprobación de la Dirección de la carrera
+                                </h3>
+                                <span class="workflow-step__status">
+                                    Pendiente
+                                </span>
+                            </div>
+                            <p>
+                                La Dirección de la carrera revisa los resultados de las etapas anteriores y formaliza la aprobación académica de la asignatura.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Responsable: Dirección de la carrera
+                            </p>
+                        </div>
+                    </li>
+                    <li class="workflow-step">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            5
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Revisión de la DIITEP
+                                </h3>
+                                <span class="workflow-step__status">
+                                    Pendiente
+                                </span>
+                            </div>
+                            <p>
+                                La DIITEP revisa la propuesta desde la perspectiva de la innovación, el diseño tecnopedagógico y la adecuada incorporación de recursos educativos.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Responsable: DIITEP
+                            </p>
+                        </div>
+                    </li>
+                    <li class="workflow-step">
+                        <div aria-hidden="true" class="workflow-step__number">
+                            6
+                        </div>
+                        <div class="workflow-step__content">
+                            <div class="workflow-step__heading">
+                                <h3>
+                                    Registro y seguimiento
+                                </h3>
+                                <span class="workflow-step__status">
+                                    Pendiente
+                                </span>
+                            </div>
+                            <p>
+                                La versión aprobada se registra para su implementación, consulta institucional y seguimiento durante el periodo académico correspondiente.
+                            </p>
+                            <p class="workflow-step__responsible">
+                                Resultado: asignatura aprobada y registrada
+                            </p>
+                        </div>
+                    </li>
+                </ol>
+            </section>
+        </main>
+        <script src="app.js" defer></script>
+    </body>
 </html>
