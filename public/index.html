@@ -1,438 +1,368 @@
-<!DOCTYPE doctype html>
+<!doctype html>
 <html lang="es">
-    <head>
-        <meta charset="utf-8"/>
-        <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-        <meta content="Formulario inicial para registrar los datos de una asignatura." name="description"/>
-        <title>
-            Creación de asignaturas
-        </title>
-        <link href="styles.css" rel="stylesheet"/>
-    </head>
-    <body>
-        <main class="page">
-            <header class="header">
-                <p class="header__eyebrow">
-                    Diseño académico
-                </p>
-                <h1>
-                    Creación de asignaturas
-                </h1>
-                <p>
-                    Registre la información académica básica que se utilizará para estructurar y revisar la propuesta de la asignatura.
-                </p>
-            </header>
-            <section aria-labelledby="form-title" class="card">
-                <form id="subject-form">
-                    <section class="form-section">
-                        <h2 id="form-title">
-                            1. Identificación de la asignatura
-                        </h2>
-                        <p class="form-section__help">
-                            Complete los datos institucionales y curriculares principales.
-                        </p>
-                        <div class="grid">
-                            <div class="field">
-                                <label for="level">
-                                    Nivel de formación
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <select id="level" name="level" required="">
-                                    <option value="">
-                                        Seleccione una opción
-                                    </option>
-                                    <option value="tecnologia">
-                                        Tecnología
-                                    </option>
-                                    <option value="grado">
-                                        Grado
-                                    </option>
-                                    <option value="posgrado">
-                                        Posgrado
-                                    </option>
-                                    <option value="doctorado">
-                                        Doctorado
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="modality">
-                                    Modalidad
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <select disabled="" id="modality" name="modality" required="">
-                                    <option value="">
-                                        Seleccione primero el nivel
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="field field--full">
-                                <label for="faculty">
-                                    Facultad
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <select disabled="" id="faculty" name="faculty" required="">
-                                    <option value="">
-                                        Seleccione primero el nivel y la modalidad
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="field field--full">
-                                <label for="program">
-                                    Carrera o programa
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <select disabled="" id="program" name="program" required="">
-                                    <option value="">
-                                        Seleccione primero una facultad
-                                    </option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label for="subject-code">
-                                    Código de la asignatura
-                                </label>
-                                <input id="subject-code" maxlength="40" name="subjectCode" placeholder="Ejemplo: ADM-101" type="text"/>
-                            </div>
-                            <div class="field">
-                                <label for="academic-period">
-                                    Periodo académico
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <input id="academic-period" maxlength="50" name="academicPeriod" placeholder="Ejemplo: Oct. 2026–Feb. 2027" required="" type="text"/>
-                            </div>
-                            <div class="field field--full">
-                                <label for="subject-name">
-                                    Nombre de la asignatura
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <input id="subject-name" maxlength="180" name="subjectName" placeholder="Ingrese el nombre oficial de la asignatura" required="" type="text"/>
-                            </div>
-                            <div class="field">
-                                <label for="weeks">
-                                    Número de semanas
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <input id="weeks" max="20" min="1" name="weeks" required="" type="number" value="8"/>
-                            </div>
-                            <div class="field">
-                                <label for="credits">
-                                    Número de créditos
-                                </label>
-                                <input id="credits" max="30" min="1" name="credits" placeholder="Ejemplo: 3" step="0.5" type="number"/>
-                            </div>
-                        </div>
-                    </section>
-                    <section class="form-section">
-                        <h2>
-                            2. Información curricular
-                        </h2>
-                        <p class="form-section__help">
-                            Transcriba la información aprobada en la planificación microcurricular sin modificar su sentido.
-                        </p>
-                        <div class="grid">
-                            <div class="field field--full">
-                                <label for="learning-outcome">
-                                    Resultado de aprendizaje
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <textarea id="learning-outcome" maxlength="2000" name="learningOutcome" placeholder="Copie el resultado de aprendizaje oficial de la asignatura." required="">
-                                </textarea>
-                                <p class="hint">
-                                    Mantenga la redacción oficial del resultado de aprendizaje.
-                                </p>
-                            </div>
-                            <div class="field field--full">
-                                <label for="contents">
-                                    Unidades y contenidos
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <textarea id="contents" maxlength="6000" name="contents" placeholder="Enumere las unidades, temas y subtemas previstos." required="">
-                                </textarea>
-                            </div>
-                            <div class="field field--full">
-                                <label for="methodology">
-                                    Metodología de aprendizaje
-                                    <span class="required">
-                                        *
-                                    </span>
-                                </label>
-                                <textarea id="methodology" maxlength="3000" name="methodology" placeholder="Describa la metodología activa o estrategia didáctica seleccionada." required="">
-                                </textarea>
-                            </div>
-                            <div class="field field--full">
-                                <label for="bibliography">
-                                    Bibliografía disponible
-                                </label>
-                                <textarea id="bibliography" maxlength="6000" name="bibliography" placeholder="Ingrese las referencias bibliográficas disponibles, preferentemente en formato APA.">
-                                </textarea>
-                            </div>
-                        </div>
-                    </section>
-                    <div class="actions">
-                        <button class="button" type="submit">
-                            Revisar información
-                        </button>
-                    </div>
-                    <div aria-live="polite" class="status" id="form-status" role="status">
-                        La información obligatoria está completa y preparada para su revisión.
-                    </div>
-                </form>
-            </section>
-            <section aria-labelledby="review-title" class="review-panel" hidden="" id="review-panel">
-                <header class="review-panel__header">
-                    <p class="header__eyebrow">
-                        Verificación previa
-                    </p>
-                    <h2 id="review-title">
-                        Resumen de la asignatura
-                    </h2>
-                    <p>
-                        Revise la información antes de enviarla al par académico.
-                    </p>
-                </header>
-                <dl class="review-summary" id="review-summary">
-                </dl>
-                <div class="review-panel__actions">
-                    <button class="button button--secondary" id="edit-information" type="button">
-                        Volver y corregir
-                    </button>
-                    <button class="button" id="confirm-review" type="button">
-                        Confirmar y enviar a revisión
-                    </button>
-                </div>
-            </section>
-            <section
-  id="generation-panel"
-  class="generation-panel"
-  aria-labelledby="generation-title"
-  hidden
->
-  <header class="generation-panel__header">
-    <p class="header__eyebrow">Elaboración docente</p>
-    <h2 id="generation-title">Generación de contenidos</h2>
-    <p>
-      Los contenidos se generarán progresivamente, una semana a la vez,
-      para permitir su revisión, ajuste y aprobación docente.
-    </p>
-  </header>
-
-  <div class="generation-progress">
-    <div>
-      <span class="generation-progress__label">Progreso</span>
-      <strong id="generation-progress-text">
-        0 semanas aprobadas
-      </strong>
-    </div>
-
-    <div
-      class="generation-progress__track"
-      role="progressbar"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      aria-valuenow="0"
-    >
-      <span id="generation-progress-bar"></span>
-    </div>
-  </div>
-
-  <article class="week-workspace">
-    <header class="week-workspace__header">
-      <div>
-        <p class="week-workspace__eyebrow">Semana actual</p>
-        <h3 id="current-week-title">Semana 1</h3>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Generador institucional de guías didácticas.">
+  <title>Generador de Guías Didácticas</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/editor-rich.css">
+</head>
+<body>
+  <div class="auth-layer" id="auth-layer">
+    <section class="auth-card">
+      <p class="eyebrow">Acceso institucional</p>
+      <h1>Generador de Guías Didácticas</h1>
+      <div class="auth-tabs">
+        <button type="button" class="active" data-auth-tab="login">Iniciar sesión</button>
+        <button type="button" data-auth-tab="register">Registrarse</button>
       </div>
+      <form id="login-form" class="auth-form">
+        <label>Correo electrónico<input name="email" type="email" required></label>
+        <label>Contraseña<input name="password" type="password" required></label>
+        <button class="button" type="submit">Ingresar</button>
+      </form>
+      <form id="register-form" class="auth-form hidden">
+        <div class="grid">
+          <label>Nombre<input name="firstName" required></label>
+          <label>Apellido<input name="lastName" required></label>
+          <label>Cédula<input name="nationalId" required></label>
+          <label>Correo<input name="email" type="email" required></label>
+        </div>
+        <label>Contraseña<input name="password" type="password" minlength="8" required></label>
+        <small>El registro individual asigna automáticamente el rol Profesor.</small>
+        <button class="button" type="submit">Crear cuenta</button>
+      </form>
+      <p id="auth-message" class="auth-message hidden"></p>
+    </section>
+  </div>
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">◇</span><strong>GGD</strong></div>
+    <nav aria-label="Navegación principal">
+      <button class="nav active" id="nav-home">⌂ <span>Inicio</span></button>
+      <button class="nav" id="nav-projects">□ <span>Mis proyectos</span></button>
+      <button class="nav hidden" id="nav-admin">⚙ <span>Administración</span></button>
+      <button class="nav" id="nav-templates">▤ <span>Plantillas</span></button>
+      <button class="nav" id="nav-help">? <span>Ayuda</span></button>
+    </nav>
+  </aside>
 
-      <span
-        class="workflow-step__status workflow-step__status--active"
-      >
-        Pendiente de generación
-      </span>
+  <main class="workspace">
+    <header class="topbar">
+      <div class="product"><i></i>Generador de Guías Didácticas</div>
+      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="logout" class="logout" type="button">Salir</button></div>
     </header>
 
-    <div id="week-content" class="week-content">
-      <p>
-        La información de la asignatura está lista. En el siguiente paso
-        se conectará este espacio con el servicio encargado de generar los
-        contenidos de la primera semana.
-      </p>
-    </div>
+    <section class="content" id="main-content">
+      <div class="heading">
+        <div><p class="eyebrow">Panel principal</p><h1>Proyectos académicos</h1><p>Cree y revise sus guías didácticas con trazabilidad por semana.</p></div>
+        <button class="button secondary" id="new-project">＋ Nuevo proyecto</button>
+      </div>
 
-    <div class="week-workspace__actions">
-      <button
-        id="return-to-review"
-        class="button button--secondary"
-        type="button"
-      >
-        Volver al resumen
-      </button>
+      <section class="projects-panel" aria-labelledby="projects-title">
+        <div class="projects-toolbar">
+          <div>
+            <h2 id="projects-title">Mis proyectos</h2>
+            <p>Retome o consulte las guías almacenadas.</p>
+          </div>
+          <label class="project-search">
+            <span class="sr-only">Buscar proyectos</span>
+            <input id="project-search" type="search" placeholder="Buscar por profesor, asignatura o código">
+          </label>
+        </div>
+        <div id="projects-list" class="projects-list" aria-live="polite">
+          <p class="projects-empty">Cargando proyectos…</p>
+        </div>
+      </section>
+    </section>
 
-      <button id="generate-week" class="button" type="button">
-        Generar semana 1
-      </button>
-    </div>
-  </article>
-</section>
-            <section aria-labelledby="workflow-title" class="workflow">
-                <header class="workflow__header">
-                    <p class="header__eyebrow">
-                        Flujo institucional
-                    </p>
-                    <h2 id="workflow-title">
-                        Revisión y aprobación de la asignatura
-                    </h2>
-                    <p>
-                        La propuesta avanzará por seis etapas de elaboración, revisión, aprobación y seguimiento institucional.
-                    </p>
-                </header>
-                <ol class="workflow__steps">
-                    <li class="workflow-step workflow-step--active">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            1
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Elaboración docente
-                                </h3>
-                                <span class="workflow-step__status workflow-step__status--active">
-                                    Etapa actual
-                                </span>
-                            </div>
-                            <p>
-                                El docente registra la identificación de la asignatura, la información curricular y los demás elementos requeridos para iniciar el proceso.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Responsable: docente
-                            </p>
-                        </div>
-                    </li>
-                    <li class="workflow-step">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            2
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Revisión del par académico
-                                </h3>
-                                <span class="workflow-step__status">
-                                    Pendiente
-                                </span>
-                            </div>
-                            <p>
-                                El par académico verifica la coherencia disciplinar, la pertinencia de los contenidos y la alineación entre los resultados de aprendizaje y la metodología.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Responsable: par académico
-                            </p>
-                        </div>
-                    </li>
-                    <li class="workflow-step">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            3
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Revisión del Equipo de Calidad
-                                </h3>
-                                <span class="workflow-step__status">
-                                    Pendiente
-                                </span>
-                            </div>
-                            <p>
-                                El Equipo de Calidad comprueba el cumplimiento de los criterios académicos, curriculares y metodológicos establecidos institucionalmente.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Responsable: Equipo de Calidad
-                            </p>
-                        </div>
-                    </li>
-                    <li class="workflow-step">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            4
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Aprobación de la Dirección de la carrera
-                                </h3>
-                                <span class="workflow-step__status">
-                                    Pendiente
-                                </span>
-                            </div>
-                            <p>
-                                La Dirección de la carrera revisa los resultados de las etapas anteriores y formaliza la aprobación académica de la asignatura.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Responsable: Dirección de la carrera
-                            </p>
-                        </div>
-                    </li>
-                    <li class="workflow-step">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            5
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Revisión de la DIITEP
-                                </h3>
-                                <span class="workflow-step__status">
-                                    Pendiente
-                                </span>
-                            </div>
-                            <p>
-                                La DIITEP revisa la propuesta desde la perspectiva de la innovación, el diseño tecnopedagógico y la adecuada incorporación de recursos educativos.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Responsable: DIITEP
-                            </p>
-                        </div>
-                    </li>
-                    <li class="workflow-step">
-                        <div aria-hidden="true" class="workflow-step__number">
-                            6
-                        </div>
-                        <div class="workflow-step__content">
-                            <div class="workflow-step__heading">
-                                <h3>
-                                    Registro y seguimiento
-                                </h3>
-                                <span class="workflow-step__status">
-                                    Pendiente
-                                </span>
-                            </div>
-                            <p>
-                                La versión aprobada se registra para su implementación, consulta institucional y seguimiento durante el periodo académico correspondiente.
-                            </p>
-                            <p class="workflow-step__responsible">
-                                Resultado: asignatura aprobada y registrada
-                            </p>
-                        </div>
-                    </li>
-                </ol>
-            </section>
-        </main>
-        <script src="app.js" defer></script>
-    </body>
+    <section class="content hidden" id="admin-content">
+      <div class="heading">
+        <div><p class="eyebrow">Gestión institucional</p><h1>Administración</h1><p>Usuarios, asignaciones, configuración de IA y seguimiento de guías.</p></div>
+        <button class="button secondary" id="refresh-admin" type="button">Actualizar datos</button>
+      </div>
+      <div class="admin-tabs" role="tablist">
+        <button class="active" data-admin-tab="users">Usuarios</button>
+        <button data-admin-tab="assignments">Asignaciones</button>
+        <button data-admin-tab="knowledge">Conocimiento e IA</button>
+        <button data-admin-tab="reports">Reporte de guías</button>
+      </div>
+
+      <section class="admin-panel active" data-admin-panel="users">
+        <div class="admin-grid">
+          <form class="admin-card" id="admin-user-form">
+            <h2 id="admin-user-form-title">Crear usuario</h2>
+            <input name="userId" id="admin-user-id" type="hidden">
+            <div class="grid">
+              <label>Nombre<input name="firstName" required></label>
+              <label>Apellido<input name="lastName" required></label>
+              <label>Cédula<input name="nationalId" required></label>
+              <label>Correo<input name="email" type="email" required></label>
+            </div>
+            <label>Roles<select name="roleCodes" id="admin-user-roles" multiple required></select><small>Use Cmd/Ctrl para seleccionar varios roles.</small></label>
+            <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="8" placeholder="El sistema puede generarla"></label>
+            <div class="form-actions"><button class="button" id="admin-user-submit" type="submit">Crear usuario</button><button class="button secondary hidden" id="admin-user-cancel" type="button">Cancelar edición</button></div>
+          </form>
+          <form class="admin-card" id="bulk-user-form">
+            <h2>Registro masivo</h2>
+            <p>Cargue Excel o CSV con: Nombre, Apellido, Cédula, Correo y Rol.</p>
+            <input id="bulk-users-file" type="file" accept=".xlsx,.csv" required>
+            <button class="button" type="submit">Registrar archivo</button>
+          </form>
+        </div>
+        <div class="admin-card">
+          <div class="table-toolbar"><h2>Usuarios registrados</h2><input id="admin-user-search" type="search" placeholder="Buscar por nombre, cédula o correo"></div>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Usuario</th><th>Cédula</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-users-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="assignments">
+        <form class="admin-card" id="assignment-form">
+          <h2>Asignar profesor a asignatura y periodo</h2>
+          <div class="grid">
+            <label>Profesor<select name="teacherId" id="assignment-teacher" required></select></label>
+            <label>Carrera<select name="career" id="assignment-career" required><option value="">Seleccione una carrera</option></select></label>
+            <label>Asignatura<select name="courseId" id="assignment-course" required><option value="">Seleccione primero una carrera</option></select></label>
+            <label class="hidden" id="new-course-code-wrap">Código de asignatura nueva<input name="subjectCode" id="assignment-code"></label>
+            <label class="hidden" id="new-course-name-wrap">Nombre de asignatura nueva<input name="subjectName" id="assignment-name"></label>
+            <label>Periodo académico<select name="periodId" id="assignment-period" required><option value="">Seleccione un periodo</option></select></label>
+            <label>Guía finalizada como base<select name="sourceProjectId" id="assignment-source"><option value="">Crear guía nueva</option></select></label>
+          </div>
+          <button class="button" type="submit">Guardar asignación</button>
+        </form>
+        <div class="admin-card"><h2>Asignaciones vigentes</h2><div id="assignment-list" class="assignment-list"></div></div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="knowledge">
+        <div class="admin-grid">
+          <form class="admin-card" id="instruction-form">
+            <h2>Especificaciones funcionales</h2>
+            <p>Defina el contexto de aplicación. Facultad y Carrera no forman parte del ámbito.</p>
+            <label>Versión existente<select id="instruction-selector"><option value="">Nueva instrucción</option></select></label>
+            <label>Clave<input name="key" required placeholder="general"></label>
+            <label>Título<input name="title" required></label>
+            <label>Prioridad<input name="priority" type="number" min="1" max="999" value="100" required></label>
+            <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
+            <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
+            <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
+            <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
+            <p class="field-help">Deje un ámbito vacío para que la especificación sea compatible con cualquier valor de ese campo.</p>
+            <label>Contenido<textarea name="content" required minlength="20"></textarea></label>
+            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
+            <div class="inline-actions"><button class="button secondary" type="button" data-impact-kind="SPECIFICATION">Analizar impacto</button><button class="button" type="submit" disabled>Guardar nueva versión</button></div>
+            <div class="impact-result hidden" data-impact-result="SPECIFICATION"></div>
+          </form>
+          <form class="admin-card" id="knowledge-form">
+            <h2>Documentos institucionales para la IA</h2>
+            <p>La versión activa de cada documento se incorpora automáticamente en las nuevas generaciones.</p>
+            <p class="field-help">Los indicadores ya no se administran como documento: utilice la fuente oficial «Indicadores generales de la guía».</p>
+            <label>Archivo existente<select id="knowledge-selector"><option value="">Nuevo archivo</option></select></label>
+            <label>Clave<input name="key" required placeholder="normas-apa"></label>
+            <label>Título<input name="title" required></label>
+            <label>Prioridad de aplicación<input name="priority" type="number" min="1" max="999" value="100" required></label>
+            <label class="confirm"><input name="appliesToAll" type="checkbox" checked> Aplicar a todos los contenidos</label>
+            <div data-document-scope>
+              <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
+              <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
+              <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
+              <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
+            </div>
+            <label>Contenido editable (Markdown)<textarea name="contentMarkdown" id="knowledge-content" required minlength="1" rows="18" placeholder="# Título&#10;&#10;Escriba o cargue aquí el contenido institucional."></textarea></label>
+            <label>Reemplazar desde archivo .txt o .md<input name="file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
+            <p class="field-help">El archivo es opcional. Al seleccionarlo, su texto se cargará en el editor. El original se conserva como respaldo de la nueva versión.</p>
+            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
+            <div class="inline-actions">
+              <button class="button secondary" type="button" data-impact-kind="DOCUMENT">Analizar impacto</button>
+              <button class="button" type="submit" disabled>Guardar como nueva versión</button>
+              <button class="button secondary hidden" id="activate-knowledge-version" type="button">Activar esta versión</button>
+              <a class="button secondary hidden" id="download-knowledge-original" href="#">Descargar original</a>
+            </div>
+            <div class="impact-result hidden" data-impact-result="DOCUMENT"></div>
+          </form>
+        </div>
+        <div class="admin-card"><h2>Versiones registradas</h2><div id="ai-version-list" class="assignment-list"></div></div>
+        <div class="admin-card" id="indicator-form">
+          <h2>Indicadores generales de la guía</h2>
+          <p>Esta es la fuente oficial única: la versión activa se aplica tanto a la generación con IA como a las nuevas listas de cotejo. Las revisiones iniciadas conservan su versión original.</p>
+          <div class="table-toolbar">
+            <label>Responsable<select id="indicator-stage-filter"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
+            <button class="button" id="new-indicator" type="button">Crear nuevo indicador</button>
+          </div>
+          <p class="field-help" id="indicator-weight-summary"></p>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Indicador</th><th>Descripción</th><th>Puntuación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="indicator-table-body"></tbody></table></div>
+          <form id="indicator-editor" class="indicator-editor hidden">
+            <input name="id" type="hidden">
+            <h3 id="indicator-editor-title">Crear indicador</h3>
+            <label>Indicador<input name="name" required minlength="3" maxlength="250"></label>
+            <label>Descripción<textarea name="description" required minlength="3" maxlength="2000"></textarea></label>
+            <label>Puntuación<input name="score" type="number" min="0.01" max="100" step="0.01" required></label>
+            <div class="form-actions"><button class="button" type="submit">Guardar y redistribuir</button><button class="button secondary" id="cancel-indicator" type="button">Cancelar</button></div>
+          </form>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="reports">
+        <div id="guide-summary" class="report-cards"></div>
+        <div class="admin-card">
+          <div class="table-toolbar"><h2>Estado de guías</h2><input id="guide-report-search" type="search" placeholder="Buscar por profesor, asignatura, código o periodo"></div>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Guía</th><th>Profesor</th><th>Periodo</th><th>Progreso</th><th>Estado</th><th>Actualización</th></tr></thead><tbody id="guide-report-body"></tbody></table></div>
+        </div>
+        <div class="admin-card">
+          <h2>Listas de cotejo institucionales</h2>
+          <p>Cada guía conserva la versión de indicadores utilizada por el Par académico, el Equipo de calidad y DIITEP.</p>
+          <label>Guía<select id="checklist-project"><option value="">Seleccione una guía</option></select></label>
+          <label>Etapa<select id="checklist-stage"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
+          <button class="button secondary" id="load-checklist" type="button">Abrir lista de cotejo</button>
+          <form id="checklist-form" class="hidden">
+            <div id="checklist-score" class="score-summary" aria-live="polite"></div>
+            <div id="checklist-items" class="checklist-items"></div>
+            <label>Observación general<textarea name="generalObservation"></textarea></label>
+            <div class="form-actions"><button class="button secondary" name="decision" value="DRAFT">Guardar borrador</button><button class="button secondary" name="decision" value="CHANGES_REQUESTED">Solicitar cambios</button><button class="button approve" name="decision" value="APPROVED">Aprobar</button></div>
+          </form>
+        </div>
+      </section>
+      <p id="admin-message" class="admin-message hidden" role="status"></p>
+    </section>
+  </main>
+
+  <div class="overlay hidden" id="wizard-layer">
+    <section class="wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
+      <header class="wizard-header">
+        <div><p class="eyebrow">Nuevo proyecto</p><h2 id="wizard-title">Configure una guía didáctica</h2></div>
+        <button class="icon-button" id="close-wizard" aria-label="Cerrar">×</button>
+      </header>
+      <div class="steps" id="steps">
+        <span class="active"><b>1</b>Asignatura</span><span><b>2</b>Matriz</span><span><b>3</b>Bibliografía</span><span><b>4</b>Confirmación</span><span><b>5</b>Semana 1</span>
+      </div>
+
+      <form id="project-form" novalidate>
+        <section class="panel active" data-step="1">
+          <div class="panel-title"><b>01</b><div><h3>Datos de la asignatura</h3><p>Registre la información oficial del proyecto académico.</p></div></div>
+          <div class="grid">
+            <label>Nombre del proyecto *<input name="projectName" required placeholder="Ej.: Guía de Derecho Administrativo"></label>
+            <label>Nivel *
+              <select name="level" id="level" required>
+                <option value="">Seleccione un nivel</option>
+              </select>
+            </label>
+            <label>Modalidad *
+              <select name="modality" id="modality" required disabled>
+                <option value="">Seleccione primero el nivel</option>
+              </select>
+            </label>
+            <label>Facultad o unidad académica *
+              <select name="faculty" id="faculty" required disabled>
+                <option value="">Seleccione primero la modalidad</option>
+              </select>
+            </label>
+            <label>Carrera o programa *
+              <select name="career" id="career" required disabled>
+                <option value="">Seleccione primero la facultad</option>
+              </select>
+            </label>
+            <label>Profesor *<input name="professorName" required placeholder="Nombres y apellidos"></label>
+            <label>Código de la asignatura *<input name="subjectCode" required placeholder="Ej.: RELI_1105"></label>
+            <label>Asignatura *<input name="subjectName" required></label>
+            <label>Tipo de asignatura *
+              <select name="subjectType" required>
+                <option value="GENERAL">General</option>
+                <option value="TEORICA">Teórica</option>
+                <option value="PRACTICA">Práctica</option>
+                <option value="PROYECTO">Proyecto o integradora</option>
+                <option value="OTRA">Otra</option>
+              </select>
+            </label>
+            <label>Periodo académico *<input name="academicPeriod" required placeholder="Oct. 2026–Feb. 2027"></label>
+            <label>Número de semanas *
+              <input type="number" name="weeks" id="weeks" required min="1" step="1" placeholder="Ej.: 8">
+              <small>Debe coincidir con las semanas únicas y consecutivas de la matriz.</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel" data-step="2">
+          <div class="panel-title"><b>02</b><div><h3>Carga y validación de la matriz</h3><p>Se admiten archivos Excel o CSV de hasta 10 MB.</p></div></div>
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="matrix-file" accept=".xlsx,.csv">
+            <strong>Arrastre la matriz aquí o seleccione un archivo</strong>
+            <span id="file-name">Excel (.xlsx) o CSV</span>
+          </label>
+          <div class="requirements"><strong>Columnas obligatorias</strong><div id="column-list"><span>Semana</span><span>Resultado de aprendizaje</span><span>Unidad/Contenido</span><span>Metodología</span></div></div>
+          <div class="validation hidden" id="matrix-result"></div>
+        </section>
+
+        <section class="panel" data-step="3">
+          <div class="panel-title"><b>03</b><div><h3>Bibliografía</h3><p>Registre únicamente fuentes disponibles y verificables.</p></div></div>
+          <div class="bibliography-grid">
+            <label>Bibliografía básica *<textarea name="basic" required placeholder="Una referencia por línea, preferentemente en APA 7"></textarea></label>
+            <label>Bibliografía complementaria *<textarea name="complementary" required placeholder="Una referencia por línea"></textarea></label>
+            <label>Recursos educativos abiertos (opcional)<textarea name="rea" placeholder="Título y enlace del recurso"></textarea></label>
+          </div>
+          <p class="notice">La guía didáctica no puede utilizarse como fuente bibliográfica.</p>
+        </section>
+
+        <section class="panel" data-step="4">
+          <div class="panel-title"><b>04</b><div><h3>Confirme el proyecto</h3><p>Revise la información antes de crear la ruta semanal.</p></div></div>
+          <div class="summary" id="project-summary"></div>
+          <label class="confirm"><input type="checkbox" id="confirm-data"> Confirmo que la matriz y las referencias corresponden a la planificación aprobada.</label>
+        </section>
+
+        <section class="panel" data-step="5">
+          <div class="panel-title"><b>05</b><div><h3 id="week-title">Preparación de la semana 1</h3><p>Revise, ajuste y apruebe cada semana antes de continuar.</p></div></div>
+          <div class="criteria"><span>✓ Resultado de aprendizaje exacto</span><span>✓ Contenidos sin renombrar</span><span>✓ Metodología declarada</span><span>✓ Citas APA 7 verificables</span></div>
+          <div class="week-navigation">
+            <div id="week-tabs" class="week-tabs" aria-label="Semanas de la guía"></div>
+            <button type="button" class="button secondary" id="download-word" disabled>Descargar avance en Word</button>
+          </div>
+          <button type="button" class="generate" id="generate-week">Generar semana 1 con IA</button>
+          <section class="weekly-review hidden" id="weekly-review">
+            <div class="review-status" id="review-status">Semana pendiente de revisión</div>
+            <div class="content-editor-label">Contenido generado y editable</div>
+            <div class="editor-toolbar" role="toolbar" aria-label="Formato del contenido">
+              <label class="format-label" for="block-format">Estilo
+                <select id="block-format" aria-label="Estilo de párrafo">
+                  <option value="p">Párrafo</option>
+                  <option value="h2">Título</option>
+                  <option value="h3">Subtítulo</option>
+                </select>
+              </label>
+              <span class="toolbar-separator" aria-hidden="true"></span>
+              <button type="button" class="format-button" data-command="bold" aria-label="Negrita" title="Negrita"><strong>N</strong></button>
+              <button type="button" class="format-button" data-command="italic" aria-label="Cursiva" title="Cursiva"><em>K</em></button>
+              <button type="button" class="format-button" data-command="insertUnorderedList" aria-label="Lista con viñetas">• Lista</button>
+              <button type="button" class="format-button" data-command="insertOrderedList" aria-label="Lista numerada">1. Lista</button>
+            </div>
+            <div class="generation content-editor" id="generation-output" contenteditable="true" spellcheck="true" aria-describedby="editor-help" role="textbox" aria-multiline="true"></div>
+            <p class="editor-help" id="editor-help">Haga clic en el contenido para corregirlo. Seleccione texto para aplicar negrita, título, subtítulo o listas. Los cambios se conservarán al aprobar.</p>
+            <label class="adjustment-label" for="adjustment-instructions">Instrucciones adicionales para el ajuste</label>
+            <textarea id="adjustment-instructions" class="adjustment-instructions" placeholder="Ej.: Amplíe el ejemplo del apartado 2, incorpore mayor diálogo didáctico y mantenga sin cambios las citas verificadas."></textarea>
+            <label class="adjustment-label" for="adjustment-files">Archivos de apoyo para este ajuste (opcional)</label>
+            <input id="adjustment-files" class="adjustment-files" type="file" accept=".pdf,.docx,.txt" multiple>
+            <p class="editor-help">Puede adjuntar hasta 3 archivos PDF, Word o TXT, con un máximo de 10 MB por archivo. Se usarán únicamente en esta regeneración.</p>
+            <div class="attachment-list hidden" id="attachment-list" aria-live="polite"></div>
+            <div class="review-actions">
+              <button type="button" class="button secondary hidden" id="modify-week">Modificar semana</button>
+              <button type="button" class="button secondary" id="regenerate-with-instructions">Regenerar con instrucciones</button>
+              <button type="button" class="button approve" id="approve-week">Aprobar semana</button>
+            </div>
+            <div class="regeneration-progress hidden" id="regeneration-progress" role="status" aria-live="polite">
+              <span class="progress-spinner" aria-hidden="true"></span>
+              <span id="regeneration-progress-text">Regenerando el contenido…</span>
+            </div>
+          </section>
+          <div class="generation-error hidden" id="generation-error" role="alert"></div>
+        </section>
+
+        <p class="form-message hidden" id="form-message" role="alert"></p>
+        <footer class="wizard-actions">
+          <button type="button" class="button secondary hidden" id="back">← Anterior</button>
+          <span></span>
+          <button type="button" class="button" id="next">Continuar →</button>
+        </footer>
+      </form>
+    </section>
+  </div>
+  <script src="/academic-offer.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
 </html>

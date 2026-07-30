@@ -5,7 +5,9 @@ servidor MCP.
 
 ## Estado del proyecto
 
-Proyecto en fase inicial de configuración.
+MVP funcional del generador de guías didácticas. Incluye un asistente de cinco
+etapas, validación real de matrices Excel/CSV y generación de la semana 1 con
+OpenAI.
 
 ## Requisitos
 
@@ -14,32 +16,29 @@ Proyecto en fase inicial de configuración.
 - Git
 - Cuenta de GitHub
 
-## Tecnologías previstas
+## Tecnologías
 
 - Node.js
 - TypeScript
 - Model Context Protocol (MCP)
 - OpenAI Apps SDK
 - Interfaz web
+- SheetJS (`xlsx`) para procesar matrices
 - Render para el despliegue
 
-## Estructura inicial
+## Estructura relevante
 
 ```text
 app-creacion-asignaturas/
 ├── docs/
 ├── src/
-│   ├── mcp/
-│   ├── resources/
 │   ├── services/
-│   ├── shared/
-│   └── tools/
-│       └── courses/
-├── tests/
-├── ui/
-│   └── src/
-│       ├── components/
-│       └── forms/
+│   │   └── matrix-service.ts
+│   └── index.ts
+├── public/
+│   ├── index.html
+│   ├── styles.css
+│   └── app.js
 ├── .env.example
 ├── .gitignore
 ├── package.json
@@ -66,14 +65,25 @@ npm start
 Copie `.env.example` como `.env` para configurar el entorno local. No almacene credenciales ni
 secretos en el repositorio.
 
-## Funcionalidades previstas
+```bash
+cp .env.example .env
+```
 
-1. Servidor con endpoint de verificación `/health`.
-2. Servidor MCP accesible mediante `/mcp`.
-3. Herramienta inicial `hello_world`.
-4. Formulario para registrar los datos básicos de una asignatura.
-5. Funciones para crear y revisar asignaturas.
-6. Integración con ChatGPT.
+Complete `OPENAI_API_KEY` únicamente en `.env`. `OPENAI_MODEL` permite cambiar
+el modelo sin modificar el código.
+
+## Flujo funcional
+
+1. Registrar los datos de la asignatura y seleccionar 8 o 16 semanas.
+2. Cargar una matriz `.xlsx`, `.xls` o `.csv` de hasta 10 MB.
+3. Validar las columnas `Semana`, `Resultado de aprendizaje`,
+   `Unidad/Contenido` y `Metodología`.
+4. Registrar bibliografía básica, complementaria y REA opcionales.
+5. Confirmar el proyecto.
+6. Generar la semana 1 con la fila correspondiente de la matriz.
+
+La API expone `/health`, `/mcp`, `/api/validate-matrix` y
+`/api/generate-week`.
 
 ## Documentación
 

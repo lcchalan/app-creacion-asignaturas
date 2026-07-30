@@ -1,0 +1,83 @@
+1. ¿Qué son los Recursos Educativos Abiertos (REA)?
+Los recursos educativos abiertos (REA) son materiales didácticos, de aprendizaje o investigación que se encuentran en el dominio público o que se publican con licencias de propiedad intelectual que facilitan su uso, adaptación y distribución gratuitos - UNESCO 2019 -
+
+2. ¿Qué tipos de REAS existen?
+Los REAS pueden ser encontrados en cualquier formato:
+    • Textos.
+    • Audiovisuales.
+    • Podcast.
+    • Contenidos multimedia.
+
+3. ¿Cómo identificar REAS?
+Los Recursos Educativos Abiertos (REA) son producto del Movimiento de Cultura Libre y pueden estar publicados bajo dos tipos de licencia.
+    •   Copyleft: El copyleft es una práctica que consiste en el ejercicio del derecho de autor con el objetivo de permitir la libre distribución de copias y versiones modificadas de una obra u otro trabajo, exigiendo que los mismos derechos sean preservados en las versiones modificadas.
+    
+    •   Creative Commons (CC): Creative Commons es una organización que permite publicar obras creativas bajo licencias que permiten flexibilidad ante el Copyright o el “todos los derechos reservados”.
+
+    Existen 6 tipos de licencias Creative Commons y de acuerdo a la que conste en una obra, podremos determinar qué permisos ha otorgado el autor sobre su trabajo.
+
+    • Creative Commons Zero (CC0): Creative Commons Zero, donde el autor renuncia a todos los derechos sobre la obra en la medida que la ley de su país se lo permita.
+
+    • Obras en Dominio público: Implica a las obras que pueden ser explotadas por cualquier persona, siempre respetando los derechos morales de sus autores, pero que, por la finalización de los plazos de protección, han entrado a formar parte del dominio público.
+    
+    Por ejemplo:
+    Literatura
+    • "Don Quijote de la Mancha" – Miguel de Cervantes (1605 y 1615)
+    • "Orgullo y prejuicio" – Jane Austen (1813)
+    • "La Divina Comedia" – Dante Alighieri (1320)
+    Música
+    • "Für Elise" – Ludwig van Beethoven
+    • "El Cascanueces" – Piotr Ilich Tchaikovsky
+    • "Himno a la alegría" – Beethoven (solo la música, no las letras modernas)
+    Pintura y Arte Visual
+    • "La noche estrellada" – Vincent van Gogh
+    • "La Mona Lisa" – Leonardo da Vinci    
+
+4. ¿Cuál es la diferencia entre los REA y las publicaciones de acceso abierto?
+    • Publicaciones de acceso abierto: Las publicaciones de acceso abierto se encuentran claramente relacionadas con los REA pero son distintas.
+
+    El término ‘acceso abierto’ se refiere a: ‘acceso abierto (a publicaciones)’; o ‘acceso a materiales (principalmente publicaciones académicas) vía Internet de tal forma que dicho material pueda ser leído por cualquier persona gratuitamente, así como utilizado (o reutilizado) en menor o mayor grado; o periódicos de acceso abierto, periódicos que proporcionan acceso abierto a la totalidad o a una parte considerable de sus artículos.
+
+5. Plataformas y bancos de Recursos Educativos Abiertos:
+    Plataformas de REAS
+    - Procomún
+    - Amazon Inspire
+    - Creative Commons Search
+    - Floe Project
+    - Justice Institute of BC(JIBC)
+    - LibreTexts
+    - MERLOT II
+    - NROER
+    - OER Commons
+    - OER Knowledge Cloud
+    - OpenStax
+    - UK Open Textbook
+    - TedEd
+    Bancos de recursos audiovisuales abiertos:
+    - IMÁGENES
+        FlickrCC
+        Google Image (filtrando búsqueda por licencias CC)
+        Pixabay
+        Openphoto
+        Pics4Learning
+    - SONIDOS
+        Free Music Archive
+        Freesound
+        Hsoundbible.com
+        Ccmixter.org
+    - VÍDEOS
+        YouTube
+        Vimeo
+        Archive.org
+        Webmix de sitios con vídeos CC.
+6. Repositorios internacionales de acceso abierto OA
+    - ROAD - Directorio de Recursos Académicos en Acceso Abierto
+    - DRIVER -Proyecto sobre el Espacio Europeo de Investigación para crear una Red de Repositorios Científicos de Europa
+    - La Referencia - Recolector de Repositorios científicos Latinoamericanos
+    - LAOAP - Buscador de documentos inéditos de América Latina
+    - OAI Registry at UIUC - Directorio de repositorios de la University of Illinois
+    - Red de Repositorios Latinoamericanos.
+    - ROAR (Registry of Open Access Repositories) - Directorio internacional de repositories
+    - REDALYC (Red de Revistas Científicas de América Latina y el Caribe, España y Portugal).
+    - SciELO (Scientific Electronic Library Online) - colección de revistas Open Access de todas las disciplinas, de países latinoamericanos.
+    - DOAR (Directory of Open Access Repositories, OPENDOAR) - Recopilación de repositorios “open Access” académicos de todo el mundo.

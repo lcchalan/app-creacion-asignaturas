@@ -1,0 +1,542 @@
+Cita textual o directa:
+Se considera una cita textual o directa cuando se utiliza exactamente la misma frase o párrafo que aparece en la fuente original, sin realizar modificaciones.
+
+Elementos de cita textual o directa:
+Apellido(s), año, página.
+    Romero Camacho, 2022, p. 24)
+Cita parentética:
+Idea del autor escrita textualmente (Apellido(s), año, p. #). 
+    (Romero Camacho, 2022, p. 24).
+
+Cita narrativa
+Apellido(s) (año) idea del autor escrita textualmente (p. #). 
+    Según Romero Camacho (2022) … (p. 24).
+
+Regla: cita textual o directa corta (hasta 39 palabras)
+
+Agrega comillas alrededor del texto. “”
+Incorpora la cita en su propio texto.
+No insertar puntos suspensivos al principio o al final de una cita, a menos que la fuente original incluya.
+Se finaliza con un punto u otro signo d e puntuación fuera del paréntesis final.
+
+Cita parentética
+
+Ejemplo:
+
+        La importancia de la educación emocional trata de huir de las concepciones de la misma como un concepto árido y pesado, por ello, “existe una orientación psicopedagógica con múltiples aplicaciones y áreas temáticas, siguiendo un criterio histórico para recordar que la orientación surgió como orientación vocacional” (Alzina, 2006, p. 18).
+
+Cita narrativa
+
+Ejemplo:
+
+        De acuerdo a Rodríguez y Corvo-Pérez (2011) la pérdida del agua capilar es completa sin que se aprecie aún la alteración en la estructura del cemento hidratado, “además adquiere el hormigón un color rosáceo debido a la ausencia del agua de las sales de hierro presentes en los áridos, y sin que la resistencia mecánica del hormigón y el acero disminuyan” (p. 350).
+ 
+ Regla: cita textual o directa en bloque (40 palabras o más)
+
+No utilice comillas para encerrar el texto en bloque.
+Comience una cita de bloque en una nueva línea.
+Coloque sangría a todo el bloque (1,27 cm) del margen izquierdo.
+Si la cita presenta varios párrafos, a partir del segundo se añade una sangría de 1,27 cm en la primera línea.
+Agregue punto después de la última palabra transcrita antes de la cita.
+
+Cita parentética
+
+Ejemplo:
+
+Los investigadores han estudiado cómo las personas hablan consigo mismas:
+
+1,27 cm
+           El discurso interno es un fenómeno paradójico. Es una experiencia que es fundamental para la vida cotidiana de muchas personas y, sin embargo, presenta desafíos considerables para cualquier esfuerzo por estudiarla científicamente.
+
+            1,27 cm   
+            Es una experiencia que es fundamental para la vida cotidiana de muchas personas y, sin embargo, presenta desafíos considerables para cualquier esfuerzo por estudiarla científicamente.
+
+           (Alvarado y Castillo, 2015, p. 957)
+
+Cita textual o directa en bloque
+Cita narrativa
+
+Ejemplo:
+
+En una investigación reciente, Juárez García (2021) destaca que:
+
+1,27 cm
+           La concepción estratégica implica la parte más filosófica y social del modelo, pues incluye el examen cuidadoso de lo que se quiere ser y a dónde se quiere llegar mediante el análisis de la visión, misión, objetivos, valores, fortalezas y debilidades, y de la madurez y cultura deaspectos psicosociales en la organización. (p. 29)
+
+Cita de parafraseo o indirecta
+
+    Expresa el significado de un texto o discurso utilizando palabras diferentes, pero que mantienen el mismo sentido y contenido del original.
+
+    Permite resumir y sintetizar información de una o más fuentes, centrarse en información importante, comparar y contrastar detalles relevantes.
+
+Elementos para cita de parafraseo o ndirecta                       
+    Autor, año 
+        Romero Camacho, 2022
+
+Cita parentética
+    Idea del autor en palabras propias del investigador
+        (Apellido, año).
+        (Romero Camacho, 2022).
+
+Cita narrativa
+    Apellido (año) Idea del autor en palabras propias del investigador.
+        Según Romero Camacho (2022) …
+
+Cita de parafraseo o indirecta
+Cita parentética
+Ejemplo:
+
+    La valorización de los relaves está todavía desarrollándose en una etapa previa, pero se espera que a futuro esta situación mejore (Kinnunen y Kaksonen, 2019).
+
+Cita narrativa
+Ejemplo:
+
+    Según Kinnunen y Kaksonen (2019) la valorización de los   relaves está todavía desarrollándose en una etapa previa, pero se espera que a futuro esta situación mejore.
+
+Cita de comunicaciones personales
+      Son: cartas privadas, comunicaciones electrónicas (como el e-mail o mensajes de grupos de WhatsApp), entrevistas personales, conversaciones telefónicas y similares.
+
+Elementos:
+Inicial del o los nombres y apellido o apellidos del comunicador, comunicación personal, fecha.
+
+Ejemplo parentética:
+      “Serias medidas han sido tomadas por la alcaldía para prevenir el suicidio de adolescentes”. (J. Marri, comunicación personal, 28 de septiembre de 1998).
+
+Ejemplo narrativa:
+    J. Marri (comunicación personal, 28 de septiembre de 1998) “serias medidas han sido tomadas por la alcaldía para prevenir el suicidio de adolescentes”.
+
+Estos datos, por lo general no son recuperables, las comunicaciones personales no se incluyen en la lista de referencias. Cite las comunicaciones personales solo en el texto.
+
+Cita de una Ley
+Cita narrativa
+
+Ejemplo:
+       La Ley Orgánica de Educación Intercultural (LOEI, 2015) enfatiza que la educación es una responsabilidad fundamental del Estado:
+           Se le atribuye la obligación ineludible e inexcusable de garantizar el derecho a la educación, a los habitantes del territorio ecuatoriano y su acceso universal a lo largo de la vida, para lo cual generará las condiciones que garanticen la igualdad de oportunidades para acceder, permanecer, movilizarse y egresar de los servicios educativos. El Estado ejerce la rectoría sobre el Sistema Educativo a través de la Autoridad Nacional de Educación de conformidad con la Constitución de la República y la Ley. (Art. 5)
+
+Cita de un artículo de la Constitución
+Cita parentética
+Ejemplo:
+        “El territorio del Ecuador constituye una unidad geográfica e histórica de dimensiones naturales, sociales y culturales, legado de nuestros antepasados y pueblos ancestrales” (Constitución de la República del Ecuador, 2008, Art. 4).
+
+Cita narrativa
+Ejemplo:
+        La Constitución de la República del Ecuador (2008), señala que “el territorio del Ecuador constituye una unidad geográfica e histórica de dimensiones naturales, sociales y culturales, legado de nuestros antepasados y pueblos ancestrales” (Art. 4).
+
+Cita de cita (fuente secundaria)
+    Se realiza cita de cita cuando se tiene acceso a una fuente de información a través de otra, aplica solo para citas directas.
+
+Cita parentética
+    Por ejemplo, una idea de Adey et al. 2003 leída en una publicación de Birch y Cline en 2017:
+        Al respecto, “Estas respuestas explican concepciones de habilidades profesionales, intuitivas y basadas en evidencia. Pero cuando se les sugiere que una palabra adecuada para describir estas habilidades es inteligencia” (Adey et al., 2003, como se citó en Birch y Cline, 2017, p. 81).
+
+Cita narrativa
+          Adey (2003, como se citó en Birch y Cline, 2017) menciona que “Estas respuestas explican concepciones de habilidades profesionales, intuitivas y basadas en evidencia. Pero cuando se les sugiere que una palabra adecuada para describir estas habilidades es inteligencia” (p. 81).
+
+Nota: Adey aparecerá solo en la cita del texto y Birch y Cline en la cita y en la referencia.
+
+Cita de figuras (infografías, fotografías, gráficos, diagramas, dibujos y
+mapas)
+Ejemplo 1 (Fotografía de un sitio web)
+
+Nota. Adaptado de Título de la imagen [Fotografía], por Inicial del nombre y Apellido del autor, año de publicación de la imagen, Fuente (URL). Tipo de licencia.
+        Figura 1
+
+        Grafeno en el espacio
+
+
+        Nota. Adaptado de Grafeno en el espacio [Fotografía], por Kanijoman, 2011,
+
+        Flickr (https://acortar.link/pkkhYR). (CC BY 2.0).
+
+Cita de un gráfico
+Ejemplo 2 (Gráfico de un libro)
+
+Nota. Tomado de Título del libro (p. #), por Inicial del nombre y Apellido del autor, año de publicación, editorial.
+
+       Figura 2
+
+      Importancia del factor humano en el proceso administrativo
+
+
+       Nota. Tomado de Planeación e integración de los recursos humanos: capital humano (p. 70), por M. González y S. Olivares, 2020, Grupo Editorial Patria.
+
+Cita de un diagrama
+Ejemplo 3 (Diagrama de un artículo)
+
+Nota. Adaptado de “Titulo del articulo” (p . #), por Inicial del nombre y Apellido del autor, año, Título de la Revista, Vol (#). DOI
+
+   Figura 3
+
+   Dimensiones de acción de la futura Agencia Estatal de Salud Pública en relación con la gestión del conocimiento y de la información para la toma de decisiones
+
+
+
+
+   Nota. Adaptado de “La Agencia Estatal de Salud Pública: una oportunidad para el sistema de Salud Pública en España” (p. 267), por D. G. Abiétar et al., 2022, Gac Sanit, 36(3).
+
+   https://doi.org/10.1016/j.gaceta.2021.12.001
+                                    Cita de una tabla
+Ejemplo
+
+Nota. Adaptado de Título del libro (p. #), por Inicial del nombre y Apellido del autor, año, Editorial. URL
+
+
+                       Tabla 1
+
+                       Sesgos de medición de algunos índices de precios al consumidor
+
+
+
+
+                       Nota. Adaptado de Nuevas mediciones de inflación y el crecimiento económico de México
+
+                       (p. 27), por C. Guerrero de Kizardi, 2009, Editorial Miguel Angel Porrua. https://acortar.link/LpREqY
+                                   Cita de contenido generado por IA
+
+                                                  ChatGPT
+
+Cita parentética
+
+         Cuando se le preguntó ¿Quién es más inteligente el hombre o la mujer?, el texto generado por
+ChatGPT indicó que “la inteligencia no se puede medir ni comparar de manera generalizada entre hombres
+y mujeres, ya que es una cualidad individual y multifacética” (OpenIA, 2024).
+
+
+Cita narrativa
+         Según OpenIA (2024) cuando se le preguntó ¿Quién es más inteligente el hombre o la mujer?, el
+texto generado por ChatGPT indicó que “la inteligencia no se puede medir ni comparar de manera
+generalizada entre hombres y mujeres, ya que es una cualidad individual y multifacética”.
+         Estructura de números de páginas
+         1 página                        p. 18
+
+ Rango de página continuas             pp. 18-20
+
+Rango de página discontinuas           pp. 18, 20
+
+          Párrafos                       párr. 4
+
+         Sección                Sección de Osteoartritis
+
+          Vídeo                          02:55
+
+        Diapositiva                  diapositiva 10
+                         Citas según el número de autores
+
+        Tipo de autor                    Cita parentética               Cita narrativa
+Un autor                          (Rivero, 2017)                Rivero (2017)
+Dos autores                       (Seminario y Beltrán, 2018)   Seminario y Beltrán (2018)
+Tres a más autores                (Benavides et al., 2023)      Benavides et al. (2023)
+
+
+                           Citas con autor institucional y con abreviatura
+
+           En el texto                   Cita parentética               Cita narrativa
+Primera vez                       (Universidad Técnica          Universidad Técnica
+                                  Particular de Loja [UTPL],    Particular de Loja (UTPL, 2016)
+                                  2016)
+Subsecuentes                      (UTPL, 2016)                  UTPL (2016)
+Referencias
+        Es el listado de fuentes, como: libros, artículos científicos, páginas web, podcasts,
+
+vídeos de YouTube, etc. que sustentan tu tarea académica, Trabajo de Titulación, Trabajo
+
+de Integración Curricular o Tesis.
+
+El listado de las referencias debe iniciar en una nueva página a doble espacio.
+
+El título de esta página se denomina Referencias, centrada y con negrita.
+
+No se incluye comunicaciones personales y viñetas.
+
+La lista de referencia se ordena alfabéticamente por el apellido de los autores.
+
+Utiliza sangría francesa (1,27 cm).
+
+Emplea el formato d e apellido o apellidos, seguido por la inicial del o los nombres.
+Utiliza un espacio entre la inicial de los nombres.
+
+Coloca coma para separar los autores.
+
+Si el apellido tiene un guión, inclúyalo en la lista de referencia y en la cita en el texto.
+
+Si el apellido tiene una preposición (por ejemplo, De, De la, Der, Van, Von), agregue antes del
+
+apellido en la referencia y en la cita en el texto.
+
+Si el apellido contiene un sufijo (por ejemplo, Jr., Sr., III), coloque el sufijo después de las iniciales en
+
+la entrada de la lista de referencias, pero no lo incorpore en la cita en el texto.
+
+Agrega “y” entre el penúltimo y último autor.
+
+Ejemplo:
+
+Ordóñez Guamán, M. E., Torres-Castillo, H., De la Torre, B., y Ríos, G. K., IV.
+                      Elementos y ejemplos de las Referencias
+Incluye hasta 20 autores en la lista de referencia.
+Ejemplos:
+Foster, M., Thompson, A., Pérez, G., Moore, D., Torres, G., Peterson, H., Foster, M., Thompson, A.,
+         Pérez, G., Moore, D., Torres, G., Peterson, H., Foster, M., Thompson, A., Pérez, G., Moore,
+         D., Torres, G., Peterson, H., Foster, M., y Cox, W. (2018). El calentamiento global en el
+         mundo. Alfaguara.
+
+Si tiene más de 20 autores, se escribe los 19 primeros, colocar … y el último autor de la obra.
+
+Amaya, M. T., Andreoli, V., Ángel, A., Bendeck, J., Carrizosa Umaña, J., Casas, F., Chavarriaga, P.,
+         Demers, C., Falchetti, A. M., George, J. F., Guarnizo, A., Guhl, E., Jimeno, M., Leyva, P.,
+         Messias, R., Molano, A., Molina, D. C., Orjuela, H., Plazas, C.,… Soto, A. (1990). Medio
+         ambiente y desarrollo. Tercer Mundo Editores.
+                                              Libro impreso
+Elementos:
+Apellido, A., Apellido, B., y Apellido, C. (año). Título del libro (Edición). Editorial.
+
+Ejemplo:
+Vásquez, J. G., Benavides, J. D. y Coronel, P. P. (2011). El ruido de las cosas al caer del cielo (3ra ed.).
+         Alfaguara.
+
+
+                                            Libro electrónico
+
+Elementos:
+Apellido, A., Apellido, B., y Apellido, C. (año). Título del libro (Edición). Editorial. URL
+
+Ejemplo:
+Snell, S. y Bohlander, G. (2013). Administración de recursos humanos (16th ed.). Cengage Learning.
+           https://elibro.net/es/lc/bibliotecautpl/titulos/39989
+Artículo de revista con DOI (identificador único y permanente para las publicaciones electrónicas)
+ Elementos:
+ Apellido, A., Apellido, B., y Apellido, C. (año). Título del artículo. Nombre de la revista,
+         volumen(número de la revista), número de página inicio-número de página final. DOI
+ Ejemplo:
+
+
+
+ Cosín-Sales, J., Ortiz Cortés, C., Barrios, V., y Gámez, J. M. (2023). Impacto de la pandemia por la
+         COVID-19 en la asistencia sanitaria de la fibrilación auricular en España. REC: CardioClinics,
+         58(3), 241–244. https://doi.org/https://doi.org/10.1016/j.rccl.2023.03.005
+
+
+        Nota: si el artículo de la revista no tiene DOI y proviene de una base de datos de investigación
+ académica, finalice la referencia después del rango de páginas. No incluya información de la base de
+ datos en la referencia.
+                             Artículo de revista impresa
+Elementos:
+
+Apellido, A., Apellido, B., y Apellido, C. (mes, año). Título del artículo. Nombre de la revista,
+       volumen(número de la revista), número de página inicio-número de página final.
+
+Ejemplo:
+
+
+
+Hernández Hernández, J., Villarreal Espinobarros, O., Camacho Ronquillo, J., Romero Castañon, S.,
+       Castillo, A., y Hernández, J. L. (junio, 2015). Valoración nutricional de seis plantas arbóreo-
+       arbustivas consumidas por cabras en la Mixteca Poblana, México, Ciencia y Tecnología, 8(1),
+       19-23.
+
+       Nota: se debe incluir el mes y el año para las revistas que tienen publicaciones mensuales. En
+el caso de que la publicación sea diaria o semanal se incluye el día (se coloca la información
+completa o la que encuentre en el artículo científico).
+                              Artículo periodístico
+Elementos:
+
+Apellido, A., Apellido, B., y Apellido, C. (día, mes y año). Título del artículo. Nombre
+
+       del periódico. URL
+
+Ejemplo:
+
+Manish, B. y Heijden, K. (21 de enero de 2015). Erradicar la pobreza extrema en el
+
+       2030, una nueva meta mundial. El Tiempo. https://nyti.ms/4209hLO
+                                                   Páginas Web
+Elementos:
+Páginas web con contenido estático:
+Apellido, A., Apellido, B., y Apellido, C. (día, mes, año). Título del artículo. Nombre del sitio web. URL
+Ejemplo:
+Carbajal, S. (1de marzo de 2023). Pedir una hipoteca: ¿qué pasos debo seguir?. Rastreator. https://lc.cx/Xg2Kjl
+
+Páginas web con autor corporativo
+Autor corporativo. (día, mes y año). Título del archivo. URL
+
+Formato especial adentro de una página web
+Apellido, A. (día, mes y año). Título del archivo. [Archivo Excel]. Nombre del sitio web. URL
+
+Páginas web con actualizaciones frecuentes
+Apellido, A., Apellido, B., y Apellido, C. (día, mes y año). Título del artículo. Nombre del sitio web. Recuperado el día
+           mes año. URL
+                                  Video de YouTube
+
+Elementos:
+
+Nombre del autor. [nombre del canal de YouTube]. (día, mes, año). Título del video [Video]. URL
+
+
+Ejemplo:
+Sherpa, K. [Canal de YouTube]. (7 de marzo de 2023). Citas y Referencias NORMAS APA 7ma
+
+        edición [Video]. https://www.youtube.com/watch?v=jBRhziuR5m8
+                                    X (Redes sociales)
+
+Elementos:
+Nombre de la persona o grupo [@usuario]. (día, mes y año). Descripción de la publicación
+        limitada    a    las   primeras    veinte   palabras    incluyendo   hashtags   [Descripción
+        audiovisual]. Nombre de la Red Social. URL
+
+Ejemplo:
+
+Noboa Azin, D. [@DanielNoboaOk]. (5 de diciembre de 2023). La esperanza de los niños y
+      jóvenes      nos    mantiene        comprometidos        con   el   país.   #NoboaPresidente
+      #ElNuevoEcuador. [Post]. X. https://acortar.link/0PfxfA
+Figuras (infografías, fotografías, gráficos, diagramas, dibujos y mapas)
+
+
+Elementos:
+
+Apellido, A. (año). Título de la imagen. [Fotografía]. Fuente. URL
+
+
+
+Ejemplo:
+
+Organización Panamericana de la Salud. (2021). Pruebas de VIH en Bolivia [Fotografía].
+
+           Flickr. (https://n9.cl/np3ps1)
+                                                 Tesis
+
+Elementos:
+Apellido, A. (año). Título de la tesis [Tipo de tesis, Institución]. Repositorio Institucional. URL
+
+
+Ejemplo:
+
+Amay Armijos, J. E. (2023). Evaluación de la Cartera de Crédito de las COAC Segmento 1 de la
+        ciudad de Loja y su impacto en la Información Financiera, periodo 2020-2022 [Tesis de
+        maestría, Universidad Nacional de Loja]. Repositorio Institucional. https://acortar.link/wBk0Cl
+                                         Ley
+Elementos:
+
+Entidad creadora. (día, mes y año). Título de la ley. Nombre del Registro Oficial N° Xx,
+       (fecha de la edición). URL
+Ejemplo:
+
+Asamblea Nacional de Ecuador. (25 de junio de 2013). Ley Orgánica de Comunicación.
+       Registro Oficial del Gobierno del Ecuador N° 22 (21 de junio de 2014).
+       http://bit.ly/366bacL
+                                       Constitución
+
+
+Elementos:
+Nombre oficial de la Constitución [abreviación]. Artículo específico citado. Fecha
+           de promulgación (País). URL
+
+
+Ejemplo:
+Constitución de la República de Ecuador [Const.]. Artículo 5. [Título I]. Registro Oficial 449
+        de 20 de octubre de 2008 (Ecuador). https://bit.ly/2B93igI
+                                         Patente
+
+Elementos:
+Apellido, A. (año). Título de patente (Patente de País. No. x, xxx, xxx). Institución. Oficina
+        de Marcas. URL
+
+Ejemplo:
+Mondragón Vásquez, K. (2020). Nuevas fases solidas de sulfasalazina [Fármaco para tratar
+        artritis reumatoide] (Patente de México. No. 3637). IMPI. Instituto mexicano
+        de la propiedad industrial. https://www.gob.mx/impi
+                        Presentaciones de diapositivas
+
+Elementos:
+
+Apellido, A. (año). Título de la presentación [Diapositiva de PowerPoint]. Nombre de la
+
+        página web. https://www.xxxx.com
+
+
+Ejemplo:
+
+Sánchez, D. (2018). Equipos altamente efectivos sin gerentes [Diapositiva de PowerPoint].
+
+        Repositorio Material Facultad de Economía. http://www.direccion.com/slides
+                                           PDF
+Elementos:
+Apellido, A. (año). Título de la presentación [Archivo PDF]. URL
+Ejemplo:
+Merayo, M. (2013). Acoso escolar: guía para padres y madres [Archivo PDF].
+        https://n9.cl/u06k3
+
+                                            IA
+Elementos:
+Autor. (año). Nombre de IA (versión del día y mes) [Modelo de lenguaje Big Data]. URL
+Open IA. (2024). ChatGPT (versión del 17 de enero) [Modelo de lenguaje Big Data].
+                https://chat.openai.com/chat
+Recomendaciones para
+       el uso de REA´s
+                                   Acortador de URLs
+Es un servicio gratuito que te permiten acortar URLs extensos.
+
+Nombres de acortadores:
+acortar.link
+lc.cx/es, etc.
+
+Ejemplo:
+https://www.flickr.com/photos/pahowho/50923245603/in/photolist-2kzZ6PK-2kzYu64-2kzUY6T-2kzUWES-
+2kzYsE8-2kzUWHx-2kzUWJQ-2kzUWMa-2kzZ6Hn-2kzUWQM-2kzYsQy-2kzYsVD-2kzUWWi-2kzZ6Z9-2kzUX7o-
+2kzYsXc-2kzZ6WD-2kzYt37-2kzYtjV-2kzUXun-2kzUXiW-2kzUXdq-2kzYtmy-2kzUX9s-2kzZ7pY-2kzZ7UF-2kzUXGw-
+2kzYtVp-2kzYtLM-2kzZ7KN-2kzYtFg-2kzYtZ7-2kzYtqm-2kzUY4J-2kzUYnV-2kzUYxe-2kzUYPG-2kzYub4-2kzUYsV-
+2kzUYgY-2kzYuii-2kzUZ1U-2kzZ8Ff-2kzZ8pJ-2kzZ87u-2kzZ8QU-2kzUZ8c-2kzYukH-2kzUYXn-2kzYuuv/
+
+Link corto: https://lc.cx/es
+                                   Referencias
+
+American Psychological Association. (2020). Publication manual of the American
+
+       Psychological Association (7th ed.). https://doi.org/10,1037/0000165-00
+
+American Psychological Association. (2020). Apa style. https://apastyle.apa.org
+
+Sánchez, C. (08 de febrero de 2019). Normas APA – 7ma (séptima) edición. Normas
+
+       APA (7ma edición). https://normas-apa.org/
+                           Reconocimiento – NoComercial – CompartirIgual (by-nc-sa)
+
+
+          No se permite un uso comercial de la obra original ni de las posibles obras derivadas, la distribución de las
+cuales se debe hacer con una licencia igual a la que regula la obra original.
+
+
+La información es con fines académicos y está prohibida la reproducción parcial o total del documento.
+
+
+          Por derechos de autor, el presente texto no puede distribuirse, copiarse, reproducirse, publicarse o venderse.
+Acciones como estas están sancionadas en las normativas nacionales e internacionales correspondientes. El texto
+referido es para SU USO ACADÉMICO EXCLUSIVO y cualquier uso distinto acarreará las sanciones previstas en el
+Reglamento de Ética y Régimen Disciplinario de la UTPL, sin perjuicio a las civiles, administrativas y penales a las que
+haya lugar.
+                  @BibliotecaUTPL
+              Síguenos en las redes sociales
+
+
+
+
+                 Visita la página web
+
+
+
+
+Inscríbete y participa en nuestros talleres gratuitos:
+
+     Talleres de competencias informacionales
+                            Links de interés
+
+Página de biblioteca: https://biblioteca.utpl.edu.ec/
+Teleasistencia: https://biblioteca.utpl.edu.ec/teleasistencia
+Microtalleres: https://biblioteca.utpl.edu.ec/microtalleres
+Biblioteca virtual: https://biblioteca.utpl.edu.ec/basedatos
+Material de Normas APA: https://acortar.link/fOu2Fj
+Video tutorial Normas APA: https://www.youtube.com/watch?v=Dv4ZlxLqhNA
+Tutoriales de biblioteca: https://www.youtube.com/@bibliotecautpl7669
+Página oficial de Normas APA: https://apastyle.apa.org/
+Gracias
+

@@ -142,3 +142,40 @@ El servidor se validó localmente mediante las siguientes pruebas:
 - Obtención del mensaje: “¡Hola, Luis! El servidor MCP funciona correctamente.”.
 
 Con estas pruebas se confirmó el funcionamiento del servidor HTTP, el endpoint MCP y la primera herramienta registrada.
+
+### Fase 8. Interfaz modular y flujo de creación
+
+Se sustituyó el formulario lineal por una interfaz institucional adaptable, con
+estructura modular y paleta azul marino y dorado. El asistente organiza el
+trabajo en cinco etapas:
+
+1. Datos de la asignatura.
+2. Carga y validación de la matriz.
+3. Bibliografía básica, complementaria y REA.
+4. Confirmación del proyecto.
+5. Generación de la semana 1.
+
+Se restringió la duración a 8 o 16 semanas, se incorporaron mensajes de
+validación y se impidió utilizar una guía didáctica como fuente bibliográfica.
+
+### Fase 9. Procesamiento de matrices y generación
+
+Se añadió `xlsx` para leer archivos Excel y CSV en el servidor. El endpoint
+`/api/validate-matrix` comprueba el archivo, identifica las cuatro columnas
+obligatorias y devuelve las filas normalizadas. La generación selecciona
+exclusivamente los registros de la semana solicitada y separa la bibliografía
+básica, complementaria y los REA.
+
+La compilación con TypeScript y una prueba de validación con CSV finalizaron
+correctamente.
+# Corrección 24 — Especificaciones contextuales y análisis previo
+
+- Se incorporaron múltiples especificaciones funcionales por nivel académico, modalidad, duración y tipo de asignatura.
+- Facultad y Carrera no intervienen en la selección del prompt.
+- Los documentos institucionales pueden ser generales o contextuales.
+- Toda nueva versión requiere un análisis de impacto previo verificable.
+- El análisis informa reglas, mejoras, superposiciones y posibles contradicciones.
+- Las contradicciones requieren documentar la decisión antes de guardar.
+- Cada guía congela las versiones de especificaciones, documentos e indicadores utilizadas en su primera generación.
+- Se añadió la migración incremental `20260805000000_correction_24_contextual_specs`.
+- Se validaron el esquema Prisma, la sintaxis del cliente y la compilación TypeScript.

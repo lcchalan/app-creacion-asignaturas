@@ -1,0 +1,266 @@
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid #cbd5df;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  background: #f5f7f9;
+}
+
+.format-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #062a50;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.format-label select {
+  width: auto;
+  min-width: 125px;
+  padding: 7px 30px 7px 9px;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 28px;
+  background: #cbd5df;
+}
+
+.format-button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #062a50;
+  cursor: pointer;
+}
+
+.format-button:hover,
+.format-button:focus {
+  border-color: #cbd5df;
+  background: #fff;
+}
+
+.content-editor {
+  min-height: 440px;
+  margin-top: 0;
+  overflow: auto;
+  border-radius: 0 0 9px 9px;
+  background: #fff;
+  white-space: normal;
+  resize: vertical;
+}
+
+.content-editor:focus {
+  border-color: #d5a93f;
+  box-shadow: 0 0 0 3px #fbf5e6;
+  outline: none;
+}
+
+.adjustment-files {
+  padding: 10px;
+  border: 1px dashed #aebbc8;
+  background: #f8fafc;
+}
+
+.attachment-list {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eef4f8;
+  color: var(--navy);
+  font-size: .88rem;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+}
+
+.attachment-item + .attachment-item {
+  border-top: 1px solid #d8e2ea;
+}
+
+.attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remove-attachment {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #a12626;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.regeneration-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #eef6fb;
+  color: #062a50;
+  font-weight: 700;
+}
+
+.progress-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #b9d3e5;
+  border-top-color: #0b5a91;
+  border-radius: 50%;
+  animation: progress-spin .8s linear infinite;
+}
+
+@keyframes progress-spin {
+  to { transform: rotate(360deg); }
+}
+
+.generated-figure {
+  margin: 1.2rem auto;
+  text-align: center;
+}
+
+.generated-figure img {
+  display: block;
+  max-width: min(100%, 820px);
+  height: auto;
+  margin: 0 auto;
+  border-radius: 10px;
+}
+
+.generated-figure figcaption {
+  margin-top: .45rem;
+  color: #66758a;
+  font-size: .86rem;
+}
+
+.content-editor h2 {
+  margin: 1.35em 0 .55em;
+  color: #062a50;
+  font-size: 1.42rem;
+  line-height: 1.25;
+}
+
+.content-editor h3 {
+  margin: 1.15em 0 .45em;
+  color: #0b3a68;
+  font-size: 1.16rem;
+  line-height: 1.3;
+}
+
+.content-editor p {
+  margin: .65em 0;
+}
+
+.content-editor ul,
+.content-editor ol {
+  margin: .7em 0;
+  padding-left: 1.65em;
+}
+
+.content-editor li + li {
+  margin-top: .35em;
+}
+
+.table-caption {
+  margin: 1.2rem 0 .45rem;
+  color: #062a50;
+}
+
+.generated-table-wrapper {
+  max-width: 100%;
+  margin: 0 0 1.25rem;
+  overflow-x: auto;
+}
+
+.generated-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: .94rem;
+}
+
+.generated-table th,
+.generated-table td {
+  min-width: 120px;
+  padding: 10px 12px;
+  border: 1px solid #aebbc8;
+  text-align: left;
+  vertical-align: top;
+}
+
+.generated-table th {
+  background: #dce6f1;
+  color: #062a50;
+  font-weight: 800;
+}
+
+.generated-table tbody tr:nth-child(even) {
+  background: #f7f9fb;
+}
+
+@media (max-width: 700px) {
+  .editor-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .format-label {
+    width: 100%;
+  }
+
+  .format-label select {
+    flex: 1;
+  }
+}
+
+.week-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.week-tabs {
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 3px 0;
+}
+
+.week-tab {
+  min-width: 42px;
+  height: 38px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  background: #fff;
+  color: #66758a;
+  cursor: pointer;
+}
+
+.week-tab.current { border-color: #d5a93f; box-shadow: 0 0 0 2px #fbf5e6; color: #062a50; }
+.week-tab.approved { border-color: #8cc9a5; background: #edf9f1; color: #14532d; }
+.week-tab.review { border-color: #e4c46b; background: #fff8df; color: #654d08; }
+.week-tab:disabled { cursor: not-allowed; opacity: .48; }
+.content-editor[contenteditable="false"] { background: #f5f7f9; cursor: default; }
+
+@media (max-width: 700px) {
+  .week-navigation { align-items: stretch; flex-direction: column; }
+  #download-word { width: 100%; }
+}

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: guias-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: guias_app
+      POSTGRES_PASSWORD: guias_local
+      POSTGRES_DB: guias_didacticas
+    ports:
+      - "5432:5432"
+    volumes:
+      - guias_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guias_app -d guias_didacticas"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  guias_postgres_data:
