@@ -1,18 +1,16 @@
 import "dotenv/config";
 import OpenAI from "openai";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { URL } from "node:url";
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import {
-  Document, HeadingLevel, Packer, Paragraph, Table, TableCell, TableRow,
+  Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow,
   TextRun, WidthType,
 } from "docx";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import * as XLSX from "xlsx";
 import { parseMatrix, requiredColumns } from "./services/matrix-service.js";
 import { database, checkDatabaseConnection } from "./db/client.js";
 
@@ -47,8 +45,11 @@ async function readKnowledgeFile(fileName: string): Promise<string> {
   ).trim();
 }
 
-const fallbackInstitutionalKnowledge = {
-  specification: await readKnowledgeFile("especificacion-funcional-v1.txt"),
+const institutionalKnowledge = {
+  specification: await readKnowledgeFile(
+    "especificacion-funcional-v1.txt",
+  ),
+  indicators: await readKnowledgeFile("indicadores-generales.txt"),
   rea: await readKnowledgeFile("indicaciones-rea.txt"),
   apa: await readKnowledgeFile("normas-apa.txt"),
   methodologies: await readKnowledgeFile("metodologias-activas.txt"),
@@ -72,7 +73,6 @@ const matrixRowSchema = z.object({
 });
 
 const generationRequestSchema = z.object({
-  projectId: z.string().uuid().optional(),
   week: z.number().int().min(1).max(100),
   project: z.object({
     projectName: z.string().trim().min(1).max(200),
@@ -82,7 +82,6 @@ const generationRequestSchema = z.object({
     professorName: z.string().trim().min(1).max(200),
     subjectCode: z.string().trim().min(1).max(100),
     subjectName: z.string().trim().min(1).max(200),
-    subjectType: z.string().trim().min(1).max(100).default("GENERAL"),
     modality: z.string().trim().min(1).max(150),
     academicPeriod: z.string().trim().min(1).max(100),
     weeks: z
@@ -110,6 +109,18 @@ const generationRequestSchema = z.object({
   })).max(3).optional().default([]),
 });
 
+const imageGenerationRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  week: z.number().int().min(1).max(100),
+  topic: z.string().trim().min(1).max(500),
+  purpose: z.string().trim().min(1).max(1000),
+  style: z.string().trim().min(1).max(200),
+  orientation: z.enum(["horizontal", "vertical", "cuadrada"]),
+  title: z.string().trim().min(1).max(180),
+  prompt: z.string().trim().min(1).max(5000),
+  altText: z.string().trim().min(1).max(1000),
+});
+
 type GenerationRequest = z.infer<
   typeof generationRequestSchema
 >;
@@ -125,14 +136,14 @@ const wordRequestSchema = z.object({
   }),
   weeks: z.array(z.object({
     week: z.number().int().min(1).max(100),
-    content: z.string().trim().min(1).max(150_000),
+    content: z.string().trim().min(1).max(12_000_000),
   })).min(1).max(100),
 });
 
 const persistedWeekSchema = z.object({
   status: z.enum(["pending", "draft", "review", "approved"]),
-  draftContent: z.string().max(150_000).optional().default(""),
-  approvedContent: z.string().max(150_000).optional().default(""),
+  draftContent: z.string().max(12_000_000).optional().default(""),
+  approvedContent: z.string().max(12_000_000).optional().default(""),
   approvedAt: z.string().datetime().optional(),
   version: z.number().int().min(0).default(0),
 });
@@ -147,179 +158,18 @@ const projectPersistenceSchema = z.object({
   weekStates: z.record(z.string(), persistedWeekSchema),
 });
 
-function passwordHash(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
-}
+const localUserEmail =
+  process.env.LOCAL_USER_EMAIL ?? "docente.local@utpl.edu.ec";
 
-function passwordMatches(password: string, stored: string | null) {
-  if (!stored) return false;
-  const [salt, expectedHex] = stored.split(":");
-  if (!salt || !expectedHex) return false;
-  const actual = scryptSync(password, salt, 64);
-  const expected = Buffer.from(expectedHex, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
-function cookieValue(request: IncomingMessage, name: string) {
-  return (request.headers.cookie ?? "").split(";").map((part) => part.trim())
-    .find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
-}
-
-async function authenticatedUser(request: IncomingMessage) {
-  const token = cookieValue(request, "ggd_session");
-  if (!token) return null;
-  const session = await database.userSession.findUnique({
-    where: { tokenHash: createHash("sha256").update(token).digest("hex") },
-    include: { user: { include: { roles: { include: { role: true } } } } },
-  });
-  if (!session || session.expiresAt <= new Date() || !session.user.active) return null;
-  return session.user;
-}
-
-async function requireUser(request: IncomingMessage) {
-  const user = await authenticatedUser(request);
-  if (!user) throw Object.assign(new Error("Debe iniciar sesión."), { statusCode: 401 });
-  return user;
-}
-
-function isAdmin(user: Awaited<ReturnType<typeof requireUser>>) {
-  return user.roles.some((entry) => entry.role.code === "ADMIN");
-}
-
-const stageTotals = { PEER: 35, QUALITY: 30, DIITEP: 35 } as const;
-const stageRole = { PEER: "REVIEWER", QUALITY: "QUALITY", DIITEP: "DIITEP" } as const;
-
-function canReview(user: Awaited<ReturnType<typeof requireUser>>, stage: keyof typeof stageRole) {
-  const roles = new Set(user.roles.map((entry) => entry.role.code));
-  return roles.has("ADMIN") || roles.has(stageRole[stage]);
-}
-
-function categoryFor(percentage: number) {
-  if (percentage >= 90) return "Excelente";
-  if (percentage >= 80) return "Satisfactoria";
-  if (percentage >= 70) return "En proceso de mejora";
-  return "Insuficiente";
-}
-
-function normalizedIndicators<T extends { stage: keyof typeof stageTotals; score: unknown; active: boolean }>(items: T[]) {
-  return items.map((item) => {
-    if (!item.active) return { ...item, score: Number(item.score) };
-    const activeTotal = items.filter((entry) => entry.active && entry.stage === item.stage)
-      .reduce((sum, entry) => sum + Number(entry.score), 0);
-    return { ...item, score: activeTotal > 0 ? Number(item.score) * stageTotals[item.stage] / activeTotal : 0 };
-  });
-}
-
-const contextScopeSchema = z.object({
-  academicLevels: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
-  modalities: z.array(z.string().trim().min(1).max(150)).max(20).default([]),
-  durations: z.array(z.number().int().min(1).max(100)).max(20).default([]),
-  subjectTypes: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
-  priority: z.number().int().min(1).max(999).default(100),
-});
-
-type PromptContext = {
-  level: string;
-  modality: string;
-  weeks: number;
-  subjectType?: string;
-};
-
-function appliesToContext(item: {
-  academicLevels: string[];
-  modalities: string[];
-  durations: number[];
-  subjectTypes: string[];
-}, context: PromptContext) {
-  const normalized = (value: string) => value.trim().toLocaleLowerCase("es");
-  const contains = (values: string[], value: string) =>
-    !values.length || values.some((entry) => normalized(entry) === normalized(value));
-  return contains(item.academicLevels, context.level)
-    && contains(item.modalities, context.modality)
-    && (!item.durations.length || item.durations.includes(context.weeks))
-    && contains(item.subjectTypes, context.subjectType || "GENERAL");
-}
-
-function impactChecksum(input: unknown) {
-  return createHash("sha256").update(JSON.stringify(input)).digest("hex");
-}
-
-function extractRules(content: string) {
-  return content.split(/\r?\n/)
-    .map((line) => line.replace(/^[-*#\d.)\s]+/, "").trim())
-    .filter((line) => line.length >= 20)
-    .slice(0, 30);
-}
-
-function analyzeImpactDraft(input: {
-  kind: "SPECIFICATION" | "DOCUMENT";
-  key: string;
-  title: string;
-  content: string;
-  academicLevels: string[];
-  modalities: string[];
-  durations: number[];
-  subjectTypes: string[];
-  priority: number;
-  appliesToAll?: boolean;
-}, existing: Array<{ title: string; content: string; priority: number }>) {
-  const rules = extractRules(input.content);
-  const newTerms = new Set(input.content.toLocaleLowerCase("es").match(/[a-záéíóúñ]{5,}/g) || []);
-  const comparisons = existing.map((item) => {
-    const terms = new Set(item.content.toLocaleLowerCase("es").match(/[a-záéíóúñ]{5,}/g) || []);
-    const overlap = [...newTerms].filter((term) => terms.has(term)).length;
-    return {
-      title: item.title,
-      relationship: overlap >= 12 ? "Posible superposición" : "Complementario",
-      detail: overlap >= 12
-        ? "Comparte conceptos y debe verificarse que no establezca cantidades, prioridades o prohibiciones diferentes."
-        : "No se detecta una superposición textual relevante.",
-    };
-  });
-  const conflictPatterns = [
-    { label: "Cantidad de citas", expression: /(?:mínim[oa]|al menos|exactamente)\s+\d+\s+citas?/gi },
-    { label: "Cantidad de preguntas", expression: /(?:mínim[oa]|al menos|exactamente)\s+\d+\s+preguntas?/gi },
-    { label: "Frecuencia semanal", expression: /(?:cada|por)\s+semana/gi },
-  ];
-  const contradictions = conflictPatterns.flatMap((pattern) => {
-    const proposed = input.content.match(pattern.expression) || [];
-    const current = existing.flatMap((item) => item.content.match(pattern.expression) || []);
-    return proposed.length && current.length
-      ? [{ severity: "REVIEW", topic: pattern.label, current: current[0], proposed: proposed[0],
-        recommendation: "Compare ambas reglas y confirme cuál debe prevalecer antes de activar." }]
-      : [];
-  });
-  return {
-    summary: `La actualización incorpora ${rules.length} reglas o directrices identificables.`,
-    newRules: rules.slice(0, 10),
-    scope: {
-      appliesToAll: Boolean(input.appliesToAll),
-      academicLevels: input.academicLevels,
-      modalities: input.modalities,
-      durations: input.durations,
-      subjectTypes: input.subjectTypes,
+async function ensureLocalUser() {
+  return database.user.upsert({
+    where: { email: localUserEmail },
+    update: {},
+    create: {
+      email: localUserEmail,
+      displayName: "Docente local",
     },
-    improvements: [
-      "Actualiza el contexto que se incorporará en futuras generaciones compatibles.",
-      "Mantiene intactas las semanas y evaluaciones generadas con versiones anteriores.",
-    ],
-    comparisons,
-    contradictions,
-    affectedPromptSections: input.kind === "SPECIFICATION"
-      ? ["Jerarquía y comportamiento de la generación", "Estructura de salida"]
-      : ["Conocimiento institucional aplicable"],
-    recommendation: contradictions.length ? "APROBAR_CON_REVISION" : "APROBAR",
-  };
-}
-
-function json(response: import("node:http").ServerResponse, status: number, body: unknown, headers = {}) {
-  response.writeHead(status, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Cache-Control": "no-store",
-    ...headers,
   });
-  response.end(JSON.stringify(body));
 }
 
 function databaseWeekStatus(status: string) {
@@ -363,7 +213,17 @@ function isTableSeparator(line: string): boolean {
   return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
 }
 
-function markdownParagraphs(markdown: string): Array<Paragraph | Table> {
+function imageDimensions(data: Buffer): { width: number; height: number } {
+  const sourceWidth = data.length >= 24 ? data.readUInt32BE(16) : 1024;
+  const sourceHeight = data.length >= 24 ? data.readUInt32BE(20) : 1024;
+  const scale = Math.min(600 / sourceWidth, 650 / sourceHeight, 1);
+  return {
+    width: Math.max(1, Math.round(sourceWidth * scale)),
+    height: Math.max(1, Math.round(sourceHeight * scale)),
+  };
+}
+
+async function markdownParagraphs(markdown: string): Promise<Array<Paragraph | Table>> {
   const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
   const blocks: Array<Paragraph | Table> = [];
   let tableNumber = 0;
@@ -404,6 +264,26 @@ function markdownParagraphs(markdown: string): Array<Paragraph | Table> {
     }
     if (!line) {
       blocks.push(new Paragraph(""));
+      continue;
+    }
+    const imageReference = line.match(
+      /^!\[[^\]]*\]\(\/api\/images\/([0-9a-f-]{36})\)$/i,
+    );
+    if (imageReference) {
+      const attachment = await database.attachment.findUnique({
+        where: { id: imageReference[1] },
+      });
+      if (attachment?.contentBase64) {
+        const image = Buffer.from(attachment.contentBase64, "base64");
+        blocks.push(new Paragraph({
+          children: [new ImageRun({
+            data: image,
+            transformation: imageDimensions(image),
+            type: "png",
+          })],
+          spacing: { before: 180, after: 180 },
+        }));
+      }
       continue;
     }
     const heading = line.match(/^(#{1,3})\s+(.+)$/);
@@ -458,7 +338,7 @@ const methodologyMarkers = [
 ];
 
 function methodologyKnowledge(methodologies: string): string {
-  const source = fallbackInstitutionalKnowledge.methodologies;
+  const source = institutionalKnowledge.methodologies;
   const requested = normalizeText(methodologies);
   const selected: string[] = [];
 
@@ -511,15 +391,30 @@ guías didácticas universitarias para educación en línea y a distancia.
 Genera exclusivamente la semana solicitada.
 
 JERARQUÍA DE REGLAS:
-1. Versión activa de la especificación funcional.
+1. Especificación funcional V1.
 2. Matriz y datos proporcionados por el profesor.
-3. Versiones activas de indicadores generales, metodología institucional, normas APA y
+3. Indicadores generales, metodología institucional, normas APA y
    criterios de REA.
 4. Bibliografía temática proporcionada por el profesor.
 
-Si existe una contradicción, aplica la especificación funcional activa.
+Si existe una contradicción, aplica la especificación funcional V1.
 Los documentos institucionales orientan la elaboración, pero no son
 bibliografía temática y no deben citarse automáticamente.
+
+ESPECIFICACIÓN FUNCIONAL V1:
+${institutionalKnowledge.specification}
+
+INDICADORES GENERALES:
+${institutionalKnowledge.indicators}
+
+METODOLOGÍA INSTITUCIONAL APLICABLE:
+${methodologyKnowledge(methodologies)}
+
+CRITERIOS INSTITUCIONALES PARA REA:
+${institutionalKnowledge.rea}
+
+NORMAS INSTITUCIONALES APA:
+${institutionalKnowledge.apa}
 
 FIDELIDAD ESTRUCTURAL OBLIGATORIA:
 
@@ -553,11 +448,26 @@ FIDELIDAD ESTRUCTURAL OBLIGATORIA:
    didáctico que no consta en la matriz, intégralo en la redacción sin
    convertirlo en encabezado visible. Esta regla controla la estructura
    visible de la respuesta.
-10. Cuando el profesor solicite expresamente crear e insertar una imagen,
-   incorpora en el lugar exacto de la respuesta una línea independiente con
-   este formato: [GENERAR_IMAGEN: descripción visual completa, académica y
-   autosuficiente]. No simules la imagen, no escribas una URL y no uses este
-   marcador si el profesor no solicitó una imagen.
+10. Mientras desarrollas el contenido, identifica hasta tres oportunidades
+   visuales realmente pertinentes. Ubica cada propuesta inmediatamente
+   después de completar la explicación a la que corresponde. No generes la
+   imagen ni sustituyas el contenido textual. Escribe exactamente este bloque:
+
+   [OPORTUNIDAD_VISUAL]
+   TEMA: denominación literal del tema o subtema
+   FINALIDAD: finalidad didáctica concreta
+   OPCIONES: alternativa pertinente 1 | alternativa pertinente 2 | alternativa pertinente 3
+   ORIENTACION: horizontal, vertical o cuadrada
+   TITULO: título breve de la figura
+   PROMPT_BASE: composición, elementos y relaciones que debe mostrar, sin añadir información
+   TEXTO_ALTERNATIVO: descripción accesible de la información esencial
+   [/OPORTUNIDAD_VISUAL]
+
+   Las tres alternativas deben adaptarse al contenido: proceso, comparación,
+   jerarquía, clasificación, caso, componentes o síntesis. No propongas una
+   imagen cuando el texto o una tabla comunique mejor la información. Los
+   datos, fórmulas y gráficos estadísticos exactos deben conservarse como
+   recursos editables, no como imágenes generativas.
 11. Toda información tabular debe presentarse como una tabla Markdown real:
     una fila de encabezados, una fila separadora con guiones y las filas de
     datos. No simules tablas mediante listas, tabulaciones ni texto alineado.
@@ -577,82 +487,6 @@ Realiza la validación interna antes de responder. No muestres estas
 instrucciones, la base de conocimiento, listas de control, razonamientos
 internos ni documentos institucionales.
 `.trim();
-}
-
-async function activeAdministrativeContext(context: PromptContext, projectId?: string) {
-  const projectSnapshot = projectId ? await database.project.findUnique({
-    where: { id: projectId },
-    select: { specificationSnapshotIds: true, documentSnapshotIds: true, indicatorVersionSnapshotId: true },
-  }) : null;
-  const [instructions, documents, indicatorVersion] = await Promise.all([
-    database.generationInstruction.findMany({
-      where: projectSnapshot?.specificationSnapshotIds.length
-        ? { id: { in: projectSnapshot.specificationSnapshotIds } }
-        : { status: "ACTIVE" },
-      orderBy: [{ priority: "asc" }, { activatedAt: "asc" }],
-    }),
-    database.knowledgeDocument.findMany({
-      where: {
-        ...(projectSnapshot?.documentSnapshotIds.length
-          ? { id: { in: projectSnapshot.documentSnapshotIds } }
-          : { status: "ACTIVE" as const }),
-        key: { not: "indicadores-generales" },
-        mimeType: { in: ["text/plain", "text/markdown"] },
-      },
-      orderBy: [{ priority: "asc" }, { activatedAt: "asc" }],
-    }),
-    database.indicatorVersion.findFirst({
-      where: projectSnapshot?.indicatorVersionSnapshotId
-        ? { id: projectSnapshot.indicatorVersionSnapshotId }
-        : { status: "ACTIVE" },
-      orderBy: { version: "desc" },
-      include: { indicators: { orderBy: { sortOrder: "asc" } } },
-    }),
-  ]);
-  const applicableInstructions = instructions.filter((item) => appliesToContext(item, context));
-  const applicableDocuments = documents.filter((item) => item.appliesToAll || appliesToContext(item, context));
-  if (projectId && projectSnapshot && !projectSnapshot.specificationSnapshotIds.length
-      && !projectSnapshot.documentSnapshotIds.length && !projectSnapshot.indicatorVersionSnapshotId) {
-    await database.project.update({
-      where: { id: projectId },
-      data: {
-        specificationSnapshotIds: applicableInstructions.map((item) => item.id),
-        documentSnapshotIds: applicableDocuments.map((item) => item.id),
-        indicatorVersionSnapshotId: indicatorVersion?.id || null,
-      },
-    });
-  }
-  const knowledgeTexts = await Promise.all(applicableDocuments.map(async (document) => {
-    try {
-      const content = document.contentMarkdown
-        || await readFile(new URL(`../${document.storagePath}`, import.meta.url), "utf8");
-      return `### ${document.title}\n${content}`;
-    } catch {
-      return "";
-    }
-  }));
-  const activeKeys = new Set(applicableDocuments.map((document) => document.key));
-  const fallbackCatalog: Array<[string, string, string]> = [
-    ["especificacion-funcional", "Especificación funcional", fallbackInstitutionalKnowledge.specification],
-    ["metodologias-activas", "Metodologías activas", fallbackInstitutionalKnowledge.methodologies],
-    ["normas-apa", "Normas APA", fallbackInstitutionalKnowledge.apa],
-    ["indicaciones-rea", "Indicaciones REA", fallbackInstitutionalKnowledge.rea],
-  ];
-  const fallbackItems = fallbackCatalog.filter(([key]) => !activeKeys.has(key));
-  const fallback = fallbackItems.length
-    ? `CONOCIMIENTO INSTITUCIONAL DE RESPALDO:\n${fallbackItems.map(([, title, content]) => `### ${title}\n${content}`).join("\n\n")}`
-    : "";
-  return [
-    applicableInstructions.length ? `ESPECIFICACIONES FUNCIONALES APLICABLES:\n${applicableInstructions.map((item) =>
-      `### ${item.title} · prioridad ${item.priority}\n${item.content}`).join("\n\n")}` : "",
-    indicatorVersion
-      ? `INDICADORES GENERALES DE LA GUÍA — VERSIÓN ${indicatorVersion.version}:\n${indicatorVersion.indicators.filter((indicator) => indicator.active).map((indicator) =>
-        `- [${indicator.stage}] ${indicator.name || indicator.code}: ${indicator.description}`
-      ).join("\n")}`
-      : "",
-    knowledgeTexts.some(Boolean) ? `CONOCIMIENTO ADMINISTRATIVO ACTIVO:\n${knowledgeTexts.filter(Boolean).join("\n\n")}` : "",
-    fallback,
-  ].filter(Boolean).join("\n\n");
 }
 
 function buildGenerationInput(
@@ -811,756 +645,8 @@ const httpServer = createServer(async (request, response) => {
       response.end(JSON.stringify({ status: "ok", database: "postgresql" }));
       return;
     }
-    if (request.method === "POST" && requestUrl.pathname === "/api/auth/register") {
-      const body = z.object({
-        firstName: z.string().trim().min(2).max(100),
-        lastName: z.string().trim().min(2).max(100),
-        nationalId: z.string().trim().min(6).max(20),
-        email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        password: z.string().min(8).max(200),
-      }).parse(await readJsonBody(request));
-      const teacherRole = await database.role.findUnique({ where: { code: "TEACHER" } });
-      if (!teacherRole) throw new Error("Ejecute el seed para crear el rol Profesor.");
-      const user = await database.user.create({
-        data: {
-          firstName: body.firstName,
-          lastName: body.lastName,
-          nationalId: body.nationalId,
-          email: body.email,
-          displayName: `${body.firstName} ${body.lastName}`,
-          passwordHash: passwordHash(body.password),
-          roles: { create: { roleId: teacherRole.id } },
-        },
-      });
-      json(response, 201, { ok: true, userId: user.id, role: "TEACHER" });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/auth/login") {
-      const body = z.object({
-        email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        password: z.string().min(1).max(200),
-      }).parse(await readJsonBody(request));
-      const user = await database.user.findUnique({ where: { email: body.email } });
-      if (!user || !user.active || !passwordMatches(body.password, user.passwordHash)) {
-        json(response, 401, { error: "Correo o contraseña incorrectos." });
-        return;
-      }
-      const token = randomBytes(32).toString("base64url");
-      await database.userSession.create({
-        data: {
-          userId: user.id,
-          tokenHash: createHash("sha256").update(token).digest("hex"),
-          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
-        },
-      });
-      json(response, 200, { ok: true }, {
-        "Set-Cookie": `ggd_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=28800`,
-      });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/auth/logout") {
-      const token = cookieValue(request, "ggd_session");
-      if (token) await database.userSession.deleteMany({
-        where: { tokenHash: createHash("sha256").update(token).digest("hex") },
-      });
-      json(response, 200, { ok: true }, {
-        "Set-Cookie": "ggd_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-      });
-      return;
-    }
-    if (request.method === "GET" && requestUrl.pathname === "/api/auth/me") {
-      const user = await authenticatedUser(request);
-      json(response, 200, {
-        user: user ? {
-          id: user.id, firstName: user.firstName, lastName: user.lastName,
-          displayName: user.displayName, email: user.email,
-          roles: user.roles.map((entry) => entry.role.code),
-        } : null,
-      });
-      return;
-    }
-    if (request.method === "GET" && requestUrl.pathname === "/api/admin/dashboard") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const [users, roles, periods, courses, assignments, projects, instructions, documents, indicatorVersions] = await Promise.all([
-        database.user.findMany({
-          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-          select: {
-            id: true, firstName: true, lastName: true, nationalId: true, email: true,
-            active: true, mustChangePassword: true, createdAt: true,
-            roles: { select: { role: { select: { code: true, name: true } } } },
-          },
-        }),
-        database.role.findMany({ orderBy: { name: "asc" } }),
-        database.academicPeriod.findMany({ orderBy: { createdAt: "desc" } }),
-        database.course.findMany({ orderBy: { name: "asc" } }),
-        database.teachingAssignment.findMany({
-          orderBy: { createdAt: "desc" },
-          include: {
-            teacher: { select: { id: true, displayName: true, email: true } },
-            course: true, period: true,
-          },
-        }),
-        database.project.findMany({
-          orderBy: { updatedAt: "desc" },
-          select: {
-            id: true, name: true, subjectCode: true, subjectName: true,
-            professorName: true, academicPeriod: true, status: true,
-            totalWeeks: true, updatedAt: true,
-            weeks: { select: { status: true } },
-          },
-        }),
-        database.generationInstruction.findMany({ orderBy: [{ key: "asc" }, { version: "desc" }] }),
-        database.knowledgeDocument.findMany({
-          where: { key: { not: "indicadores-generales" } },
-          orderBy: [{ key: "asc" }, { version: "desc" }],
-        }),
-        database.indicatorVersion.findMany({
-          orderBy: { version: "desc" },
-          include: { indicators: { orderBy: { sortOrder: "asc" } } },
-        }),
-      ]);
-      json(response, 200, { users, roles, periods, courses, assignments, projects, instructions, documents, indicatorVersions });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/users") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        firstName: z.string().trim().min(2), lastName: z.string().trim().min(2),
-        nationalId: z.string().trim().min(6),
-        email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        roleCodes: z.array(z.string().trim().min(1)).min(1),
-        temporaryPassword: z.string().min(8).max(200).optional(),
-      }).parse(await readJsonBody(request));
-      const temporaryPassword = body.temporaryPassword || randomBytes(9).toString("base64url");
-      const selectedRoles = await database.role.findMany({ where: { code: { in: body.roleCodes } } });
-      if (selectedRoles.length !== new Set(body.roleCodes).size) throw new Error("Uno o más roles no existen.");
-      const user = await database.user.create({
-        data: {
-          firstName: body.firstName, lastName: body.lastName, nationalId: body.nationalId,
-          email: body.email, displayName: `${body.firstName} ${body.lastName}`,
-          passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
-          roles: { create: selectedRoles.map((role) => ({ roleId: role.id })) },
-        },
-      });
-      json(response, 201, { ok: true, userId: user.id, temporaryPassword });
-      return;
-    }
-    const userAdminMatch = requestUrl.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]+)$/i);
-    if (request.method === "PATCH" && userAdminMatch) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const userId = z.string().uuid().parse(userAdminMatch[1]);
-      const body = z.object({
-        active: z.boolean().optional(),
-        roleCodes: z.array(z.string().trim().min(1)).min(1).optional(),
-        firstName: z.string().trim().min(2).optional(),
-        lastName: z.string().trim().min(2).optional(),
-        nationalId: z.string().trim().min(6).optional(),
-        email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
-      }).parse(await readJsonBody(request));
-      if (userId === admin.id && body.active === false) throw new Error("No puede desactivar su propia cuenta.");
-      await database.$transaction(async (transaction) => {
-        if (body.firstName || body.lastName || body.nationalId || body.email) {
-          const current = await transaction.user.findUniqueOrThrow({ where: { id: userId } });
-          const firstName = body.firstName ?? current.firstName;
-          const lastName = body.lastName ?? current.lastName;
-          await transaction.user.update({
-            where: { id: userId },
-            data: { firstName, lastName, nationalId: body.nationalId, email: body.email, displayName: `${firstName} ${lastName}` },
-          });
-        }
-        if (typeof body.active === "boolean") {
-          await transaction.user.update({ where: { id: userId }, data: { active: body.active } });
-          if (!body.active) await transaction.userSession.deleteMany({ where: { userId } });
-        }
-        if (body.roleCodes) {
-          const selectedRoles = await transaction.role.findMany({ where: { code: { in: body.roleCodes } } });
-          if (selectedRoles.length !== new Set(body.roleCodes).size) throw new Error("Uno o más roles no existen.");
-          await transaction.userRole.deleteMany({ where: { userId } });
-          await transaction.userRole.createMany({ data: selectedRoles.map((role) => ({ userId, roleId: role.id })) });
-        }
-      });
-      json(response, 200, { ok: true });
-      return;
-    }
-    const passwordAdminMatch = requestUrl.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]+)\/temporary-password$/i);
-    if (request.method === "POST" && passwordAdminMatch) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const userId = z.string().uuid().parse(passwordAdminMatch[1]);
-      const body = z.object({ password: z.string().min(8).max(200).optional() }).parse(await readJsonBody(request));
-      const temporaryPassword = body.password || randomBytes(9).toString("base64url");
-      await database.user.update({
-        where: { id: userId },
-        data: { passwordHash: passwordHash(temporaryPassword), mustChangePassword: true, active: true },
-      });
-      await database.userSession.deleteMany({ where: { userId } });
-      json(response, 200, { ok: true, temporaryPassword });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/instructions") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        key: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
-        content: z.string().trim().min(20).max(200_000), activate: z.boolean().default(true),
-        impactChecksum: z.string().length(64),
-        conflictResolution: z.string().trim().max(5000).default(""),
-      }).merge(contextScopeSchema).parse(await readJsonBody(request));
-      const analyzedInput = {
-        kind: "SPECIFICATION" as const, key: body.key, title: body.title, content: body.content,
-        academicLevels: body.academicLevels, modalities: body.modalities, durations: body.durations,
-        subjectTypes: body.subjectTypes, priority: body.priority,
-      };
-      if (body.impactChecksum !== impactChecksum(analyzedInput)) {
-        json(response, 409, { error: "El contenido o el ámbito cambió después del análisis. Analice nuevamente antes de guardar." });
-        return;
-      }
-      const existingForImpact = await database.generationInstruction.findMany({
-        where: { status: "ACTIVE" }, select: { title: true, content: true, priority: true },
-      });
-      const impactAnalysis = analyzeImpactDraft(analyzedInput, existingForImpact);
-      if (impactAnalysis.contradictions.length && body.conflictResolution.length < 10) {
-        json(response, 409, { error: "Registre la decisión adoptada para las posibles contradicciones antes de guardar." });
-        return;
-      }
-      const latest = await database.generationInstruction.findFirst({ where: { key: body.key }, orderBy: { version: "desc" } });
-      const instruction = await database.$transaction(async (transaction) => {
-        if (body.activate) await transaction.generationInstruction.updateMany({
-          where: { key: body.key, status: "ACTIVE" }, data: { status: "INACTIVE" },
-        });
-        return transaction.generationInstruction.create({
-          data: {
-            key: body.key, title: body.title, content: body.content,
-            version: (latest?.version ?? 0) + 1, status: body.activate ? "ACTIVE" : "DRAFT",
-            academicLevels: body.academicLevels, modalities: body.modalities,
-            durations: body.durations, subjectTypes: body.subjectTypes, priority: body.priority,
-            impactAnalysis: { ...impactAnalysis, conflictResolution: body.conflictResolution || null },
-            impactChecksum: body.impactChecksum,
-            activatedAt: body.activate ? new Date() : null, createdById: admin.id,
-          },
-        });
-      });
-      json(response, 201, { ok: true, instruction });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/ai-impact-analysis") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        kind: z.enum(["SPECIFICATION", "DOCUMENT"]),
-        key: z.string().trim().min(1).max(100),
-        title: z.string().trim().min(1).max(200),
-        content: z.string().trim().min(20).max(500_000),
-        appliesToAll: z.boolean().optional(),
-      }).merge(contextScopeSchema).parse(await readJsonBody(request));
-      const existing = body.kind === "SPECIFICATION"
-        ? await database.generationInstruction.findMany({
-            where: { status: "ACTIVE" }, select: { title: true, content: true, priority: true },
-          })
-        : await database.knowledgeDocument.findMany({
-            where: { status: "ACTIVE", key: { not: "indicadores-generales" } },
-            select: { title: true, contentMarkdown: true, priority: true },
-          }).then((items) => items.map((item) => ({
-            title: item.title, content: item.contentMarkdown || "", priority: item.priority,
-          })));
-      const analyzedInput = {
-        kind: body.kind, key: body.key, title: body.title, content: body.content,
-        academicLevels: body.academicLevels, modalities: body.modalities,
-        durations: body.durations, subjectTypes: body.subjectTypes,
-        priority: body.priority, ...(body.kind === "DOCUMENT" ? { appliesToAll: Boolean(body.appliesToAll) } : {}),
-      };
-      json(response, 200, {
-        analysis: analyzeImpactDraft(analyzedInput, existing),
-        impactChecksum: impactChecksum(analyzedInput),
-      });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/knowledge") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        key: z.string().trim().min(1).max(100), title: z.string().trim().min(1).max(200),
-        fileName: z.string().trim().min(1).max(255).optional(),
-        mimeType: z.string().trim().min(1).max(150).optional(),
-        contentBase64: z.string().max(20_000_000).optional(),
-        contentMarkdown: z.string().trim().min(1).max(500_000),
-        priority: z.number().int().min(1).max(999).default(100),
-        activate: z.boolean().default(true),
-        appliesToAll: z.boolean().default(true),
-        impactChecksum: z.string().length(64),
-        conflictResolution: z.string().trim().max(5000).default(""),
-      }).merge(contextScopeSchema.omit({ priority: true })).parse(await readJsonBody(request));
-      const analyzedInput = {
-        kind: "DOCUMENT" as const, key: body.key, title: body.title, content: body.contentMarkdown,
-        academicLevels: body.academicLevels, modalities: body.modalities, durations: body.durations,
-        subjectTypes: body.subjectTypes, priority: body.priority, appliesToAll: body.appliesToAll,
-      };
-      if (body.impactChecksum !== impactChecksum(analyzedInput)) {
-        json(response, 409, { error: "El contenido o el ámbito cambió después del análisis. Analice nuevamente antes de guardar." });
-        return;
-      }
-      const existingForImpact = await database.knowledgeDocument.findMany({
-        where: { status: "ACTIVE", key: { not: "indicadores-generales" } },
-        select: { title: true, contentMarkdown: true, priority: true },
-      });
-      const impactAnalysis = analyzeImpactDraft(analyzedInput, existingForImpact.map((item) => ({
-        title: item.title, content: item.contentMarkdown || "", priority: item.priority,
-      })));
-      if (impactAnalysis.contradictions.length && body.conflictResolution.length < 10) {
-        json(response, 409, { error: "Registre la decisión adoptada para las posibles contradicciones antes de guardar." });
-        return;
-      }
-      if (body.key === "indicadores-generales") {
-        json(response, 409, {
-          error: "Los indicadores se administran únicamente en «Indicadores generales de la guía».",
-        });
-        return;
-      }
-      const latest = await database.knowledgeDocument.findFirst({ where: { key: body.key }, orderBy: { version: "desc" } });
-      const version = (latest?.version ?? 0) + 1;
-      const fileName = body.fileName || `${body.key}.md`;
-      const mimeType = body.mimeType || "text/markdown";
-      const bytes = body.contentBase64
-        ? Buffer.from(body.contentBase64, "base64")
-        : Buffer.from(body.contentMarkdown, "utf8");
-      const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const relativePath = `knowledge/uploads/${body.key.replace(/[^a-zA-Z0-9_-]/g, "_")}-v${version}-${safeName}`;
-      const fileUrl = new URL(`../${relativePath}`, import.meta.url);
-      await mkdir(new URL("../knowledge/uploads/", import.meta.url), { recursive: true });
-      await writeFile(fileUrl, bytes);
-      const document = await database.$transaction(async (transaction) => {
-        if (body.activate) await transaction.knowledgeDocument.updateMany({
-          where: { key: body.key, status: "ACTIVE" }, data: { status: "INACTIVE" },
-        });
-        return transaction.knowledgeDocument.create({
-          data: {
-            key: body.key, title: body.title, version,
-            status: body.activate ? "ACTIVE" : "DRAFT", storagePath: relativePath,
-            mimeType,
-            originalName: fileName,
-            contentMarkdown: body.contentMarkdown,
-            priority: body.priority,
-            academicLevels: body.academicLevels, modalities: body.modalities,
-            durations: body.durations, subjectTypes: body.subjectTypes,
-            appliesToAll: body.appliesToAll,
-            impactAnalysis: { ...impactAnalysis, conflictResolution: body.conflictResolution || null },
-            impactChecksum: body.impactChecksum,
-            checksum: createHash("sha256").update(bytes).digest("hex"),
-            activatedAt: body.activate ? new Date() : null, createdById: admin.id,
-          },
-        });
-      });
-      json(response, 201, { ok: true, document });
-      return;
-    }
-    const knowledgeAdminMatch = requestUrl.pathname.match(/^\/api\/admin\/knowledge\/([0-9a-f-]+)$/i);
-    if (request.method === "GET" && knowledgeAdminMatch) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const id = z.string().uuid().parse(knowledgeAdminMatch[1]);
-      const document = await database.knowledgeDocument.findUniqueOrThrow({ where: { id } });
-      let contentMarkdown = document.contentMarkdown || "";
-      if (!contentMarkdown && ["text/plain", "text/markdown"].includes(document.mimeType)) {
-        contentMarkdown = await readFile(new URL(`../${document.storagePath}`, import.meta.url), "utf8");
-      }
-      json(response, 200, { document: { ...document, contentMarkdown } });
-      return;
-    }
-    const knowledgeDownloadMatch = requestUrl.pathname.match(/^\/api\/admin\/knowledge\/([0-9a-f-]+)\/download$/i);
-    if (request.method === "GET" && knowledgeDownloadMatch) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const id = z.string().uuid().parse(knowledgeDownloadMatch[1]);
-      const document = await database.knowledgeDocument.findUniqueOrThrow({ where: { id } });
-      const bytes = await readFile(new URL(`../${document.storagePath}`, import.meta.url));
-      const name = (document.originalName || `${document.key}.md`).replace(/["\r\n]/g, "_");
-      response.writeHead(200, {
-        "Content-Type": document.mimeType,
-        "Content-Disposition": `attachment; filename="${name}"`,
-        "Content-Length": String(bytes.length),
-      });
-      response.end(bytes);
-      return;
-    }
-    const knowledgeActivateMatch = requestUrl.pathname.match(/^\/api\/admin\/knowledge\/([0-9a-f-]+)\/activate$/i);
-    if (request.method === "POST" && knowledgeActivateMatch) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const id = z.string().uuid().parse(knowledgeActivateMatch[1]);
-      const selected = await database.knowledgeDocument.findUniqueOrThrow({ where: { id } });
-      if (selected.key === "indicadores-generales") {
-        json(response, 409, {
-          error: "Esta fuente fue archivada. Active una versión desde «Indicadores generales de la guía».",
-        });
-        return;
-      }
-      await database.$transaction([
-        database.knowledgeDocument.updateMany({
-          where: { key: selected.key, status: "ACTIVE" },
-          data: { status: "INACTIVE" },
-        }),
-        database.knowledgeDocument.update({
-          where: { id }, data: { status: "ACTIVE", activatedAt: new Date() },
-        }),
-      ]);
-      json(response, 200, { ok: true });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/users/bulk") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({ users: z.array(z.object({
-        firstName: z.string().trim().min(2),
-        lastName: z.string().trim().min(2),
-        nationalId: z.string().trim().min(6),
-        email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        role: z.string().trim().min(1).default("TEACHER"),
-      })).min(1).max(1000) }).parse(await readJsonBody(request));
-      const roles = await database.role.findMany();
-      const roleByCode = new Map(roles.map((role) => [role.code, role]));
-      const temporaryPasswords: Array<{ email: string; temporaryPassword: string }> = [];
-      await database.$transaction(async (transaction) => {
-        for (const entry of body.users) {
-          const temporaryPassword = randomBytes(9).toString("base64url");
-          const user = await transaction.user.upsert({
-            where: { email: entry.email },
-            update: {
-              firstName: entry.firstName, lastName: entry.lastName,
-              nationalId: entry.nationalId,
-              displayName: `${entry.firstName} ${entry.lastName}`, active: true,
-            },
-            create: {
-              firstName: entry.firstName, lastName: entry.lastName,
-              nationalId: entry.nationalId, email: entry.email,
-              displayName: `${entry.firstName} ${entry.lastName}`,
-              passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
-            },
-          });
-          const role = roleByCode.get(entry.role);
-          if (!role) throw new Error(`No existe el rol ${entry.role}.`);
-          await transaction.userRole.upsert({
-            where: { userId_roleId: { userId: user.id, roleId: role.id } },
-            update: {}, create: { userId: user.id, roleId: role.id },
-          });
-          temporaryPasswords.push({ email: entry.email, temporaryPassword });
-        }
-      });
-      json(response, 201, { ok: true, created: temporaryPasswords.length, temporaryPasswords });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/users/bulk-file") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        fileName: z.string().trim().regex(/\.(xlsx|csv)$/i),
-        contentBase64: z.string().min(1).max(20_000_000),
-      }).parse(await readJsonBody(request));
-      const workbook = XLSX.read(Buffer.from(body.contentBase64, "base64"), { type: "buffer" });
-      const firstSheetName = workbook.SheetNames[0];
-      if (!firstSheetName) throw new Error("El archivo no contiene hojas.");
-      const sheet = workbook.Sheets[firstSheetName];
-      if (!sheet) throw new Error("No fue posible leer la primera hoja.");
-      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-      const normalized = rawRows.map((row) => {
-        const lookup = new Map(Object.entries(row).map(([key, value]) => [key.trim().toLowerCase(), String(value).trim()]));
-        return {
-          firstName: lookup.get("nombre") || "",
-          lastName: lookup.get("apellido") || "",
-          nationalId: lookup.get("cédula") || lookup.get("cedula") || "",
-          email: (lookup.get("correo") || lookup.get("email") || "").toLowerCase(),
-          role: (lookup.get("rol") || lookup.get("role") || "TEACHER").toUpperCase(),
-        };
-      });
-      const users = z.array(z.object({
-        firstName: z.string().min(2), lastName: z.string().min(2),
-        nationalId: z.string().min(6), email: z.string().email(), role: z.string().min(1),
-      })).min(1).max(1000).parse(normalized);
-      const roles = await database.role.findMany();
-      const roleByCode = new Map(roles.map((role) => [role.code, role]));
-      const temporaryPasswords: Array<{ email: string; temporaryPassword: string }> = [];
-      await database.$transaction(async (transaction) => {
-        for (const entry of users) {
-          const role = roleByCode.get(entry.role);
-          if (!role) throw new Error(`No existe el rol ${entry.role}.`);
-          const temporaryPassword = randomBytes(9).toString("base64url");
-          const user = await transaction.user.upsert({
-            where: { email: entry.email },
-            update: {
-              firstName: entry.firstName, lastName: entry.lastName, nationalId: entry.nationalId,
-              displayName: `${entry.firstName} ${entry.lastName}`, active: true,
-            },
-            create: {
-              firstName: entry.firstName, lastName: entry.lastName, nationalId: entry.nationalId,
-              email: entry.email, displayName: `${entry.firstName} ${entry.lastName}`,
-              passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
-            },
-          });
-          await transaction.userRole.upsert({
-            where: { userId_roleId: { userId: user.id, roleId: role.id } },
-            update: {}, create: { userId: user.id, roleId: role.id },
-          });
-          temporaryPasswords.push({ email: entry.email, temporaryPassword });
-        }
-      });
-      json(response, 201, { ok: true, created: temporaryPasswords.length, temporaryPasswords });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/assignments") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        teacherId: z.string().uuid(), courseId: z.string().min(1),
-        subjectCode: z.string().trim().optional(), subjectName: z.string().trim().optional(),
-        career: z.string().trim().min(1), periodId: z.string().uuid(),
-        sourceProjectId: z.string().uuid().optional(),
-      }).parse(await readJsonBody(request));
-      const result = await database.$transaction(async (transaction) => {
-        const course = body.courseId === "NEW"
-          ? await transaction.course.create({
-              data: {
-                code: z.string().trim().min(1).parse(body.subjectCode),
-                name: z.string().trim().min(1).parse(body.subjectName),
-                career: body.career,
-              },
-            })
-          : await transaction.course.findUniqueOrThrow({ where: { id: z.string().uuid().parse(body.courseId) } });
-        if (course.career !== body.career) throw new Error("La asignatura no pertenece a la carrera seleccionada.");
-        const period = await transaction.academicPeriod.findUniqueOrThrow({ where: { id: body.periodId } });
-        const assignment = await transaction.teachingAssignment.upsert({
-          where: { teacherId_courseId_periodId: {
-            teacherId: body.teacherId, courseId: course.id, periodId: period.id,
-          } },
-          update: { active: true },
-          create: { teacherId: body.teacherId, courseId: course.id, periodId: period.id },
-        });
-        let clonedProjectId: string | null = null;
-        if (body.sourceProjectId) {
-          const source = await transaction.project.findUnique({
-            where: { id: body.sourceProjectId },
-            include: { matrix: { include: { rows: true } }, weeks: true },
-          });
-          if (!source || source.status !== "COMPLETED") throw new Error("La guía base debe existir y estar finalizada.");
-          const teacher = await transaction.user.findUniqueOrThrow({ where: { id: body.teacherId } });
-          const copy = await transaction.project.create({
-            data: {
-              ownerId: body.teacherId, teachingAssignmentId: assignment.id,
-              sourceProjectId: source.id, name: `${source.name} – ${period.name}`,
-              level: source.level, faculty: source.faculty, career: body.career,
-              professorName: teacher.displayName, subjectCode: course.code,
-              subjectName: course.name, modality: source.modality,
-              academicPeriod: period.name, totalWeeks: source.totalWeeks,
-              currentWeek: 1, basicBib: source.basicBib,
-              complementaryBib: source.complementaryBib, reaBib: source.reaBib,
-              status: "DRAFT",
-              matrix: source.matrix ? { create: {
-                originalName: source.matrix.originalName,
-                rows: { create: source.matrix.rows.map((row) => ({
-                  rowOrder: row.rowOrder, weekNumber: row.weekNumber,
-                  learningOutcome: row.learningOutcome, unitContent: row.unitContent,
-                  methodology: row.methodology,
-                })) },
-              } } : undefined,
-              weeks: { create: source.weeks.map((week) => ({
-                weekNumber: week.weekNumber, status: "PENDING",
-                draftContent: week.approvedContent ?? week.draftContent,
-                approvedContent: null, approvedAt: null, currentVersion: 0,
-              })) },
-            },
-          });
-          clonedProjectId = copy.id;
-        } else {
-          const teacher = await transaction.user.findUniqueOrThrow({ where: { id: body.teacherId } });
-          const assigned = await transaction.project.create({
-            data: {
-              ownerId: body.teacherId, teachingAssignmentId: assignment.id,
-              name: `${course.name} – ${period.name}`, level: "", faculty: "",
-              career: course.career, professorName: teacher.displayName,
-              subjectCode: course.code, subjectName: course.name, modality: "",
-              academicPeriod: period.name, totalWeeks: 8, currentWeek: 1,
-              basicBib: "", complementaryBib: "", status: "DRAFT",
-            },
-          });
-          clonedProjectId = assigned.id;
-        }
-        return { assignmentId: assignment.id, clonedProjectId };
-      });
-      json(response, 201, { ok: true, ...result });
-      return;
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/admin/indicator-versions") {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const body = z.object({
-        title: z.string().trim().min(3).max(200),
-        activate: z.boolean().default(true),
-        indicators: z.array(z.object({
-          code: z.string().trim().min(1).max(50),
-          name: z.string().trim().min(3).max(250),
-          description: z.string().trim().min(3).max(2000),
-          stage: z.enum(["PEER", "QUALITY", "DIITEP"]),
-          score: z.number().positive().max(100),
-          active: z.boolean().default(true),
-          required: z.boolean().default(true),
-        })).min(1).max(200),
-      }).parse(await readJsonBody(request));
-      const latest = await database.indicatorVersion.findFirst({ orderBy: { version: "desc" } });
-      const indicatorVersion = await database.$transaction(async (transaction) => {
-        if (body.activate) await transaction.indicatorVersion.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE" } });
-        return transaction.indicatorVersion.create({
-          data: {
-            version: (latest?.version ?? 0) + 1, title: body.title,
-            status: body.activate ? "ACTIVE" : "DRAFT", activatedAt: body.activate ? new Date() : null,
-            createdById: admin.id,
-            indicators: { create: normalizedIndicators(body.indicators).map((item, sortOrder) => ({ ...item, sortOrder })) },
-          },
-          include: { indicators: { orderBy: { sortOrder: "asc" } } },
-        });
-      });
-      json(response, 201, { ok: true, indicatorVersion });
-      return;
-    }
-    const indicatorMutationMatch = requestUrl.pathname.match(/^\/api\/admin\/indicators(?:\/([0-9a-f-]+))?$/i);
-    if (indicatorMutationMatch && ["POST", "PATCH", "DELETE"].includes(request.method ?? "")) {
-      const admin = await requireUser(request);
-      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
-      const activeVersion = await database.indicatorVersion.findFirst({
-        where: { status: "ACTIVE" }, orderBy: { version: "desc" },
-        include: { indicators: { orderBy: { sortOrder: "asc" } } },
-      });
-      if (!activeVersion) throw new Error("No existe una versión activa de indicadores.");
-      const targetId = indicatorMutationMatch[1];
-      const body = request.method === "DELETE" ? null : z.object({
-        name: z.string().trim().min(3).max(250),
-        description: z.string().trim().min(3).max(2000),
-        stage: z.enum(["PEER", "QUALITY", "DIITEP"]),
-        score: z.number().positive().max(100),
-        active: z.boolean().optional(),
-      }).parse(await readJsonBody(request));
-      let next = activeVersion.indicators.map((item) => ({
-        code: item.code, name: item.name || item.code, description: item.description,
-        stage: item.stage, score: Number(item.score), active: item.active, required: item.required,
-      }));
-      if (request.method === "POST" && body) {
-        const prefix = body.stage === "PEER" ? "PA" : body.stage === "QUALITY" ? "EC" : "DT";
-        const used = next.filter((item) => item.code.startsWith(`${prefix}-`))
-          .map((item) => Number(item.code.split("-")[1])).filter(Number.isFinite);
-        next.push({ code: `${prefix}-${String(Math.max(0, ...used) + 1).padStart(2, "0")}`, ...body, active: true, required: true });
-      } else {
-        const target = activeVersion.indicators.find((item) => item.id === targetId);
-        const index = next.findIndex((item) => item.code === target?.code);
-        if (index < 0) throw Object.assign(new Error("Indicador no encontrado."), { statusCode: 404 });
-        if (request.method === "PATCH" && body) {
-          const current = next[index]!;
-          next[index] = { ...current, ...body, code: current.code, required: current.required, active: body.active ?? current.active };
-        }
-        if (request.method === "DELETE") next.splice(index, 1);
-      }
-      for (const stage of Object.keys(stageTotals) as Array<keyof typeof stageTotals>) {
-        if (!next.some((item) => item.stage === stage && item.active)) {
-          throw new Error("Cada responsable debe conservar al menos un indicador activo.");
-        }
-      }
-      const latest = await database.indicatorVersion.findFirst({ orderBy: { version: "desc" } });
-      const version = await database.$transaction(async (transaction) => {
-        await transaction.indicatorVersion.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE" } });
-        return transaction.indicatorVersion.create({
-          data: {
-            version: (latest?.version ?? 0) + 1, title: activeVersion.title, status: "ACTIVE",
-            activatedAt: new Date(), createdById: admin.id,
-            indicators: { create: normalizedIndicators(next).map((item, sortOrder) => ({ ...item, sortOrder })) },
-          },
-          include: { indicators: { orderBy: { sortOrder: "asc" } } },
-        });
-      });
-      json(response, 200, { ok: true, indicatorVersion: version });
-      return;
-    }
-    const checklistProjectMatch = requestUrl.pathname.match(/^\/api\/admin\/projects\/([0-9a-f-]+)\/checklist$/i);
-    if (request.method === "GET" && checklistProjectMatch) {
-      const reviewer = await requireUser(request);
-      const projectId = z.string().uuid().parse(checklistProjectMatch[1]);
-      const stage = z.enum(["PEER", "QUALITY", "DIITEP"]).parse(requestUrl.searchParams.get("stage"));
-      if (!canReview(reviewer, stage)) { json(response, 403, { error: "No tiene permisos para evaluar esta etapa." }); return; }
-      let review = await database.guideReview.findUnique({
-        where: { projectId_stage: { projectId, stage } },
-        include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, indicatorVersion: true },
-      });
-      if (!review) {
-        const version = await database.indicatorVersion.findFirst({
-          where: { status: "ACTIVE" }, orderBy: { version: "desc" }, include: { indicators: true },
-        });
-        if (!version) throw new Error("Debe activar una versión de indicadores antes de iniciar la revisión.");
-        const stageIndicators = version.indicators.filter((indicator) => indicator.active && indicator.stage === stage);
-        if (!stageIndicators.length) throw new Error("No existen indicadores activos para esta etapa.");
-        review = await database.guideReview.create({
-          data: {
-            projectId, stage, indicatorVersionId: version.id,
-            items: { create: stageIndicators.map((indicator) => ({ indicatorId: indicator.id })) },
-          },
-          include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, indicatorVersion: true },
-        });
-      }
-      const possible = review.items.filter((item) => item.result !== "NOT_APPLICABLE")
-        .reduce((sum, item) => sum + Number(item.indicator.score), 0);
-      const earned = review.items.reduce((sum, item) => sum + Number(item.indicator.score)
-        * (item.result === "COMPLIES" ? 1 : item.result === "COMPLIES_PARTIALLY" ? 0.5 : 0), 0);
-      const percentage = possible > 0 ? earned / possible * 100 : 0;
-      json(response, 200, { review, scoring: { earned, possible, percentage, category: categoryFor(percentage) } });
-      return;
-    }
-    const checklistMatch = requestUrl.pathname.match(/^\/api\/admin\/checklists\/([0-9a-f-]+)$/i);
-    if (request.method === "PATCH" && checklistMatch) {
-      const reviewer = await requireUser(request);
-      const reviewId = z.string().uuid().parse(checklistMatch[1]);
-      const body = z.object({
-        decision: z.enum(["DRAFT", "APPROVED", "CHANGES_REQUESTED"]),
-        generalObservation: z.string().trim().max(10_000).optional().default(""),
-        items: z.array(z.object({
-          id: z.string().uuid(), result: z.enum(["PENDING", "COMPLIES", "COMPLIES_PARTIALLY", "DOES_NOT_COMPLY", "NOT_APPLICABLE"]),
-          observation: z.string().trim().max(5000).optional().default(""),
-        })).min(1),
-      }).parse(await readJsonBody(request));
-      const review = await database.guideReview.findUniqueOrThrow({
-        where: { id: reviewId }, include: { items: { include: { indicator: true } } },
-      });
-      if (!canReview(reviewer, review.stage)) { json(response, 403, { error: "No tiene permisos para evaluar esta etapa." }); return; }
-      const submitted = new Map(body.items.map((item) => [item.id, item]));
-      if (review.items.some((item) => !submitted.has(item.id))) throw new Error("La lista de cotejo está incompleta.");
-      if (body.decision === "APPROVED" && review.items.some((item) => {
-        const result = submitted.get(item.id)?.result;
-        return item.indicator.required ? result === "PENDING" || result === "DOES_NOT_COMPLY" : result === "PENDING";
-      })) throw new Error("No se puede aprobar: existen indicadores obligatorios pendientes o incumplidos.");
-      const scoredItems = review.items.map((item) => ({ ...item, submittedResult: submitted.get(item.id)?.result ?? "PENDING" }));
-      const possibleScore = scoredItems.filter((item) => item.submittedResult !== "NOT_APPLICABLE")
-        .reduce((sum, item) => sum + Number(item.indicator.score), 0);
-      const earnedScore = scoredItems.reduce((sum, item) => sum + Number(item.indicator.score)
-        * (item.submittedResult === "COMPLIES" ? 1 : item.submittedResult === "COMPLIES_PARTIALLY" ? 0.5 : 0), 0);
-      const percentage = possibleScore > 0 ? earnedScore / possibleScore * 100 : 0;
-      const category = categoryFor(percentage);
-      if (body.decision === "APPROVED" && percentage < 80) {
-        throw new Error(`No se puede aprobar: la guía obtuvo ${percentage.toFixed(2)} % (${category}).`);
-      }
-      await database.$transaction(async (transaction) => {
-        for (const item of body.items) await transaction.guideReviewItem.update({
-          where: { id: item.id }, data: { result: item.result, observation: item.observation || null },
-        });
-        await transaction.guideReview.update({
-          where: { id: reviewId },
-          data: {
-            decision: body.decision, generalObservation: body.generalObservation || null,
-            reviewedById: reviewer.id, reviewedAt: body.decision === "DRAFT" ? null : new Date(),
-            earnedScore, possibleScore, percentage, category,
-          },
-        });
-      });
-      json(response, 200, { ok: true, scoring: { earned: earnedScore, possible: possibleScore, percentage, category } });
-      return;
-    }
     if (request.method === "GET" && requestUrl.pathname === "/api/projects") {
-      const user = await requireUser(request);
+      const user = await ensureLocalUser();
       const search = requestUrl.searchParams.get("search")?.trim() ?? "";
       const projects = await database.project.findMany({
         where: {
@@ -1599,7 +685,7 @@ const httpServer = createServer(async (request, response) => {
     }
     const projectMatch = requestUrl.pathname.match(/^\/api\/projects\/([0-9a-f-]+)$/i);
     if (request.method === "GET" && projectMatch) {
-      const user = await requireUser(request);
+      const user = await ensureLocalUser();
       const project = await database.project.findFirst({
         where: { id: projectMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: {
@@ -1627,7 +713,6 @@ const httpServer = createServer(async (request, response) => {
             professorName: project.professorName,
             subjectCode: project.subjectCode,
             subjectName: project.subjectName,
-            subjectType: project.subjectType,
             modality: project.modality,
             academicPeriod: project.academicPeriod,
             weeks: project.totalWeeks,
@@ -1661,7 +746,7 @@ const httpServer = createServer(async (request, response) => {
       requestUrl.pathname === "/api/projects/sync"
     ) {
       const body = projectPersistenceSchema.parse(await readJsonBody(request));
-      const user = await requireUser(request);
+      const user = await ensureLocalUser();
       const saved = await database.$transaction(async (transaction) => {
         const project = body.projectId
           ? await transaction.project.update({
@@ -1674,7 +759,6 @@ const httpServer = createServer(async (request, response) => {
                 professorName: body.project.professorName,
                 subjectCode: body.project.subjectCode,
                 subjectName: body.project.subjectName,
-                subjectType: body.project.subjectType,
                 modality: body.project.modality,
                 academicPeriod: body.project.academicPeriod,
                 totalWeeks: body.project.weeks,
@@ -1697,7 +781,6 @@ const httpServer = createServer(async (request, response) => {
                 professorName: body.project.professorName,
                 subjectCode: body.project.subjectCode,
                 subjectName: body.project.subjectName,
-                subjectType: body.project.subjectType,
                 modality: body.project.modality,
                 academicPeriod: body.project.academicPeriod,
                 totalWeeks: body.project.weeks,
@@ -1894,15 +977,9 @@ const httpServer = createServer(async (request, response) => {
         })),
       ];
 
-      const administrativeContext = await activeAdministrativeContext({
-        level: validation.data.project.level,
-        modality: validation.data.project.modality,
-        weeks: validation.data.project.weeks,
-        subjectType: validation.data.project.subjectType,
-      }, validation.data.projectId);
       const apiResponse = await openai.responses.create({
         model: openaiModel,
-        instructions: `${buildGenerationInstructions(methodologies)}${administrativeContext ? `\n\n${administrativeContext}` : ""}`,
+        instructions: buildGenerationInstructions(methodologies),
         input: [{
           role: "user",
           content: inputContent,
@@ -1918,32 +995,6 @@ const httpServer = createServer(async (request, response) => {
         );
       }
 
-      let contentWithImages = generatedContent;
-      const imageMarkers = [...generatedContent.matchAll(
-        /\[GENERAR_IMAGEN:\s*([^\]]+)\]/gi,
-      )].slice(0, 3);
-      for (const marker of imageMarkers) {
-        const prompt = (marker[1] ?? "").trim();
-        if (!prompt) continue;
-        const imageResponse = await openai.images.generate({
-          model: openaiImageModel,
-          prompt: `${prompt}\nImagen educativa clara y profesional. No incluya logotipos ni marcas de agua.`,
-          size: "1024x1024",
-        });
-        const imageBase64 = imageResponse.data?.[0]?.b64_json;
-        if (!imageBase64) {
-          contentWithImages = contentWithImages.replace(
-            marker[0],
-            `**Imagen sugerida:** ${prompt}`,
-          );
-          continue;
-        }
-        contentWithImages = contentWithImages.replace(
-          marker[0],
-          `![Imagen educativa: ${prompt}](data:image/png;base64,${imageBase64})`,
-        );
-      }
-
       response.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
         "Cache-Control": "no-store",
@@ -1952,11 +1003,139 @@ const httpServer = createServer(async (request, response) => {
       response.end(
         JSON.stringify({
           week: validation.data.week,
-          content: contentWithImages,
+          content: generatedContent,
           model: openaiModel,
         }),
       );
 
+      return;
+    }
+    if (
+      request.method === "POST" &&
+      requestUrl.pathname === "/api/generate-image"
+    ) {
+      if (!openai) {
+        response.writeHead(503, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify({
+          error: "La variable OPENAI_API_KEY no está configurada.",
+        }));
+        return;
+      }
+
+      const validation = imageGenerationRequestSchema.safeParse(
+        await readJsonBody(request),
+      );
+      if (!validation.success) {
+        response.writeHead(400, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify({
+          error: "La propuesta visual está incompleta o no es válida.",
+          details: validation.error.flatten(),
+        }));
+        return;
+      }
+
+      const imageSize =
+        validation.data.orientation === "horizontal"
+          ? "1536x1024"
+          : validation.data.orientation === "vertical"
+            ? "1024x1536"
+            : "1024x1024";
+      const imageResponse = await openai.images.generate({
+        model: openaiImageModel,
+        prompt: `
+Propósito educativo: ${validation.data.purpose}
+Tema: ${validation.data.topic}
+Tipo y estilo seleccionado: ${validation.data.style}
+Título conceptual: ${validation.data.title}
+Composición y contenido autorizado: ${validation.data.prompt}
+Orientación: ${validation.data.orientation}
+
+Cree un recurso visual académico, sobrio, contemporáneo, claro y apto para
+educación superior. Use jerarquía visual, tipografía legible, alto contraste,
+paleta consistente y fondo limpio. Incluya únicamente texto breve e
+indispensable. No invente datos, citas, autores ni contenidos. No incluya
+logotipos, marcas de agua, rostros identificables ni elementos decorativos
+innecesarios.
+        `.trim(),
+        size: imageSize,
+      });
+      const imageBase64 = imageResponse.data?.[0]?.b64_json;
+      if (!imageBase64) {
+        throw new Error("La herramienta no devolvió un archivo visual.");
+      }
+
+      const project = await database.project.findUnique({
+        where: { id: validation.data.projectId },
+        include: {
+          weeks: {
+            where: { weekNumber: validation.data.week },
+            take: 1,
+          },
+        },
+      });
+      if (!project || !project.weeks[0]) {
+        response.writeHead(404, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify({
+          error: "No se encontró el proyecto o la semana para guardar la imagen.",
+        }));
+        return;
+      }
+      const attachment = await database.attachment.create({
+        data: {
+          projectId: project.id,
+          projectWeekId: project.weeks[0].id,
+          kind: "GENERATED_IMAGE",
+          originalName: `figura-semana-${validation.data.week}-${Date.now()}.png`,
+          storagePath: "postgresql://generated-image",
+          mimeType: "image/png",
+          sizeBytes: Buffer.byteLength(imageBase64, "base64"),
+          contentBase64: imageBase64,
+        },
+      });
+
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      response.end(JSON.stringify({
+        imageUrl: `/api/images/${attachment.id}`,
+        title: validation.data.title,
+        altText: validation.data.altText,
+        source: "Elaboración propia mediante IA generativa.",
+      }));
+      return;
+    }
+    const imageRoute = requestUrl.pathname.match(
+      /^\/api\/images\/([0-9a-f-]{36})$/i,
+    );
+    if (request.method === "GET" && imageRoute) {
+      const attachment = await database.attachment.findUnique({
+        where: { id: imageRoute[1] },
+      });
+      if (
+        !attachment ||
+        attachment.kind !== "GENERATED_IMAGE" ||
+        !attachment.contentBase64
+      ) {
+        response.writeHead(404, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(JSON.stringify({ error: "Imagen no encontrada." }));
+        return;
+      }
+      const image = Buffer.from(attachment.contentBase64, "base64");
+      response.writeHead(200, {
+        "Content-Type": attachment.mimeType,
+        "Content-Length": image.length,
+        "Cache-Control": "private, max-age=31536000, immutable",
+      });
+      response.end(image);
       return;
     }
     if (
@@ -1972,6 +1151,15 @@ const httpServer = createServer(async (request, response) => {
         return;
       }
       const isComplete = body.weeks.length === body.project.totalWeeks;
+      const weekBlocks: Array<Paragraph | Table> = [];
+      for (const item of body.weeks) {
+        weekBlocks.push(new Paragraph({
+          text: `Semana ${item.week}`,
+          heading: HeadingLevel.HEADING_1,
+          pageBreakBefore: item.week > 1,
+        }));
+        weekBlocks.push(...await markdownParagraphs(item.content));
+      }
       const document = new Document({
         numbering: {
           config: [{
@@ -1987,10 +1175,7 @@ const httpServer = createServer(async (request, response) => {
             new Paragraph(`Carrera: ${body.project.career}`),
             new Paragraph(`Modalidad: ${body.project.modality}`),
             new Paragraph(`Periodo académico: ${body.project.academicPeriod}`),
-            ...body.weeks.flatMap((item) => [
-              new Paragraph({ text: `Semana ${item.week}`, heading: HeadingLevel.HEADING_1, pageBreakBefore: item.week > 1 }),
-              ...markdownParagraphs(item.content),
-            ]),
+            ...weekBlocks,
           ],
         }],
       });
@@ -2142,7 +1327,7 @@ const httpServer = createServer(async (request, response) => {
     console.error("Error al procesar la solicitud:", error);
 
     if (!response.headersSent) {
-      response.writeHead(Number((error as { statusCode?: number }).statusCode ?? 500), {
+      response.writeHead(500, {
         "Content-Type": "application/json; charset=utf-8",
       });
     }

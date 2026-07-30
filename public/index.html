@@ -9,39 +9,11 @@
   <link rel="stylesheet" href="/editor-rich.css">
 </head>
 <body>
-  <div class="auth-layer" id="auth-layer">
-    <section class="auth-card">
-      <p class="eyebrow">Acceso institucional</p>
-      <h1>Generador de Guías Didácticas</h1>
-      <div class="auth-tabs">
-        <button type="button" class="active" data-auth-tab="login">Iniciar sesión</button>
-        <button type="button" data-auth-tab="register">Registrarse</button>
-      </div>
-      <form id="login-form" class="auth-form">
-        <label>Correo electrónico<input name="email" type="email" required></label>
-        <label>Contraseña<input name="password" type="password" required></label>
-        <button class="button" type="submit">Ingresar</button>
-      </form>
-      <form id="register-form" class="auth-form hidden">
-        <div class="grid">
-          <label>Nombre<input name="firstName" required></label>
-          <label>Apellido<input name="lastName" required></label>
-          <label>Cédula<input name="nationalId" required></label>
-          <label>Correo<input name="email" type="email" required></label>
-        </div>
-        <label>Contraseña<input name="password" type="password" minlength="8" required></label>
-        <small>El registro individual asigna automáticamente el rol Profesor.</small>
-        <button class="button" type="submit">Crear cuenta</button>
-      </form>
-      <p id="auth-message" class="auth-message hidden"></p>
-    </section>
-  </div>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">◇</span><strong>GGD</strong></div>
     <nav aria-label="Navegación principal">
       <button class="nav active" id="nav-home">⌂ <span>Inicio</span></button>
       <button class="nav" id="nav-projects">□ <span>Mis proyectos</span></button>
-      <button class="nav hidden" id="nav-admin">⚙ <span>Administración</span></button>
       <button class="nav" id="nav-templates">▤ <span>Plantillas</span></button>
       <button class="nav" id="nav-help">? <span>Ayuda</span></button>
     </nav>
@@ -50,10 +22,10 @@
   <main class="workspace">
     <header class="topbar">
       <div class="product"><i></i>Generador de Guías Didácticas</div>
-      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="logout" class="logout" type="button">Salir</button></div>
+      <div class="profile"><span>DM</span><div><strong>Dirección de Materiales</strong><small>Administrador funcional</small></div></div>
     </header>
 
-    <section class="content" id="main-content">
+    <section class="content">
       <div class="heading">
         <div><p class="eyebrow">Panel principal</p><h1>Proyectos académicos</h1><p>Cree y revise sus guías didácticas con trazabilidad por semana.</p></div>
         <button class="button secondary" id="new-project">＋ Nuevo proyecto</button>
@@ -74,154 +46,6 @@
           <p class="projects-empty">Cargando proyectos…</p>
         </div>
       </section>
-    </section>
-
-    <section class="content hidden" id="admin-content">
-      <div class="heading">
-        <div><p class="eyebrow">Gestión institucional</p><h1>Administración</h1><p>Usuarios, asignaciones, configuración de IA y seguimiento de guías.</p></div>
-        <button class="button secondary" id="refresh-admin" type="button">Actualizar datos</button>
-      </div>
-      <div class="admin-tabs" role="tablist">
-        <button class="active" data-admin-tab="users">Usuarios</button>
-        <button data-admin-tab="assignments">Asignaciones</button>
-        <button data-admin-tab="knowledge">Conocimiento e IA</button>
-        <button data-admin-tab="reports">Reporte de guías</button>
-      </div>
-
-      <section class="admin-panel active" data-admin-panel="users">
-        <div class="admin-grid">
-          <form class="admin-card" id="admin-user-form">
-            <h2 id="admin-user-form-title">Crear usuario</h2>
-            <input name="userId" id="admin-user-id" type="hidden">
-            <div class="grid">
-              <label>Nombre<input name="firstName" required></label>
-              <label>Apellido<input name="lastName" required></label>
-              <label>Cédula<input name="nationalId" required></label>
-              <label>Correo<input name="email" type="email" required></label>
-            </div>
-            <label>Roles<select name="roleCodes" id="admin-user-roles" multiple required></select><small>Use Cmd/Ctrl para seleccionar varios roles.</small></label>
-            <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="8" placeholder="El sistema puede generarla"></label>
-            <div class="form-actions"><button class="button" id="admin-user-submit" type="submit">Crear usuario</button><button class="button secondary hidden" id="admin-user-cancel" type="button">Cancelar edición</button></div>
-          </form>
-          <form class="admin-card" id="bulk-user-form">
-            <h2>Registro masivo</h2>
-            <p>Cargue Excel o CSV con: Nombre, Apellido, Cédula, Correo y Rol.</p>
-            <input id="bulk-users-file" type="file" accept=".xlsx,.csv" required>
-            <button class="button" type="submit">Registrar archivo</button>
-          </form>
-        </div>
-        <div class="admin-card">
-          <div class="table-toolbar"><h2>Usuarios registrados</h2><input id="admin-user-search" type="search" placeholder="Buscar por nombre, cédula o correo"></div>
-          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Usuario</th><th>Cédula</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-users-body"></tbody></table></div>
-        </div>
-      </section>
-
-      <section class="admin-panel" data-admin-panel="assignments">
-        <form class="admin-card" id="assignment-form">
-          <h2>Asignar profesor a asignatura y periodo</h2>
-          <div class="grid">
-            <label>Profesor<select name="teacherId" id="assignment-teacher" required></select></label>
-            <label>Carrera<select name="career" id="assignment-career" required><option value="">Seleccione una carrera</option></select></label>
-            <label>Asignatura<select name="courseId" id="assignment-course" required><option value="">Seleccione primero una carrera</option></select></label>
-            <label class="hidden" id="new-course-code-wrap">Código de asignatura nueva<input name="subjectCode" id="assignment-code"></label>
-            <label class="hidden" id="new-course-name-wrap">Nombre de asignatura nueva<input name="subjectName" id="assignment-name"></label>
-            <label>Periodo académico<select name="periodId" id="assignment-period" required><option value="">Seleccione un periodo</option></select></label>
-            <label>Guía finalizada como base<select name="sourceProjectId" id="assignment-source"><option value="">Crear guía nueva</option></select></label>
-          </div>
-          <button class="button" type="submit">Guardar asignación</button>
-        </form>
-        <div class="admin-card"><h2>Asignaciones vigentes</h2><div id="assignment-list" class="assignment-list"></div></div>
-      </section>
-
-      <section class="admin-panel" data-admin-panel="knowledge">
-        <div class="admin-grid">
-          <form class="admin-card" id="instruction-form">
-            <h2>Especificaciones funcionales</h2>
-            <p>Defina el contexto de aplicación. Facultad y Carrera no forman parte del ámbito.</p>
-            <label>Versión existente<select id="instruction-selector"><option value="">Nueva instrucción</option></select></label>
-            <label>Clave<input name="key" required placeholder="general"></label>
-            <label>Título<input name="title" required></label>
-            <label>Prioridad<input name="priority" type="number" min="1" max="999" value="100" required></label>
-            <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
-            <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
-            <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
-            <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
-            <p class="field-help">Deje un ámbito vacío para que la especificación sea compatible con cualquier valor de ese campo.</p>
-            <label>Contenido<textarea name="content" required minlength="20"></textarea></label>
-            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
-            <div class="inline-actions"><button class="button secondary" type="button" data-impact-kind="SPECIFICATION">Analizar impacto</button><button class="button" type="submit" disabled>Guardar nueva versión</button></div>
-            <div class="impact-result hidden" data-impact-result="SPECIFICATION"></div>
-          </form>
-          <form class="admin-card" id="knowledge-form">
-            <h2>Documentos institucionales para la IA</h2>
-            <p>La versión activa de cada documento se incorpora automáticamente en las nuevas generaciones.</p>
-            <p class="field-help">Los indicadores ya no se administran como documento: utilice la fuente oficial «Indicadores generales de la guía».</p>
-            <label>Archivo existente<select id="knowledge-selector"><option value="">Nuevo archivo</option></select></label>
-            <label>Clave<input name="key" required placeholder="normas-apa"></label>
-            <label>Título<input name="title" required></label>
-            <label>Prioridad de aplicación<input name="priority" type="number" min="1" max="999" value="100" required></label>
-            <label class="confirm"><input name="appliesToAll" type="checkbox" checked> Aplicar a todos los contenidos</label>
-            <div data-document-scope>
-              <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
-              <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
-              <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
-              <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
-            </div>
-            <label>Contenido editable (Markdown)<textarea name="contentMarkdown" id="knowledge-content" required minlength="1" rows="18" placeholder="# Título&#10;&#10;Escriba o cargue aquí el contenido institucional."></textarea></label>
-            <label>Reemplazar desde archivo .txt o .md<input name="file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
-            <p class="field-help">El archivo es opcional. Al seleccionarlo, su texto se cargará en el editor. El original se conserva como respaldo de la nueva versión.</p>
-            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
-            <div class="inline-actions">
-              <button class="button secondary" type="button" data-impact-kind="DOCUMENT">Analizar impacto</button>
-              <button class="button" type="submit" disabled>Guardar como nueva versión</button>
-              <button class="button secondary hidden" id="activate-knowledge-version" type="button">Activar esta versión</button>
-              <a class="button secondary hidden" id="download-knowledge-original" href="#">Descargar original</a>
-            </div>
-            <div class="impact-result hidden" data-impact-result="DOCUMENT"></div>
-          </form>
-        </div>
-        <div class="admin-card"><h2>Versiones registradas</h2><div id="ai-version-list" class="assignment-list"></div></div>
-        <div class="admin-card" id="indicator-form">
-          <h2>Indicadores generales de la guía</h2>
-          <p>Esta es la fuente oficial única: la versión activa se aplica tanto a la generación con IA como a las nuevas listas de cotejo. Las revisiones iniciadas conservan su versión original.</p>
-          <div class="table-toolbar">
-            <label>Responsable<select id="indicator-stage-filter"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
-            <button class="button" id="new-indicator" type="button">Crear nuevo indicador</button>
-          </div>
-          <p class="field-help" id="indicator-weight-summary"></p>
-          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Indicador</th><th>Descripción</th><th>Puntuación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="indicator-table-body"></tbody></table></div>
-          <form id="indicator-editor" class="indicator-editor hidden">
-            <input name="id" type="hidden">
-            <h3 id="indicator-editor-title">Crear indicador</h3>
-            <label>Indicador<input name="name" required minlength="3" maxlength="250"></label>
-            <label>Descripción<textarea name="description" required minlength="3" maxlength="2000"></textarea></label>
-            <label>Puntuación<input name="score" type="number" min="0.01" max="100" step="0.01" required></label>
-            <div class="form-actions"><button class="button" type="submit">Guardar y redistribuir</button><button class="button secondary" id="cancel-indicator" type="button">Cancelar</button></div>
-          </form>
-        </div>
-      </section>
-
-      <section class="admin-panel" data-admin-panel="reports">
-        <div id="guide-summary" class="report-cards"></div>
-        <div class="admin-card">
-          <div class="table-toolbar"><h2>Estado de guías</h2><input id="guide-report-search" type="search" placeholder="Buscar por profesor, asignatura, código o periodo"></div>
-          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Guía</th><th>Profesor</th><th>Periodo</th><th>Progreso</th><th>Estado</th><th>Actualización</th></tr></thead><tbody id="guide-report-body"></tbody></table></div>
-        </div>
-        <div class="admin-card">
-          <h2>Listas de cotejo institucionales</h2>
-          <p>Cada guía conserva la versión de indicadores utilizada por el Par académico, el Equipo de calidad y DIITEP.</p>
-          <label>Guía<select id="checklist-project"><option value="">Seleccione una guía</option></select></label>
-          <label>Etapa<select id="checklist-stage"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
-          <button class="button secondary" id="load-checklist" type="button">Abrir lista de cotejo</button>
-          <form id="checklist-form" class="hidden">
-            <div id="checklist-score" class="score-summary" aria-live="polite"></div>
-            <div id="checklist-items" class="checklist-items"></div>
-            <label>Observación general<textarea name="generalObservation"></textarea></label>
-            <div class="form-actions"><button class="button secondary" name="decision" value="DRAFT">Guardar borrador</button><button class="button secondary" name="decision" value="CHANGES_REQUESTED">Solicitar cambios</button><button class="button approve" name="decision" value="APPROVED">Aprobar</button></div>
-          </form>
-        </div>
-      </section>
-      <p id="admin-message" class="admin-message hidden" role="status"></p>
     </section>
   </main>
 
@@ -263,15 +87,6 @@
             <label>Profesor *<input name="professorName" required placeholder="Nombres y apellidos"></label>
             <label>Código de la asignatura *<input name="subjectCode" required placeholder="Ej.: RELI_1105"></label>
             <label>Asignatura *<input name="subjectName" required></label>
-            <label>Tipo de asignatura *
-              <select name="subjectType" required>
-                <option value="GENERAL">General</option>
-                <option value="TEORICA">Teórica</option>
-                <option value="PRACTICA">Práctica</option>
-                <option value="PROYECTO">Proyecto o integradora</option>
-                <option value="OTRA">Otra</option>
-              </select>
-            </label>
             <label>Periodo académico *<input name="academicPeriod" required placeholder="Oct. 2026–Feb. 2027"></label>
             <label>Número de semanas *
               <input type="number" name="weeks" id="weeks" required min="1" step="1" placeholder="Ej.: 8">
@@ -360,6 +175,55 @@
           <button type="button" class="button" id="next">Continuar →</button>
         </footer>
       </form>
+    </section>
+  </div>
+
+  <div class="visual-modal-layer hidden" id="visual-modal-layer">
+    <section class="visual-modal" role="dialog" aria-modal="true" aria-labelledby="visual-modal-title">
+      <header class="visual-modal-header">
+        <div>
+          <p class="eyebrow">Oportunidad visual identificada</p>
+          <h2 id="visual-modal-title">Este contenido puede representarse visualmente</h2>
+        </div>
+      </header>
+      <div class="visual-modal-body">
+        <dl class="visual-summary">
+          <div><dt>Tema o subtema</dt><dd id="visual-topic"></dd></div>
+          <div><dt>Finalidad didáctica</dt><dd id="visual-purpose"></dd></div>
+        </dl>
+        <fieldset class="visual-style-options">
+          <legend>Seleccione un estilo</legend>
+          <div id="visual-styles"></div>
+        </fieldset>
+        <div class="visual-settings">
+          <label>Orientación
+            <select id="visual-orientation">
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
+              <option value="cuadrada">Cuadrada</option>
+            </select>
+          </label>
+          <label>Título de la figura
+            <input id="visual-title" maxlength="180">
+          </label>
+          <label class="visual-full">Elementos e indicaciones
+            <textarea id="visual-prompt" rows="4"></textarea>
+          </label>
+          <label class="visual-full">Texto alternativo
+            <textarea id="visual-alt" rows="2"></textarea>
+          </label>
+        </div>
+        <div class="visual-progress hidden" id="visual-progress" role="status" aria-live="polite">
+          <span class="progress-spinner" aria-hidden="true"></span>
+          <span>Generando el recurso visual seleccionado… El contenido continuará cuando esté listo.</span>
+        </div>
+        <p class="generation-error hidden" id="visual-error" role="alert"></p>
+      </div>
+      <footer class="visual-modal-actions">
+        <button type="button" class="button secondary" id="omit-visual">Omitir</button>
+        <button type="button" class="button secondary" id="modify-visual">Modificar propuesta</button>
+        <button type="button" class="button approve" id="generate-visual">Generar recurso</button>
+      </footer>
     </section>
   </div>
   <script src="/academic-offer.js" defer></script>

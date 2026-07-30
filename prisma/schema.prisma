@@ -37,48 +37,20 @@ enum AttachmentKind {
   KNOWLEDGE
 }
 
-enum ReviewStage {
-  PEER
-  QUALITY
-  DIITEP
-}
-
-enum ChecklistResult {
-  PENDING
-  COMPLIES
-  COMPLIES_PARTIALLY
-  DOES_NOT_COMPLY
-  NOT_APPLICABLE
-}
-
-enum ReviewDecision {
-  DRAFT
-  APPROVED
-  CHANGES_REQUESTED
-}
-
 model User {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  email               String                  @unique
-  firstName           String                  @default("")
-  lastName            String                  @default("")
-  nationalId          String?                 @unique
-  displayName         String
-  passwordHash        String?
-  mustChangePassword  Boolean                 @default(false)
-  active              Boolean                 @default(true)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  roles               UserRole[]
-  projects            Project[]               @relation("ProjectOwner")
-  weekVersions        WeekVersion[]
-  instructions        GenerationInstruction[]
-  documents           KnowledgeDocument[]
-  auditLogs           AuditLog[]
-  sessions            UserSession[]
-  teachingAssignments TeachingAssignment[]
-  indicatorVersions   IndicatorVersion[]
-  guideReviews        GuideReview[]
+  id           String      @id @default(uuid()) @db.Uuid
+  email        String      @unique
+  displayName  String
+  passwordHash String?
+  active       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  roles        UserRole[]
+  projects     Project[]   @relation("ProjectOwner")
+  weekVersions WeekVersion[]
+  instructions GenerationInstruction[]
+  documents    KnowledgeDocument[]
+  auditLogs    AuditLog[]
 }
 
 model Role {
@@ -100,90 +72,32 @@ model UserRole {
 }
 
 model Project {
-  id                   String              @id @default(uuid()) @db.Uuid
-  ownerId              String              @db.Uuid
-  name                 String
-  level                String
-  faculty              String
-  career               String
-  professorName        String              @default("")
-  subjectCode          String              @default("")
-  subjectName          String
-  modality             String
-  subjectType          String              @default("GENERAL")
-  specificationSnapshotIds String[]        @default([])
-  documentSnapshotIds      String[]        @default([])
-  indicatorVersionSnapshotId String?       @db.Uuid
-  academicPeriod       String
-  totalWeeks           Int
-  currentWeek          Int                 @default(1)
-  basicBib             String
-  complementaryBib     String
-  reaBib               String?
-  status               ProjectStatus       @default(DRAFT)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  owner                User                @relation("ProjectOwner", fields: [ownerId], references: [id])
-  matrix               Matrix?
-  weeks                ProjectWeek[]
-  attachments          Attachment[]
-  teachingAssignmentId String?             @db.Uuid
-  sourceProjectId      String?             @db.Uuid
-  teachingAssignment   TeachingAssignment? @relation(fields: [teachingAssignmentId], references: [id])
-  sourceProject        Project?            @relation("ProjectLineage", fields: [sourceProjectId], references: [id])
-  derivedProjects      Project[]           @relation("ProjectLineage")
-  guideReviews         GuideReview[]
+  id             String        @id @default(uuid()) @db.Uuid
+  ownerId        String        @db.Uuid
+  name           String
+  level          String
+  faculty        String
+  career         String
+  professorName  String        @default("")
+  subjectCode    String        @default("")
+  subjectName    String
+  modality       String
+  academicPeriod String
+  totalWeeks     Int
+  currentWeek    Int           @default(1)
+  basicBib       String
+  complementaryBib String
+  reaBib         String?
+  status         ProjectStatus @default(DRAFT)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  owner          User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  matrix         Matrix?
+  weeks          ProjectWeek[]
+  attachments    Attachment[]
 
   @@index([ownerId, updatedAt])
   @@index([ownerId, subjectCode])
-}
-
-model AcademicPeriod {
-  id          String               @id @default(uuid()) @db.Uuid
-  name        String               @unique
-  startsAt    DateTime?
-  endsAt      DateTime?
-  active      Boolean              @default(true)
-  assignments TeachingAssignment[]
-  createdAt   DateTime             @default(now())
-}
-
-model Course {
-  id          String               @id @default(uuid()) @db.Uuid
-  code        String               @unique
-  name        String
-  career      String
-  active      Boolean              @default(true)
-  assignments TeachingAssignment[]
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
-}
-
-model TeachingAssignment {
-  id        String         @id @default(uuid()) @db.Uuid
-  teacherId String         @db.Uuid
-  courseId  String         @db.Uuid
-  periodId  String         @db.Uuid
-  active    Boolean        @default(true)
-  createdAt DateTime       @default(now())
-  teacher   User           @relation(fields: [teacherId], references: [id])
-  course    Course         @relation(fields: [courseId], references: [id])
-  period    AcademicPeriod @relation(fields: [periodId], references: [id])
-  projects  Project[]
-
-  @@unique([teacherId, courseId, periodId])
-  @@index([teacherId, periodId])
-}
-
-model UserSession {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  tokenHash String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, expiresAt])
 }
 
 model Matrix {
@@ -211,17 +125,17 @@ model MatrixRow {
 }
 
 model ProjectWeek {
-  id              String        @id @default(uuid()) @db.Uuid
-  projectId       String        @db.Uuid
+  id              String      @id @default(uuid()) @db.Uuid
+  projectId       String      @db.Uuid
   weekNumber      Int
-  status          WeekStatus    @default(PENDING)
+  status          WeekStatus  @default(PENDING)
   draftContent    String?
   approvedContent String?
   approvedAt      DateTime?
-  currentVersion  Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  currentVersion  Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  project         Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   versions        WeekVersion[]
   attachments     Attachment[]
 
@@ -230,16 +144,16 @@ model ProjectWeek {
 }
 
 model WeekVersion {
-  id                     String      @id @default(uuid()) @db.Uuid
-  projectWeekId          String      @db.Uuid
-  versionNumber          Int
-  status                 WeekStatus
-  content                String
+  id                    String      @id @default(uuid()) @db.Uuid
+  projectWeekId         String      @db.Uuid
+  versionNumber         Int
+  status                WeekStatus
+  content               String
   adjustmentInstructions String?
-  createdById            String?     @db.Uuid
-  createdAt              DateTime    @default(now())
-  projectWeek            ProjectWeek @relation(fields: [projectWeekId], references: [id], onDelete: Cascade)
-  createdBy              User?       @relation(fields: [createdById], references: [id])
+  createdById           String?     @db.Uuid
+  createdAt             DateTime    @default(now())
+  projectWeek           ProjectWeek @relation(fields: [projectWeekId], references: [id], onDelete: Cascade)
+  createdBy             User?       @relation(fields: [createdById], references: [id])
 
   @@unique([projectWeekId, versionNumber])
 }
@@ -251,13 +165,6 @@ model GenerationInstruction {
   content     String
   version     Int
   status      DocumentStatus @default(DRAFT)
-  academicLevels String[]     @default([])
-  modalities    String[]      @default([])
-  durations     Int[]         @default([])
-  subjectTypes  String[]      @default([])
-  priority      Int           @default(100)
-  impactAnalysis Json?
-  impactChecksum String?
   createdById String?        @db.Uuid
   createdAt   DateTime       @default(now())
   activatedAt DateTime?
@@ -268,99 +175,21 @@ model GenerationInstruction {
 }
 
 model KnowledgeDocument {
-  id          String         @id @default(uuid()) @db.Uuid
-  key         String
-  title       String
-  version     Int
-  status      DocumentStatus @default(DRAFT)
-  storagePath String
-  mimeType    String
-  originalName String?
-  contentMarkdown String?
-  priority    Int            @default(100)
-  academicLevels String[]    @default([])
-  modalities    String[]     @default([])
-  durations     Int[]        @default([])
-  subjectTypes  String[]     @default([])
-  appliesToAll  Boolean      @default(true)
-  impactAnalysis Json?
-  impactChecksum String?
-  checksum    String?
-  createdById String?        @db.Uuid
-  createdAt   DateTime       @default(now())
-  activatedAt DateTime?
-  createdBy   User?          @relation(fields: [createdById], references: [id])
+  id           String         @id @default(uuid()) @db.Uuid
+  key          String
+  title        String
+  version      Int
+  status       DocumentStatus @default(DRAFT)
+  storagePath  String
+  mimeType     String
+  checksum     String?
+  createdById  String?        @db.Uuid
+  createdAt    DateTime       @default(now())
+  activatedAt  DateTime?
+  createdBy    User?          @relation(fields: [createdById], references: [id])
 
   @@unique([key, version])
   @@index([key, status])
-  @@index([status, priority])
-}
-
-model IndicatorVersion {
-  id          String           @id @default(uuid()) @db.Uuid
-  version     Int              @unique
-  title       String
-  status      DocumentStatus   @default(DRAFT)
-  createdById String?          @db.Uuid
-  createdAt   DateTime         @default(now())
-  activatedAt DateTime?
-  createdBy   User?            @relation(fields: [createdById], references: [id])
-  indicators  GuideIndicator[]
-  reviews     GuideReview[]
-}
-
-model GuideIndicator {
-  id          String            @id @default(uuid()) @db.Uuid
-  versionId   String            @db.Uuid
-  code        String
-  name        String            @default("")
-  description String
-  stage       ReviewStage       @default(PEER)
-  score       Decimal           @default(0) @db.Decimal(8, 4)
-  active      Boolean           @default(true)
-  required    Boolean           @default(true)
-  sortOrder   Int
-  version     IndicatorVersion  @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  reviewItems GuideReviewItem[]
-
-  @@unique([versionId, code])
-  @@index([versionId, sortOrder])
-}
-
-model GuideReview {
-  id                 String            @id @default(uuid()) @db.Uuid
-  projectId          String            @db.Uuid
-  indicatorVersionId String            @db.Uuid
-  stage              ReviewStage
-  decision           ReviewDecision    @default(DRAFT)
-  generalObservation String?
-  earnedScore        Decimal?          @db.Decimal(8, 4)
-  possibleScore      Decimal?          @db.Decimal(8, 4)
-  percentage         Decimal?          @db.Decimal(6, 2)
-  category           String?
-  reviewedById       String?           @db.Uuid
-  reviewedAt         DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  project            Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  indicatorVersion   IndicatorVersion  @relation(fields: [indicatorVersionId], references: [id])
-  reviewedBy         User?             @relation(fields: [reviewedById], references: [id])
-  items              GuideReviewItem[]
-
-  @@unique([projectId, stage])
-  @@index([stage, decision])
-}
-
-model GuideReviewItem {
-  id          String          @id @default(uuid()) @db.Uuid
-  reviewId    String          @db.Uuid
-  indicatorId String          @db.Uuid
-  result      ChecklistResult @default(PENDING)
-  observation String?
-  review      GuideReview     @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  indicator   GuideIndicator  @relation(fields: [indicatorId], references: [id])
-
-  @@unique([reviewId, indicatorId])
 }
 
 model Attachment {
@@ -373,6 +202,7 @@ model Attachment {
   mimeType      String
   sizeBytes     Int
   checksum      String?
+  contentBase64 String?
   createdAt     DateTime       @default(now())
   project       Project?       @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectWeek   ProjectWeek?   @relation(fields: [projectWeekId], references: [id], onDelete: Cascade)
