@@ -179,3 +179,16 @@ correctamente.
 - Cada guía congela las versiones de especificaciones, documentos e indicadores utilizadas en su primera generación.
 - Se añadió la migración incremental `20260805000000_correction_24_contextual_specs`.
 - Se validaron el esquema Prisma, la sintaxis del cliente y la compilación TypeScript.
+# Actualización acumulativa — generación visual asistida
+
+- Se tomó como base funcional la corrección 24.
+- Se incorporó detección de hasta tres oportunidades visuales por semana.
+- Se agregó una ventana con tres estilos adaptados al contenido y las acciones
+  Generar recurso, Modificar propuesta y Omitir.
+- La generación se reanuda después de cada decisión y la figura se inserta en
+  el punto correspondiente.
+- Las imágenes se almacenan en PostgreSQL mediante `GeneratedImage`; la guía
+  conserva una URL estable.
+- La descarga Word incorpora imagen, número, título y fuente.
+- Se corrigieron referencias asíncronas inseguras a
+  `event.currentTarget` en formularios administrativos.

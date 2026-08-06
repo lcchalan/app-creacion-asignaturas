@@ -27,3 +27,13 @@ coverage/
 # Archivos temporales
 *.tmp
 *.swp
+# Archivos cargados durante la ejecución
+knowledge/uploads/
+
+# Respaldos de base de datos
+respaldos/
+
+# Archivos auxiliares
+cambios-src-index.patch
+index.html.antes-de-separar
+__MACOSX/
