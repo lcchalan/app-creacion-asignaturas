@@ -16,6 +16,7 @@ npm-debug.log*
 
 # Archivos del sistema
 .DS_Store
+__MACOSX/
 
 # Editores
 .vscode/
@@ -27,13 +28,15 @@ coverage/
 # Archivos temporales
 *.tmp
 *.swp
-# Archivos cargados durante la ejecución
+
+# Archivos creados durante la ejecución
 knowledge/uploads/
 
-# Respaldos de base de datos
+# Respaldos y exportaciones de base de datos
 respaldos/
+backups/
+*.dump
 
-# Archivos auxiliares
+# Residuos históricos de desarrollo
 cambios-src-index.patch
 index.html.antes-de-separar
-__MACOSX/
