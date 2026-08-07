@@ -204,6 +204,7 @@ async function syncDatabase() {
   const local = JSON.parse(localStorage.getItem(storageKey) || "{}");
   local.projectId = projectId;
   localStorage.setItem(storageKey, JSON.stringify(local));
+  $("#download-json").disabled = false;
 }
 function scheduleDatabaseSync() {
   clearTimeout(syncTimer);
@@ -743,6 +744,7 @@ function updateWeekInterface() {
   $("#generate-week").classList.toggle("hidden", Boolean(displayContent));
   renderWeekTabs();
   const approvedCount = consecutiveApprovedWeeks();
+  $("#download-json").disabled = !canSyncDatabase();
   $("#download-word").disabled = approvedCount === 0;
   $("#download-word").textContent = approvedCount === totalWeeks() ? "Descargar guía completa" : `Descargar avance (semanas 1–${approvedCount})`;
 }
@@ -1086,6 +1088,34 @@ $("#modify-week").onclick = () => {
   persistProject();
   updateWeekInterface();
   $("#generation-output").focus();
+};
+
+$("#download-json").onclick = async () => {
+  const button = $("#download-json");
+  button.disabled = true;
+  try {
+    clearTimeout(syncTimer);
+    await syncDatabase();
+    if (!projectId) throw new Error("Guarde el proyecto antes de descargar el JSON canónico.");
+    const response = await fetch(`/api/projects/${projectId}/canonical-json`, { cache: "no-store" });
+    if (!response.ok) {
+      const payload = await response.json();
+      throw new Error(payload.error || "No fue posible descargar el JSON canónico.");
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const serverName = disposition.match(/filename="([^"]+)"/)?.[1];
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = serverName || `${data().subjectName || "guia-didactica"}.canonical.v1.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) {
+    $("#generation-error").textContent = error.message;
+    $("#generation-error").classList.remove("hidden");
+  } finally {
+    button.disabled = !canSyncDatabase();
+  }
 };
 
 $("#download-word").onclick = async () => {

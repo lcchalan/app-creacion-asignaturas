@@ -100,40 +100,41 @@ model UserRole {
 }
 
 model Project {
-  id                   String              @id @default(uuid()) @db.Uuid
-  ownerId              String              @db.Uuid
-  name                 String
-  level                String
-  faculty              String
-  career               String
-  professorName        String              @default("")
-  subjectCode          String              @default("")
-  subjectName          String
-  modality             String
-  subjectType          String              @default("GENERAL")
-  specificationSnapshotIds String[]        @default([])
-  documentSnapshotIds      String[]        @default([])
-  indicatorVersionSnapshotId String?       @db.Uuid
-  academicPeriod       String
-  totalWeeks           Int
-  currentWeek          Int                 @default(1)
-  basicBib             String
-  complementaryBib     String
-  reaBib               String?
-  status               ProjectStatus       @default(DRAFT)
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  owner                User                @relation("ProjectOwner", fields: [ownerId], references: [id])
-  matrix               Matrix?
-  weeks                ProjectWeek[]
-  attachments          Attachment[]
-  teachingAssignmentId String?             @db.Uuid
-  sourceProjectId      String?             @db.Uuid
-  teachingAssignment   TeachingAssignment? @relation(fields: [teachingAssignmentId], references: [id])
-  sourceProject        Project?            @relation("ProjectLineage", fields: [sourceProjectId], references: [id])
-  derivedProjects      Project[]           @relation("ProjectLineage")
-  guideReviews         GuideReview[]
-  generatedImages      GeneratedImage[]
+  id                         String                  @id @default(uuid()) @db.Uuid
+  ownerId                    String                  @db.Uuid
+  name                       String
+  level                      String
+  faculty                    String
+  career                     String
+  professorName              String                  @default("")
+  subjectCode                String                  @default("")
+  subjectName                String
+  modality                   String
+  subjectType                String                  @default("GENERAL")
+  specificationSnapshotIds   String[]                @default([])
+  documentSnapshotIds        String[]                @default([])
+  indicatorVersionSnapshotId String?                 @db.Uuid
+  academicPeriod             String
+  totalWeeks                 Int
+  currentWeek                Int                     @default(1)
+  basicBib                   String
+  complementaryBib           String
+  reaBib                     String?
+  status                     ProjectStatus           @default(DRAFT)
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+  owner                      User                    @relation("ProjectOwner", fields: [ownerId], references: [id])
+  matrix                     Matrix?
+  weeks                      ProjectWeek[]
+  attachments                Attachment[]
+  teachingAssignmentId       String?                 @db.Uuid
+  sourceProjectId            String?                 @db.Uuid
+  teachingAssignment         TeachingAssignment?     @relation(fields: [teachingAssignmentId], references: [id])
+  sourceProject              Project?                @relation("ProjectLineage", fields: [sourceProjectId], references: [id])
+  derivedProjects            Project[]               @relation("ProjectLineage")
+  guideReviews               GuideReview[]
+  generatedImages            GeneratedImage[]
+  canonicalGuide             CanonicalGuideDocument?
 
   @@index([ownerId, updatedAt])
   @@index([ownerId, subjectCode])
@@ -212,17 +213,17 @@ model MatrixRow {
 }
 
 model ProjectWeek {
-  id              String        @id @default(uuid()) @db.Uuid
-  projectId       String        @db.Uuid
+  id              String           @id @default(uuid()) @db.Uuid
+  projectId       String           @db.Uuid
   weekNumber      Int
-  status          WeekStatus    @default(PENDING)
+  status          WeekStatus       @default(PENDING)
   draftContent    String?
   approvedContent String?
   approvedAt      DateTime?
-  currentVersion  Int           @default(0)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  currentVersion  Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   versions        WeekVersion[]
   attachments     Attachment[]
   generatedImages GeneratedImage[]
@@ -232,24 +233,37 @@ model ProjectWeek {
 }
 
 model GeneratedImage {
-  id             String      @id @default(uuid()) @db.Uuid
-  projectId      String?     @db.Uuid
-  projectWeekId  String?     @db.Uuid
-  weekNumber     Int
-  figureNumber   Int
-  title          String
-  altText        String
-  source         String      @default("Elaboración propia mediante IA")
-  prompt         String
-  style          String
-  mimeType       String      @default("image/png")
-  imageData      Bytes
-  createdAt      DateTime    @default(now())
-  project        Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  projectWeek    ProjectWeek? @relation(fields: [projectWeekId], references: [id], onDelete: Cascade)
+  id            String       @id @default(uuid()) @db.Uuid
+  projectId     String?      @db.Uuid
+  projectWeekId String?      @db.Uuid
+  weekNumber    Int
+  figureNumber  Int
+  title         String
+  altText       String
+  source        String       @default("Elaboración propia mediante IA")
+  prompt        String
+  style         String
+  mimeType      String       @default("image/png")
+  imageData     Bytes
+  createdAt     DateTime     @default(now())
+  project       Project?     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectWeek   ProjectWeek? @relation(fields: [projectWeekId], references: [id], onDelete: Cascade)
 
   @@index([projectId, weekNumber])
   @@index([projectWeekId])
+}
+
+model CanonicalGuideDocument {
+  id            String   @id @default(uuid()) @db.Uuid
+  projectId     String   @unique @db.Uuid
+  schemaVersion String
+  document      Json
+  checksum      String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([schemaVersion])
 }
 
 model WeekVersion {
@@ -268,51 +282,51 @@ model WeekVersion {
 }
 
 model GenerationInstruction {
-  id          String         @id @default(uuid()) @db.Uuid
-  key         String
-  title       String
-  content     String
-  version     Int
-  status      DocumentStatus @default(DRAFT)
-  academicLevels String[]     @default([])
-  modalities    String[]      @default([])
-  durations     Int[]         @default([])
-  subjectTypes  String[]      @default([])
-  priority      Int           @default(100)
+  id             String         @id @default(uuid()) @db.Uuid
+  key            String
+  title          String
+  content        String
+  version        Int
+  status         DocumentStatus @default(DRAFT)
+  academicLevels String[]       @default([])
+  modalities     String[]       @default([])
+  durations      Int[]          @default([])
+  subjectTypes   String[]       @default([])
+  priority       Int            @default(100)
   impactAnalysis Json?
   impactChecksum String?
-  createdById String?        @db.Uuid
-  createdAt   DateTime       @default(now())
-  activatedAt DateTime?
-  createdBy   User?          @relation(fields: [createdById], references: [id])
+  createdById    String?        @db.Uuid
+  createdAt      DateTime       @default(now())
+  activatedAt    DateTime?
+  createdBy      User?          @relation(fields: [createdById], references: [id])
 
   @@unique([key, version])
   @@index([key, status])
 }
 
 model KnowledgeDocument {
-  id          String         @id @default(uuid()) @db.Uuid
-  key         String
-  title       String
-  version     Int
-  status      DocumentStatus @default(DRAFT)
-  storagePath String
-  mimeType    String
-  originalName String?
+  id              String         @id @default(uuid()) @db.Uuid
+  key             String
+  title           String
+  version         Int
+  status          DocumentStatus @default(DRAFT)
+  storagePath     String
+  mimeType        String
+  originalName    String?
   contentMarkdown String?
-  priority    Int            @default(100)
-  academicLevels String[]    @default([])
-  modalities    String[]     @default([])
-  durations     Int[]        @default([])
-  subjectTypes  String[]     @default([])
-  appliesToAll  Boolean      @default(true)
-  impactAnalysis Json?
-  impactChecksum String?
-  checksum    String?
-  createdById String?        @db.Uuid
-  createdAt   DateTime       @default(now())
-  activatedAt DateTime?
-  createdBy   User?          @relation(fields: [createdById], references: [id])
+  priority        Int            @default(100)
+  academicLevels  String[]       @default([])
+  modalities      String[]       @default([])
+  durations       Int[]          @default([])
+  subjectTypes    String[]       @default([])
+  appliesToAll    Boolean        @default(true)
+  impactAnalysis  Json?
+  impactChecksum  String?
+  checksum        String?
+  createdById     String?        @db.Uuid
+  createdAt       DateTime       @default(now())
+  activatedAt     DateTime?
+  createdBy       User?          @relation(fields: [createdById], references: [id])
 
   @@unique([key, version])
   @@index([key, status])

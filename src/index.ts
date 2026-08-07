@@ -11,8 +11,14 @@ import {
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import * as XLSX from "xlsx";
+import {
+  buildCanonicalGuide,
+  CANONICAL_GUIDE_SCHEMA_VERSION,
+  canonicalGuideSchema,
+} from "./canonical-guide.js";
 import { parseMatrix, requiredColumns } from "./services/matrix-service.js";
 import { database, checkDatabaseConnection } from "./db/client.js";
 
@@ -37,6 +43,10 @@ const stylesFileUrl = new URL(
 );
 const editorStylesFileUrl = new URL(
   "../public/editor-rich.css",
+  import.meta.url,
+);
+const canonicalGuideSchemaFileUrl = new URL(
+  "../schemas/guide-canonical-v1.schema.json",
   import.meta.url,
 );
 const knowledgeDirectoryUrl = new URL("../knowledge/", import.meta.url);
@@ -181,6 +191,25 @@ const projectPersistenceSchema = z.object({
   matrixFileName: z.string().max(255).optional().default(""),
   matrixRows: z.array(matrixRowSchema).min(1).max(1000),
   weekStates: z.record(z.string(), persistedWeekSchema),
+}).superRefine((input, context) => {
+  const matrixWeeks = new Set(input.matrixRows.map((row) => Number.parseInt(row.Semana, 10)));
+  const validSequence = matrixWeeks.size === input.project.weeks &&
+    Array.from({ length: input.project.weeks }, (_, index) => index + 1)
+      .every((week) => matrixWeeks.has(week));
+  if (!validSequence) {
+    context.addIssue({
+      code: "custom",
+      path: ["matrixRows"],
+      message: "Las semanas de la matriz deben formar una secuencia completa desde 1.",
+    });
+  }
+  if (input.currentWeek > input.project.weeks) {
+    context.addIssue({
+      code: "custom",
+      path: ["currentWeek"],
+      message: "La semana actual no puede superar el total de semanas del proyecto.",
+    });
+  }
 });
 
 function passwordHash(password: string) {
@@ -370,6 +399,19 @@ function browserWeekStatus(status: string) {
   if (status === "REQUIRES_REVIEW") return "review";
   if (status === "IN_REVIEW" || status === "GENERATED") return "draft";
   return "pending";
+}
+
+function canonicalDocumentChecksum(document: unknown) {
+  return createHash("sha256").update(JSON.stringify(document)).digest("hex");
+}
+
+function canonicalDownloadName(subjectName: string) {
+  const safeName = subjectName
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${safeName || "guia-didactica"}.canonical.v1.json`;
 }
 
 function markdownRuns(text: string): TextRun[] {
@@ -1713,6 +1755,49 @@ const httpServer = createServer(async (request, response) => {
       }));
       return;
     }
+    const canonicalGuideMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/canonical-json$/i,
+    );
+    if (request.method === "GET" && canonicalGuideMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: {
+          id: canonicalGuideMatch[1],
+          ownerId: user.id,
+          status: { not: "ARCHIVED" },
+        },
+        include: { canonicalGuide: true },
+      });
+      if (!project) {
+        json(response, 404, { error: "La guía no existe o no pertenece al usuario." });
+        return;
+      }
+      if (!project.canonicalGuide) {
+        json(response, 409, {
+          error: "El JSON canónico todavía no se ha creado. Guarde nuevamente el proyecto o ejecute la conversión inicial.",
+        });
+        return;
+      }
+      const validation = canonicalGuideSchema.safeParse(project.canonicalGuide.document);
+      if (!validation.success) {
+        json(response, 500, {
+          error: "El JSON canónico almacenado no cumple el contrato vigente.",
+          details: validation.error.flatten(),
+        });
+        return;
+      }
+      const serialized = `${JSON.stringify(validation.data, null, 2)}\n`;
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${canonicalDownloadName(project.subjectName)}"`,
+        "Content-Length": Buffer.byteLength(serialized),
+        "Cache-Control": "no-store",
+        "X-Canonical-Schema-Version": project.canonicalGuide.schemaVersion,
+        "X-Content-SHA256": project.canonicalGuide.checksum,
+      });
+      response.end(serialized);
+      return;
+    }
     const projectMatch = requestUrl.pathname.match(/^\/api\/projects\/([0-9a-f-]+)$/i);
     if (request.method === "GET" && projectMatch) {
       const user = await requireUser(request);
@@ -1886,6 +1971,37 @@ const httpServer = createServer(async (request, response) => {
             });
           }
         }
+        const canonicalSource = await transaction.project.findUniqueOrThrow({
+          where: { id: project.id },
+          include: {
+            matrix: { include: { rows: { orderBy: { rowOrder: "asc" } } } },
+            weeks: { orderBy: { weekNumber: "asc" } },
+            generatedImages: {
+              orderBy: [{ weekNumber: "asc" }, { figureNumber: "asc" }],
+            },
+          },
+        });
+        const canonicalDocument = buildCanonicalGuide({
+          project: canonicalSource,
+          matrix: canonicalSource.matrix,
+          weeks: canonicalSource.weeks,
+          generatedImages: canonicalSource.generatedImages,
+        });
+        const canonicalChecksum = canonicalDocumentChecksum(canonicalDocument);
+        await transaction.canonicalGuideDocument.upsert({
+          where: { projectId: project.id },
+          update: {
+            schemaVersion: CANONICAL_GUIDE_SCHEMA_VERSION,
+            document: canonicalDocument as unknown as Prisma.InputJsonValue,
+            checksum: canonicalChecksum,
+          },
+          create: {
+            projectId: project.id,
+            schemaVersion: CANONICAL_GUIDE_SCHEMA_VERSION,
+            document: canonicalDocument as unknown as Prisma.InputJsonValue,
+            checksum: canonicalChecksum,
+          },
+        });
         await transaction.auditLog.create({
           data: {
             userId: user.id,
@@ -1904,6 +2020,7 @@ const httpServer = createServer(async (request, response) => {
         ok: true,
         projectId: saved.id,
         savedAt: saved.updatedAt.toISOString(),
+        canonicalSchemaVersion: CANONICAL_GUIDE_SCHEMA_VERSION,
       }));
       return;
     }
@@ -2311,6 +2428,18 @@ CONTENIDO DE REFERENCIA: ${body.proposal.insertionAfter}`,
       });
 
       response.end(editorStyles);
+      return;
+    }
+    if (
+      request.method === "GET" &&
+      requestUrl.pathname === "/schemas/guide-canonical-v1.schema.json"
+    ) {
+      const schema = await readFile(canonicalGuideSchemaFileUrl, "utf8");
+      response.writeHead(200, {
+        "Content-Type": "application/schema+json; charset=utf-8",
+        "Cache-Control": "public, max-age=3600",
+      });
+      response.end(schema);
       return;
     }
     if (request.method === "GET" && requestUrl.pathname === "/health") {
