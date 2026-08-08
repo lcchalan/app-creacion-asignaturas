@@ -51,6 +51,7 @@ function showAuthenticatedUser(user) {
   $("#profile-role").textContent = user.roles.includes("ADMIN") ? "Administrador" : "Profesor";
   $("#profile-initials").textContent = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U";
   $("#nav-admin").classList.toggle("hidden", !user.roles.includes("ADMIN"));
+  syncProfessorName();
   loadProjects();
 }
 $$("[data-auth-tab]").forEach((button) => {
@@ -112,6 +113,107 @@ const level = $("#level");
 const modality = $("#modality");
 const faculty = $("#faculty");
 const career = $("#career");
+const utplGenericCompetencyCatalog = [
+  "Desarrollo personal integral",
+  "Trabajo colaborativo",
+  "Innovación y emprendimiento con visión de propósito",
+  "Mentalidad sostenible",
+  "Ciudadanía global",
+];
+let academicProfileState = {
+  professionalProfileCompetencies: [],
+  graduateProfileResults: [],
+  utplGenericCompetencies: [],
+};
+
+function syncProfessorName() {
+  const field = $("#professor-name");
+  if (field && authenticatedUserData?.displayName) field.value = authenticatedUserData.displayName;
+}
+
+function setAcademicProfileState(source = {}) {
+  academicProfileState = {
+    professionalProfileCompetencies: Array.isArray(source.professionalProfileCompetencies)
+      ? source.professionalProfileCompetencies.filter(Boolean)
+      : [],
+    graduateProfileResults: Array.isArray(source.graduateProfileResults)
+      ? source.graduateProfileResults.filter(Boolean)
+      : [],
+    utplGenericCompetencies: Array.isArray(source.utplGenericCompetencies)
+      ? source.utplGenericCompetencies.filter((value) => utplGenericCompetencyCatalog.includes(value))
+      : [],
+  };
+  renderAcademicProfile();
+}
+
+function renderAcademicProfileList(key, selector) {
+  const list = $(selector);
+  list.innerHTML = academicProfileState[key].map((value, index) => `
+    <li><span>${escapeHtml(value)}</span><button type="button" data-profile-key="${key}" data-profile-index="${index}" aria-label="Eliminar elemento">× Eliminar</button></li>`).join("");
+}
+
+function renderAcademicProfile() {
+  renderAcademicProfileList("professionalProfileCompetencies", "#professional-competencies-list");
+  renderAcademicProfileList("graduateProfileResults", "#graduate-results-list");
+  renderAcademicProfileList("utplGenericCompetencies", "#utpl-generic-competencies-list");
+  const select = $("#utpl-generic-competency");
+  if (select) {
+    [...select.options].forEach((option) => {
+      option.disabled = Boolean(option.value && academicProfileState.utplGenericCompetencies.includes(option.value));
+    });
+    select.value = "";
+  }
+}
+
+function addAcademicProfileValue(key, value) {
+  const normalized = String(value || "").trim().replace(/\s+/g, " ");
+  if (!normalized) return false;
+  if (academicProfileState[key].some((entry) => entry.toLocaleLowerCase("es") === normalized.toLocaleLowerCase("es"))) {
+    return false;
+  }
+  academicProfileState[key].push(normalized);
+  renderAcademicProfile();
+  return true;
+}
+
+function bindAcademicProfileEntry(buttonSelector, inputSelector, key) {
+  const input = $(inputSelector);
+  const add = () => {
+    if (!addAcademicProfileValue(key, input.value)) {
+      showMessage(input.value.trim() ? "Ese elemento ya fue agregado." : "Escriba un elemento antes de agregarlo.");
+      return;
+    }
+    input.value = "";
+    showMessage();
+    input.focus();
+  };
+  $(buttonSelector).onclick = add;
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      add();
+    }
+  });
+}
+
+bindAcademicProfileEntry("#add-professional-competency", "#professional-competency-input", "professionalProfileCompetencies");
+bindAcademicProfileEntry("#add-graduate-result", "#graduate-result-input", "graduateProfileResults");
+$("#add-utpl-generic-competency").onclick = () => {
+  const select = $("#utpl-generic-competency");
+  if (!addAcademicProfileValue("utplGenericCompetencies", select.value)) {
+    showMessage(select.value ? "Esa competencia ya fue agregada." : "Seleccione una competencia genérica de la UTPL.");
+    return;
+  }
+  showMessage();
+};
+$$(["#professional-competencies-list", "#graduate-results-list", "#utpl-generic-competencies-list"].join(",")).forEach((list) => {
+  list.onclick = (event) => {
+    const button = event.target.closest("[data-profile-key]");
+    if (!button) return;
+    academicProfileState[button.dataset.profileKey].splice(Number(button.dataset.profileIndex), 1);
+    renderAcademicProfile();
+  };
+});
 
 function totalWeeks() {
   return Number.parseInt(form.elements.weeks.value, 10) || 0;
@@ -132,6 +234,7 @@ function applySavedProject(saved) {
   projectId = saved.projectId || "";
   matrixFileName = saved.matrixFileName || "";
   const savedForm = saved.formData || {};
+  setAcademicProfileState(savedForm);
   if (savedForm.level) {
     level.value = savedForm.level;
     fillSelect(modality, Object.keys(offer[savedForm.level] || {}), "Seleccione una modalidad");
@@ -148,6 +251,7 @@ function applySavedProject(saved) {
     const field = form.elements[name];
     if (field && typeof field.value !== "undefined") field.value = value;
   });
+  syncProfessorName();
   matrixRows = Array.isArray(saved.matrixRows) ? saved.matrixRows : [];
   currentWeek = Number(saved.currentWeek) || 1;
   weekStates = saved.weekStates || {};
@@ -172,6 +276,9 @@ function databasePayload() {
       modality: project.modality,
       academicPeriod: project.academicPeriod,
       weeks: Number(project.weeks),
+      professionalProfileCompetencies: project.professionalProfileCompetencies,
+      graduateProfileResults: project.graduateProfileResults,
+      utplGenericCompetencies: project.utplGenericCompetencies,
     },
     bibliography: {
       basic: project.basic,
@@ -187,7 +294,11 @@ function canSyncDatabase() {
   const payload = databasePayload();
   return payload.matrixRows.length > 0 &&
     payload.project.weeks > 0 &&
-    Object.values(payload.project).every((value) => String(value || "").trim()) &&
+    ["projectName", "level", "faculty", "career", "professorName", "subjectCode", "subjectName", "subjectType", "modality", "academicPeriod"]
+      .every((key) => String(payload.project[key] || "").trim()) &&
+    payload.project.professionalProfileCompetencies.length > 0 &&
+    payload.project.graduateProfileResults.length > 0 &&
+    payload.project.utplGenericCompetencies.length > 0 &&
     payload.bibliography.basic?.trim() &&
     payload.bibliography.complementary?.trim();
 }
@@ -260,9 +371,8 @@ async function openSavedProject(id) {
   const payload = await response.json();
   if (!response.ok || !payload.project) throw new Error(payload.error || "No fue posible abrir el proyecto.");
   form.reset();
-  if (authenticatedUserData?.roles?.includes("TEACHER") && form.elements.professorName) {
-    form.elements.professorName.value = authenticatedUserData.displayName || "";
-  }
+  setAcademicProfileState();
+  syncProfessorName();
   if (!applySavedProject(payload.project)) return;
   localStorage.setItem(storageKey, JSON.stringify(payload.project));
   step = 5;
@@ -483,6 +593,8 @@ function startNewProject() {
   selectedAdjustmentFiles = [];
   matrixFileName = "";
   form.reset();
+  setAcademicProfileState();
+  syncProfessorName();
   fillSelect(level, Object.keys(offer), "Seleccione un nivel");
   resetAcademicFields("level");
   const fileName = $("#file-name");
@@ -565,7 +677,14 @@ back.onclick = () => {
     renderStep();
   }
 };
-const data = () => Object.fromEntries(new FormData(form).entries());
+function data() {
+  return {
+    ...Object.fromEntries(new FormData(form).entries()),
+    professionalProfileCompetencies: [...academicProfileState.professionalProfileCompetencies],
+    graduateProfileResults: [...academicProfileState.graduateProfileResults],
+    utplGenericCompetencies: [...academicProfileState.utplGenericCompetencies],
+  };
+}
 function invalidFields(names) {
   return names.filter((name) => {
     const element = form.elements[name];
@@ -580,6 +699,9 @@ function summarize() {
     ["Carrera", project.career], ["Profesor", project.professorName],
     ["Código", project.subjectCode], ["Asignatura", project.subjectName], ["Tipo", project.subjectType],
     ["Periodo", project.academicPeriod], ["Duración", `${project.weeks} semanas`],
+    ["Competencias del perfil profesional", project.professionalProfileCompetencies.join(" · ")],
+    ["Resultados de perfil de egreso", project.graduateProfileResults.join(" · ")],
+    ["Competencias genéricas UTPL", project.utplGenericCompetencies.join(" · ")],
     ["Matriz", matrixFile?.name || matrixFileName], ["Registros", matrixRows.length],
   ].map(([key, value]) => `<div><small>${key}</small><strong>${escapeHtml(value || "—")}</strong></div>`).join("");
 }
@@ -587,6 +709,15 @@ next.onclick = async () => {
   if (step === 1) {
     if (invalidFields(["projectName", "level", "modality", "faculty", "career", "professorName", "subjectCode", "subjectName", "subjectType", "academicPeriod", "weeks"]).length) {
       return showMessage("Complete todos los campos obligatorios para continuar.");
+    }
+    if (!academicProfileState.professionalProfileCompetencies.length) {
+      return showMessage("Agregue al menos una competencia del perfil profesional.");
+    }
+    if (!academicProfileState.graduateProfileResults.length) {
+      return showMessage("Agregue al menos un resultado de perfil de egreso.");
+    }
+    if (!academicProfileState.utplGenericCompetencies.length) {
+      return showMessage("Seleccione al menos una competencia genérica de la UTPL.");
     }
     if (!Number.isInteger(totalWeeks()) || totalWeeks() < 1) return showMessage("Ingrese un número entero de semanas mayor que cero.");
     step = 2;
@@ -711,6 +842,9 @@ async function generationPayload(adjustmentInstructions = "") {
       subjectCode: project.subjectCode, subjectName: project.subjectName,
       subjectType: project.subjectType,
       academicPeriod: project.academicPeriod, weeks: Number(project.weeks),
+      professionalProfileCompetencies: project.professionalProfileCompetencies,
+      graduateProfileResults: project.graduateProfileResults,
+      utplGenericCompetencies: project.utplGenericCompetencies,
     },
     matrixRows,
     bibliography: {
@@ -1107,7 +1241,7 @@ $("#download-json").onclick = async () => {
     const serverName = disposition.match(/filename="([^"]+)"/)?.[1];
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = serverName || `${data().subjectName || "guia-didactica"}.canonical.v1.json`;
+    link.download = serverName || `${data().subjectName || "guia-didactica"}.canonical.v2.json`;
     link.click();
     URL.revokeObjectURL(link.href);
   } catch (error) {
@@ -1179,11 +1313,8 @@ function showAdminMessage(text, error = false) {
   clearTimeout(showAdminMessage.timer);
   showAdminMessage.timer = setTimeout(() => element.classList.add("hidden"), 9000);
 }
-function selectedValues(select) {
-  return [...select.selectedOptions].map((option) => option.value);
-}
-function roleNames(user) {
-  return user.roles.map((entry) => entry.role.name).join(", ");
+function roleName(user) {
+  return user.roles[0]?.role.name || "Sin rol";
 }
 function renderAdminUsers() {
   if (!adminData) return;
@@ -1194,10 +1325,9 @@ function renderAdminUsers() {
     <tr>
       <td><strong>${escapeHtml(`${user.firstName} ${user.lastName}`)}</strong>${user.mustChangePassword ? "<small>Debe cambiar la contraseña</small>" : ""}</td>
       <td>${escapeHtml(user.nationalId || "—")}</td><td>${escapeHtml(user.email)}</td>
-      <td><select class="table-role" multiple data-user-roles="${user.id}">${adminData.roles.map((role) =>
-        `<option value="${role.code}" ${user.roles.some((item) => item.role.code === role.code) ? "selected" : ""}>${escapeHtml(role.name)}</option>`).join("")}</select></td>
+      <td><span class="assigned-role">${escapeHtml(roleName(user))}</span></td>
       <td><span class="status-badge ${user.active ? "status-completed" : "status-draft"}">${user.active ? "Activa" : "Inactiva"}</span></td>
-      <td class="table-actions"><button type="button" data-edit-user="${user.id}">Editar datos</button><button type="button" data-save-user="${user.id}">Guardar roles</button><button type="button" data-password-user="${user.id}">Contraseña temporal</button><button type="button" data-toggle-user="${user.id}" data-active="${user.active}">${user.active ? "Desactivar" : "Activar"}</button></td>
+      <td class="table-actions"><button type="button" data-edit-user="${user.id}">Editar datos</button><button type="button" data-password-user="${user.id}">Contraseña temporal</button><button type="button" data-toggle-user="${user.id}" data-active="${user.active}">${user.active ? "Desactivar" : "Activar"}</button></td>
     </tr>`).join("") || `<tr><td colspan="6">No se encontraron usuarios.</td></tr>`;
 }
 function renderAssignments() {
@@ -1283,7 +1413,7 @@ function renderGuideReport() {
 }
 async function loadAdminDashboard() {
   adminData = await authRequest("/api/admin/dashboard");
-  $("#admin-user-roles").innerHTML = adminData.roles.map((role) => `<option value="${role.code}">${escapeHtml(role.name)}</option>`).join("");
+  $("#admin-user-role").innerHTML = `<option value="">Seleccione un rol</option>${adminData.roles.map((role) => `<option value="${role.code}">${escapeHtml(role.name)}</option>`).join("")}`;
   renderAdminUsers(); renderAssignments(); renderAiVersions(); renderGuideReport();
   $("#checklist-project").innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
 }
@@ -1307,7 +1437,6 @@ $("#guide-report-search").oninput = renderGuideReport;
 $("#admin-user-form").onsubmit = async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(event.currentTarget));
-  values.roleCodes = selectedValues($("#admin-user-roles"));
   if (!values.temporaryPassword) delete values.temporaryPassword;
   try {
     if (values.userId) {
@@ -1338,13 +1467,9 @@ $("#admin-users-body").onclick = async (event) => {
       form.elements.userId.value = user.id; form.elements.firstName.value = user.firstName;
       form.elements.lastName.value = user.lastName; form.elements.nationalId.value = user.nationalId || "";
       form.elements.email.value = user.email;
-      [...$("#admin-user-roles").options].forEach((option) => option.selected = user.roles.some((item) => item.role.code === option.value));
+      $("#admin-user-role").value = user.roles[0]?.role.code || "";
       $("#admin-user-form-title").textContent = "Editar usuario"; $("#admin-user-submit").textContent = "Guardar cambios";
       $("#admin-user-cancel").classList.remove("hidden"); form.scrollIntoView({ behavior: "smooth" }); return;
-    } else if (button.dataset.saveUser) {
-      const select = $(`[data-user-roles="${button.dataset.saveUser}"]`);
-      await authRequest(`/api/admin/users/${button.dataset.saveUser}`, { method: "PATCH", body: JSON.stringify({ roleCodes: selectedValues(select) }) });
-      showAdminMessage("Roles actualizados.");
     } else if (button.dataset.passwordUser) {
       const result = await authRequest(`/api/admin/users/${button.dataset.passwordUser}/temporary-password`, { method: "POST", body: "{}" });
       showAdminMessage(`Contraseña temporal asignada: ${result.temporaryPassword}`);

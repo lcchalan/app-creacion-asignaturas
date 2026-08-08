@@ -1,5 +1,8 @@
 # JSON canónico de la guía didáctica — contrato 1.0.0
 
+> Contrato legado e inmutable. Los nuevos guardados que incorporan la alineación con el perfil
+> académico utilizan el contrato 2.0.0 documentado en `JSON_CANONICO_V2.md`.
+
 ## Objetivo
 
 El JSON canónico representa una guía didáctica mediante un contrato estable y validable. En esta

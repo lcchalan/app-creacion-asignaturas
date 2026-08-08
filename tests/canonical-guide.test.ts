@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildCanonicalGuide,
   CANONICAL_GUIDE_SCHEMA_VERSION,
+  canonicalGuideDocumentSchema,
   canonicalGuideSchema,
   type CanonicalGuideSource,
 } from "../src/canonical-guide.js";
@@ -21,6 +22,13 @@ const source: CanonicalGuideSource = {
     modality: "En línea",
     academicPeriod: "Octubre 2026 - Febrero 2027",
     totalWeeks: 2,
+    professionalProfileCompetencies: [
+      "Diseña experiencias de aprendizaje pertinentes para educación superior.",
+    ],
+    graduateProfileResults: [
+      "Integra fundamentos pedagógicos en propuestas educativas contextualizadas.",
+    ],
+    utplGenericCompetencies: ["Trabajo colaborativo", "Ciudadanía global"],
     basicBib: "Referencia básica",
     complementaryBib: "Referencia complementaria",
     reaBib: "https://example.edu/recurso",
@@ -82,7 +90,7 @@ const source: CanonicalGuideSource = {
   ],
 };
 
-test("crea un documento canónico v1 sin alterar el contenido literal", () => {
+test("crea un documento canónico v2 sin alterar el contenido literal", () => {
   const guide = buildCanonicalGuide(source);
 
   assert.equal(guide.schemaVersion, CANONICAL_GUIDE_SCHEMA_VERSION);
@@ -93,6 +101,18 @@ test("crea un documento canónico v1 sin alterar el contenido literal", () => {
   assert.equal(guide.weeks[0]?.content.format, "markdown");
   assert.equal(guide.weeks[0]?.content.approved, "# Semana 1\n\nContenido aprobado.");
   assert.deepEqual(guide.weeks[0]?.sourceMatrixRowIds, ["matrix-row-1"]);
+  assert.deepEqual(
+    guide.metadata.academicProfile.professionalProfileCompetencies,
+    source.project.professionalProfileCompetencies,
+  );
+  assert.deepEqual(
+    guide.metadata.academicProfile.graduateProfileResults,
+    source.project.graduateProfileResults,
+  );
+  assert.deepEqual(
+    guide.metadata.academicProfile.utplGenericCompetencies,
+    source.project.utplGenericCompetencies,
+  );
 });
 
 test("referencia los activos y no incorpora bytes ni base64", () => {
@@ -116,8 +136,31 @@ test("rechaza referencias de matriz que no pertenecen a la semana", () => {
 
 test("rechaza versiones de contrato desconocidas", () => {
   const guide = buildCanonicalGuide(source);
-  const invalid = { ...guide, schemaVersion: "2.0.0" };
+  const invalid = { ...guide, schemaVersion: "3.0.0" };
 
   const result = canonicalGuideSchema.safeParse(invalid);
   assert.equal(result.success, false);
+});
+
+test("rechaza competencias genéricas ajenas al catálogo UTPL", () => {
+  const guide = buildCanonicalGuide(source);
+  const invalid = structuredClone(guide);
+  invalid.metadata.academicProfile.utplGenericCompetencies = ["Competencia inventada" as never];
+
+  const result = canonicalGuideSchema.safeParse(invalid);
+  assert.equal(result.success, false);
+});
+
+test("mantiene la lectura de documentos canónicos 1.0.0", () => {
+  const current = buildCanonicalGuide(source);
+  const { academicProfile: _academicProfile, ...legacyMetadata } = current.metadata;
+  const legacy = {
+    ...current,
+    $schema: "/schemas/guide-canonical-v1.schema.json",
+    schemaVersion: "1.0.0",
+    metadata: legacyMetadata,
+  };
+
+  const result = canonicalGuideDocumentSchema.safeParse(legacy);
+  assert.equal(result.success, true);
 });

@@ -99,7 +99,7 @@
               <label>Cédula<input name="nationalId" required></label>
               <label>Correo<input name="email" type="email" required></label>
             </div>
-            <label>Roles<select name="roleCodes" id="admin-user-roles" multiple required></select><small>Use Cmd/Ctrl para seleccionar varios roles.</small></label>
+            <label>Rol<select name="roleCode" id="admin-user-role" required><option value="">Seleccione un rol</option></select></label>
             <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="8" placeholder="El sistema puede generarla"></label>
             <div class="form-actions"><button class="button" id="admin-user-submit" type="submit">Crear usuario</button><button class="button secondary hidden" id="admin-user-cancel" type="button">Cancelar edición</button></div>
           </form>
@@ -112,7 +112,7 @@
         </div>
         <div class="admin-card">
           <div class="table-toolbar"><h2>Usuarios registrados</h2><input id="admin-user-search" type="search" placeholder="Buscar por nombre, cédula o correo"></div>
-          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Usuario</th><th>Cédula</th><th>Correo</th><th>Roles</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-users-body"></tbody></table></div>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Usuario</th><th>Cédula</th><th>Correo</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="admin-users-body"></tbody></table></div>
         </div>
       </section>
 
@@ -260,7 +260,7 @@
                 <option value="">Seleccione primero la facultad</option>
               </select>
             </label>
-            <label>Profesor *<input name="professorName" required placeholder="Nombres y apellidos"></label>
+            <label>Profesor *<input name="professorName" id="professor-name" required readonly aria-readonly="true"><small>Se completa con el usuario que inició sesión.</small></label>
             <label>Código de la asignatura *<input name="subjectCode" required placeholder="Ej.: RELI_1105"></label>
             <label>Asignatura *<input name="subjectName" required></label>
             <label>Tipo de asignatura *
@@ -277,6 +277,42 @@
               <input type="number" name="weeks" id="weeks" required min="1" step="1" placeholder="Ej.: 8">
               <small>Debe coincidir con las semanas únicas y consecutivas de la matriz.</small>
             </label>
+          </div>
+          <div class="academic-profile-sections">
+            <section class="academic-profile-card" aria-labelledby="professional-competencies-title">
+              <h4 id="professional-competencies-title">Competencias del perfil profesional *</h4>
+              <p>Ingrese cada competencia por separado.</p>
+              <div class="list-entry-control">
+                <input id="professional-competency-input" maxlength="1000" placeholder="Escriba una competencia">
+                <button class="button secondary" id="add-professional-competency" type="button">Agregar</button>
+              </div>
+              <ul class="entered-values" id="professional-competencies-list" aria-live="polite"></ul>
+            </section>
+            <section class="academic-profile-card" aria-labelledby="graduate-results-title">
+              <h4 id="graduate-results-title">Resultados de perfil de egreso *</h4>
+              <p>Ingrese cada resultado por separado.</p>
+              <div class="list-entry-control">
+                <input id="graduate-result-input" maxlength="1000" placeholder="Escriba un resultado">
+                <button class="button secondary" id="add-graduate-result" type="button">Agregar</button>
+              </div>
+              <ul class="entered-values" id="graduate-results-list" aria-live="polite"></ul>
+            </section>
+            <section class="academic-profile-card" aria-labelledby="utpl-competencies-title">
+              <h4 id="utpl-competencies-title">Competencias genéricas de la UTPL *</h4>
+              <p>Seleccione una competencia del catálogo institucional y agréguela.</p>
+              <div class="list-entry-control">
+                <select id="utpl-generic-competency">
+                  <option value="">Seleccione una competencia</option>
+                  <option>Desarrollo personal integral</option>
+                  <option>Trabajo colaborativo</option>
+                  <option>Innovación y emprendimiento con visión de propósito</option>
+                  <option>Mentalidad sostenible</option>
+                  <option>Ciudadanía global</option>
+                </select>
+                <button class="button secondary" id="add-utpl-generic-competency" type="button">Agregar</button>
+              </div>
+              <ul class="entered-values" id="utpl-generic-competencies-list" aria-live="polite"></ul>
+            </section>
           </div>
         </section>
 

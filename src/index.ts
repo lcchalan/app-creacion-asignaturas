@@ -17,7 +17,7 @@ import * as XLSX from "xlsx";
 import {
   buildCanonicalGuide,
   CANONICAL_GUIDE_SCHEMA_VERSION,
-  canonicalGuideSchema,
+  canonicalGuideDocumentSchema,
 } from "./canonical-guide.js";
 import { parseMatrix, requiredColumns } from "./services/matrix-service.js";
 import { database, checkDatabaseConnection } from "./db/client.js";
@@ -45,8 +45,12 @@ const editorStylesFileUrl = new URL(
   "../public/editor-rich.css",
   import.meta.url,
 );
-const canonicalGuideSchemaFileUrl = new URL(
+const canonicalGuideV1SchemaFileUrl = new URL(
   "../schemas/guide-canonical-v1.schema.json",
+  import.meta.url,
+);
+const canonicalGuideV2SchemaFileUrl = new URL(
+  "../schemas/guide-canonical-v2.schema.json",
   import.meta.url,
 );
 const knowledgeDirectoryUrl = new URL("../knowledge/", import.meta.url);
@@ -81,6 +85,29 @@ const matrixRowSchema = z.object({
   Metodología: z.string().trim().min(1),
 });
 
+const utplGenericCompetencySchema = z.enum([
+  "Desarrollo personal integral",
+  "Trabajo colaborativo",
+  "Innovación y emprendimiento con visión de propósito",
+  "Mentalidad sostenible",
+  "Ciudadanía global",
+]);
+
+const uniqueAcademicTextListSchema = z.array(z.string().trim().min(1).max(1000))
+  .min(1)
+  .max(100)
+  .refine(
+    (items) => new Set(items.map((item) => item.toLocaleLowerCase("es"))).size === items.length,
+    "Los elementos no pueden repetirse.",
+  );
+
+const academicProfileSchema = {
+  professionalProfileCompetencies: uniqueAcademicTextListSchema,
+  graduateProfileResults: uniqueAcademicTextListSchema,
+  utplGenericCompetencies: z.array(utplGenericCompetencySchema).min(1).max(5)
+    .refine((items) => new Set(items).size === items.length, "Las competencias no pueden repetirse."),
+};
+
 const generationRequestSchema = z.object({
   projectId: z.string().uuid().optional(),
   week: z.number().int().min(1).max(100),
@@ -95,6 +122,7 @@ const generationRequestSchema = z.object({
     subjectType: z.string().trim().min(1).max(100).default("GENERAL"),
     modality: z.string().trim().min(1).max(150),
     academicPeriod: z.string().trim().min(1).max(100),
+    ...academicProfileSchema,
     weeks: z
       .number()
       .int()
@@ -405,13 +433,14 @@ function canonicalDocumentChecksum(document: unknown) {
   return createHash("sha256").update(JSON.stringify(document)).digest("hex");
 }
 
-function canonicalDownloadName(subjectName: string) {
+function canonicalDownloadName(subjectName: string, schemaVersion: string) {
   const safeName = subjectName
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-zA-Z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `${safeName || "guia-didactica"}.canonical.v1.json`;
+  const majorVersion = schemaVersion.split(".")[0] || "2";
+  return `${safeName || "guia-didactica"}.canonical.v${majorVersion}.json`;
 }
 
 function markdownRuns(text: string): TextRun[] {
@@ -843,6 +872,15 @@ Modalidad: ${project.modality}
 Periodo académico: ${project.academicPeriod}
 Asignatura: ${project.subjectName}
 
+COMPETENCIAS DEL PERFIL PROFESIONAL:
+${project.professionalProfileCompetencies.map((item) => `- ${item}`).join("\n")}
+
+RESULTADOS DE PERFIL DE EGRESO:
+${project.graduateProfileResults.map((item) => `- ${item}`).join("\n")}
+
+COMPETENCIAS GENÉRICAS DE LA UTPL:
+${project.utplGenericCompetencies.map((item) => `- ${item}`).join("\n")}
+
 RESULTADO DE APRENDIZAJE:
 ${learningOutcomes}
 
@@ -1088,18 +1126,18 @@ const httpServer = createServer(async (request, response) => {
         firstName: z.string().trim().min(2), lastName: z.string().trim().min(2),
         nationalId: z.string().trim().min(6),
         email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        roleCodes: z.array(z.string().trim().min(1)).min(1),
+        roleCode: z.string().trim().min(1),
         temporaryPassword: z.string().min(8).max(200).optional(),
       }).parse(await readJsonBody(request));
       const temporaryPassword = body.temporaryPassword || randomBytes(9).toString("base64url");
-      const selectedRoles = await database.role.findMany({ where: { code: { in: body.roleCodes } } });
-      if (selectedRoles.length !== new Set(body.roleCodes).size) throw new Error("Uno o más roles no existen.");
+      const selectedRole = await database.role.findUnique({ where: { code: body.roleCode } });
+      if (!selectedRole) throw new Error("El rol seleccionado no existe.");
       const user = await database.user.create({
         data: {
           firstName: body.firstName, lastName: body.lastName, nationalId: body.nationalId,
           email: body.email, displayName: `${body.firstName} ${body.lastName}`,
           passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
-          roles: { create: selectedRoles.map((role) => ({ roleId: role.id })) },
+          roles: { create: { roleId: selectedRole.id } },
         },
       });
       json(response, 201, { ok: true, userId: user.id, temporaryPassword });
@@ -1112,13 +1150,16 @@ const httpServer = createServer(async (request, response) => {
       const userId = z.string().uuid().parse(userAdminMatch[1]);
       const body = z.object({
         active: z.boolean().optional(),
-        roleCodes: z.array(z.string().trim().min(1)).min(1).optional(),
+        roleCode: z.string().trim().min(1).optional(),
         firstName: z.string().trim().min(2).optional(),
         lastName: z.string().trim().min(2).optional(),
         nationalId: z.string().trim().min(6).optional(),
         email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
       }).parse(await readJsonBody(request));
       if (userId === admin.id && body.active === false) throw new Error("No puede desactivar su propia cuenta.");
+      if (userId === admin.id && body.roleCode && body.roleCode !== "ADMIN") {
+        throw new Error("No puede retirar su propio rol de administrador.");
+      }
       await database.$transaction(async (transaction) => {
         if (body.firstName || body.lastName || body.nationalId || body.email) {
           const current = await transaction.user.findUniqueOrThrow({ where: { id: userId } });
@@ -1133,11 +1174,11 @@ const httpServer = createServer(async (request, response) => {
           await transaction.user.update({ where: { id: userId }, data: { active: body.active } });
           if (!body.active) await transaction.userSession.deleteMany({ where: { userId } });
         }
-        if (body.roleCodes) {
-          const selectedRoles = await transaction.role.findMany({ where: { code: { in: body.roleCodes } } });
-          if (selectedRoles.length !== new Set(body.roleCodes).size) throw new Error("Uno o más roles no existen.");
+        if (body.roleCode) {
+          const selectedRole = await transaction.role.findUnique({ where: { code: body.roleCode } });
+          if (!selectedRole) throw new Error("El rol seleccionado no existe.");
           await transaction.userRole.deleteMany({ where: { userId } });
-          await transaction.userRole.createMany({ data: selectedRoles.map((role) => ({ userId, roleId: role.id })) });
+          await transaction.userRole.create({ data: { userId, roleId: selectedRole.id } });
         }
       });
       json(response, 200, { ok: true });
@@ -1399,10 +1440,8 @@ const httpServer = createServer(async (request, response) => {
           });
           const role = roleByCode.get(entry.role);
           if (!role) throw new Error(`No existe el rol ${entry.role}.`);
-          await transaction.userRole.upsert({
-            where: { userId_roleId: { userId: user.id, roleId: role.id } },
-            update: {}, create: { userId: user.id, roleId: role.id },
-          });
+          await transaction.userRole.deleteMany({ where: { userId: user.id } });
+          await transaction.userRole.create({ data: { userId: user.id, roleId: role.id } });
           temporaryPasswords.push({ email: entry.email, temporaryPassword });
         }
       });
@@ -1456,10 +1495,8 @@ const httpServer = createServer(async (request, response) => {
               passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
             },
           });
-          await transaction.userRole.upsert({
-            where: { userId_roleId: { userId: user.id, roleId: role.id } },
-            update: {}, create: { userId: user.id, roleId: role.id },
-          });
+          await transaction.userRole.deleteMany({ where: { userId: user.id } });
+          await transaction.userRole.create({ data: { userId: user.id, roleId: role.id } });
           temporaryPasswords.push({ email: entry.email, temporaryPassword });
         }
       });
@@ -1512,6 +1549,9 @@ const httpServer = createServer(async (request, response) => {
               academicPeriod: period.name, totalWeeks: source.totalWeeks,
               currentWeek: 1, basicBib: source.basicBib,
               complementaryBib: source.complementaryBib, reaBib: source.reaBib,
+              professionalProfileCompetencies: source.professionalProfileCompetencies,
+              graduateProfileResults: source.graduateProfileResults,
+              utplGenericCompetencies: source.utplGenericCompetencies,
               status: "DRAFT",
               matrix: source.matrix ? { create: {
                 originalName: source.matrix.originalName,
@@ -1778,7 +1818,7 @@ const httpServer = createServer(async (request, response) => {
         });
         return;
       }
-      const validation = canonicalGuideSchema.safeParse(project.canonicalGuide.document);
+      const validation = canonicalGuideDocumentSchema.safeParse(project.canonicalGuide.document);
       if (!validation.success) {
         json(response, 500, {
           error: "El JSON canónico almacenado no cumple el contrato vigente.",
@@ -1786,10 +1826,16 @@ const httpServer = createServer(async (request, response) => {
         });
         return;
       }
+      if (validation.data.schemaVersion !== project.canonicalGuide.schemaVersion) {
+        json(response, 500, {
+          error: "La versión almacenada no coincide con la declarada por el documento canónico.",
+        });
+        return;
+      }
       const serialized = `${JSON.stringify(validation.data, null, 2)}\n`;
       response.writeHead(200, {
         "Content-Type": "application/json; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${canonicalDownloadName(project.subjectName)}"`,
+        "Content-Disposition": `attachment; filename="${canonicalDownloadName(project.subjectName, project.canonicalGuide.schemaVersion)}"`,
         "Content-Length": Buffer.byteLength(serialized),
         "Cache-Control": "no-store",
         "X-Canonical-Schema-Version": project.canonicalGuide.schemaVersion,
@@ -1825,13 +1871,16 @@ const httpServer = createServer(async (request, response) => {
             level: project.level,
             faculty: project.faculty,
             career: project.career,
-            professorName: project.professorName,
+            professorName: user.displayName,
             subjectCode: project.subjectCode,
             subjectName: project.subjectName,
             subjectType: project.subjectType,
             modality: project.modality,
             academicPeriod: project.academicPeriod,
             weeks: project.totalWeeks,
+            professionalProfileCompetencies: project.professionalProfileCompetencies,
+            graduateProfileResults: project.graduateProfileResults,
+            utplGenericCompetencies: project.utplGenericCompetencies,
             basic: project.basicBib,
             complementary: project.complementaryBib,
             rea: project.reaBib ?? "",
@@ -1872,7 +1921,7 @@ const httpServer = createServer(async (request, response) => {
                 level: body.project.level,
                 faculty: body.project.faculty,
                 career: body.project.career,
-                professorName: body.project.professorName,
+                professorName: user.displayName,
                 subjectCode: body.project.subjectCode,
                 subjectName: body.project.subjectName,
                 subjectType: body.project.subjectType,
@@ -1883,6 +1932,9 @@ const httpServer = createServer(async (request, response) => {
                 basicBib: body.bibliography.basic,
                 complementaryBib: body.bibliography.complementary,
                 reaBib: body.bibliography.rea,
+                professionalProfileCompetencies: body.project.professionalProfileCompetencies,
+                graduateProfileResults: body.project.graduateProfileResults,
+                utplGenericCompetencies: body.project.utplGenericCompetencies,
                 status: Object.values(body.weekStates).filter((week) => week.status === "approved").length === body.project.weeks
                   ? "COMPLETED"
                   : "IN_PROGRESS",
@@ -1895,7 +1947,7 @@ const httpServer = createServer(async (request, response) => {
                 level: body.project.level,
                 faculty: body.project.faculty,
                 career: body.project.career,
-                professorName: body.project.professorName,
+                professorName: user.displayName,
                 subjectCode: body.project.subjectCode,
                 subjectName: body.project.subjectName,
                 subjectType: body.project.subjectType,
@@ -1906,6 +1958,9 @@ const httpServer = createServer(async (request, response) => {
                 basicBib: body.bibliography.basic,
                 complementaryBib: body.bibliography.complementary,
                 reaBib: body.bibliography.rea,
+                professionalProfileCompetencies: body.project.professionalProfileCompetencies,
+                graduateProfileResults: body.project.graduateProfileResults,
+                utplGenericCompetencies: body.project.utplGenericCompetencies,
                 status: Object.values(body.weekStates).filter((week) => week.status === "approved").length === body.project.weeks
                   ? "COMPLETED"
                   : "IN_PROGRESS",
@@ -2430,11 +2485,16 @@ CONTENIDO DE REFERENCIA: ${body.proposal.insertionAfter}`,
       response.end(editorStyles);
       return;
     }
-    if (
-      request.method === "GET" &&
-      requestUrl.pathname === "/schemas/guide-canonical-v1.schema.json"
-    ) {
-      const schema = await readFile(canonicalGuideSchemaFileUrl, "utf8");
+    if (request.method === "GET" && [
+      "/schemas/guide-canonical-v1.schema.json",
+      "/schemas/guide-canonical-v2.schema.json",
+    ].includes(requestUrl.pathname)) {
+      const schema = await readFile(
+        requestUrl.pathname.endsWith("v1.schema.json")
+          ? canonicalGuideV1SchemaFileUrl
+          : canonicalGuideV2SchemaFileUrl,
+        "utf8",
+      );
       response.writeHead(200, {
         "Content-Type": "application/schema+json; charset=utf-8",
         "Cache-Control": "public, max-age=3600",

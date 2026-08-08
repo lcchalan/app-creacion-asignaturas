@@ -120,6 +120,9 @@ model Project {
   basicBib                   String
   complementaryBib           String
   reaBib                     String?
+  professionalProfileCompetencies String[]              @default([])
+  graduateProfileResults          String[]              @default([])
+  utplGenericCompetencies         String[]              @default([])
   status                     ProjectStatus           @default(DRAFT)
   createdAt                  DateTime                @default(now())
   updatedAt                  DateTime                @updatedAt

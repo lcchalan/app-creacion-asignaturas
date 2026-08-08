@@ -1,7 +1,9 @@
 import { z } from "zod";
 
-export const CANONICAL_GUIDE_SCHEMA_VERSION = "1.0.0" as const;
-export const CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v1.schema.json" as const;
+export const LEGACY_CANONICAL_GUIDE_SCHEMA_VERSION = "1.0.0" as const;
+export const LEGACY_CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v1.schema.json" as const;
+export const CANONICAL_GUIDE_SCHEMA_VERSION = "2.0.0" as const;
+export const CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v2.schema.json" as const;
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
@@ -45,9 +47,9 @@ const canonicalImageAssetSchema = z.strictObject({
   }),
 });
 
-export const canonicalGuideSchema = z.strictObject({
-  $schema: z.literal(CANONICAL_GUIDE_SCHEMA_PATH),
-  schemaVersion: z.literal(CANONICAL_GUIDE_SCHEMA_VERSION),
+const canonicalGuideV1BaseSchema = z.strictObject({
+  $schema: z.literal(LEGACY_CANONICAL_GUIDE_SCHEMA_PATH),
+  schemaVersion: z.literal(LEGACY_CANONICAL_GUIDE_SCHEMA_VERSION),
   documentType: z.literal("didactic-guide"),
   documentId: z.string().uuid(),
   language: z.literal("es"),
@@ -86,7 +88,38 @@ export const canonicalGuideSchema = z.strictObject({
     createdAt: isoDateTimeSchema,
     updatedAt: isoDateTimeSchema,
   }),
-}).superRefine((guide, context) => {
+});
+
+const canonicalAcademicProfileSchema = z.strictObject({
+  professionalProfileCompetencies: z.array(z.string().min(1))
+    .refine((items) => new Set(items).size === items.length),
+  graduateProfileResults: z.array(z.string().min(1))
+    .refine((items) => new Set(items).size === items.length),
+  utplGenericCompetencies: z.array(z.enum([
+    "Desarrollo personal integral",
+    "Trabajo colaborativo",
+    "Innovación y emprendimiento con visión de propósito",
+    "Mentalidad sostenible",
+    "Ciudadanía global",
+  ])).refine((items) => new Set(items).size === items.length),
+});
+
+const canonicalGuideV2BaseSchema = canonicalGuideV1BaseSchema.extend({
+  $schema: z.literal(CANONICAL_GUIDE_SCHEMA_PATH),
+  schemaVersion: z.literal(CANONICAL_GUIDE_SCHEMA_VERSION),
+  metadata: canonicalGuideV1BaseSchema.shape.metadata.extend({
+    academicProfile: canonicalAcademicProfileSchema,
+  }),
+});
+
+type StructurallyValidCanonicalGuide =
+  | z.infer<typeof canonicalGuideV1BaseSchema>
+  | z.infer<typeof canonicalGuideV2BaseSchema>;
+
+function validateCanonicalGuideStructure(
+  guide: StructurallyValidCanonicalGuide,
+  context: z.RefinementCtx,
+) {
   if (guide.weeks.length !== guide.metadata.totalWeeks) {
     context.addIssue({
       code: "custom",
@@ -151,7 +184,18 @@ export const canonicalGuideSchema = z.strictObject({
       });
     }
   });
-});
+}
+
+export const canonicalGuideV1Schema = canonicalGuideV1BaseSchema.superRefine(
+  validateCanonicalGuideStructure,
+);
+export const canonicalGuideSchema = canonicalGuideV2BaseSchema.superRefine(
+  validateCanonicalGuideStructure,
+);
+export const canonicalGuideDocumentSchema = z.union([
+  canonicalGuideV1Schema,
+  canonicalGuideSchema,
+]);
 
 export type CanonicalGuide = z.infer<typeof canonicalGuideSchema>;
 
@@ -169,6 +213,9 @@ export interface CanonicalGuideSource {
     modality: string;
     academicPeriod: string;
     totalWeeks: number;
+    professionalProfileCompetencies: string[];
+    graduateProfileResults: string[];
+    utplGenericCompetencies: string[];
     basicBib: string;
     complementaryBib: string;
     reaBib: string | null;
@@ -288,6 +335,11 @@ export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuid
       modality: source.project.modality,
       academicPeriod: source.project.academicPeriod,
       totalWeeks: source.project.totalWeeks,
+      academicProfile: {
+        professionalProfileCompetencies: source.project.professionalProfileCompetencies,
+        graduateProfileResults: source.project.graduateProfileResults,
+        utplGenericCompetencies: source.project.utplGenericCompetencies,
+      },
     },
     planning: {
       sourceMatrix: {
