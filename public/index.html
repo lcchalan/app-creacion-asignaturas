@@ -50,7 +50,7 @@
   <main class="workspace">
     <header class="topbar">
       <div class="product"><i></i>Generador de Guías Didácticas</div>
-      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="logout" class="logout" type="button">Salir</button></div>
+      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="change-own-password" class="logout" type="button">Cambiar mi contraseña</button><button id="logout" class="logout" type="button">Salir</button></div>
     </header>
 
     <section class="content" id="main-content">
@@ -224,6 +224,40 @@
       <p id="admin-message" class="admin-message hidden" role="status"></p>
     </section>
   </main>
+
+  <div class="auth-layer password-layer hidden" id="password-change-layer">
+    <section class="auth-card" role="dialog" aria-modal="true" aria-labelledby="password-change-title">
+      <p class="eyebrow">Seguridad de la cuenta</p>
+      <h1 id="password-change-title">Cambiar mi contraseña</h1>
+      <p id="password-change-description">Ingrese su contraseña actual y establezca una nueva.</p>
+      <form id="password-change-form" class="auth-form">
+        <label>Contraseña actual<input name="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label>Nueva contraseña<input name="newPassword" type="password" autocomplete="new-password" minlength="12" required><small>Mínimo 12 caracteres.</small></label>
+        <label>Confirmar nueva contraseña<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+        <p id="password-change-message" class="auth-message hidden" role="alert"></p>
+        <div class="form-actions">
+          <button class="button" type="submit">Guardar contraseña</button>
+          <button class="button secondary" id="password-change-cancel" type="button">Cancelar</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="auth-layer password-layer hidden" id="temporary-password-layer">
+    <section class="auth-card" role="dialog" aria-modal="true" aria-labelledby="temporary-password-title">
+      <p class="eyebrow">Credencial temporal</p>
+      <h1 id="temporary-password-title">Contraseña temporal</h1>
+      <p id="temporary-password-description">Copie la credencial antes de cerrar esta ventana.</p>
+      <label class="temporary-password-field">Contraseña o credenciales generadas
+        <textarea id="temporary-password-value" readonly rows="5"></textarea>
+      </label>
+      <p id="temporary-password-copy-message" class="copy-message hidden" role="status"></p>
+      <div class="form-actions">
+        <button class="button" id="copy-temporary-password" type="button">Copiar</button>
+        <button class="button secondary" id="close-temporary-password" type="button">Cerrar</button>
+      </div>
+    </section>
+  </div>
 
   <div class="overlay hidden" id="wizard-layer">
     <section class="wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">

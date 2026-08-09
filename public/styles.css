@@ -34,6 +34,11 @@
 @media(max-width:900px){.projects-toolbar,.saved-project{align-items:stretch;flex-direction:column}.project-search{width:100%}.saved-project dl{grid-template-columns:repeat(2,minmax(0,1fr))}.saved-project .button{align-self:flex-start}}
 @media(max-width:560px){.saved-project dl{grid-template-columns:1fr}.projects-panel{padding:18px}}
 .auth-layer{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;background:linear-gradient(145deg,#041e3d,#0b3a68)}
+.password-layer{z-index:120;background:#031a32d9;backdrop-filter:blur(5px)}
+.password-layer .auth-card>p:not(.eyebrow){color:var(--muted);line-height:1.5}
+.temporary-password-field{display:grid;gap:7px;color:var(--navy);font-size:13px;font-weight:750}
+.temporary-password-field textarea{min-height:120px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.45}
+.copy-message{margin:12px 0 0;padding:10px 12px;border-radius:8px;background:#eaf5eb;color:var(--ok);font-weight:700}
 .auth-card{width:min(560px,100%);padding:34px;border-radius:20px;background:#fff;box-shadow:0 30px 80px #0007}
 .auth-card h1{font-size:32px;margin-bottom:24px}.auth-tabs{display:grid;grid-template-columns:1fr 1fr;margin-bottom:22px;border-bottom:1px solid var(--line)}
 .auth-tabs button{padding:12px;border:0;background:transparent;color:var(--muted);font-weight:800;cursor:pointer}

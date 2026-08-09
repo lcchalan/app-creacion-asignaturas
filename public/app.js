@@ -51,8 +51,48 @@ function showAuthenticatedUser(user) {
   $("#profile-role").textContent = user.roles.includes("ADMIN") ? "Administrador" : "Profesor";
   $("#profile-initials").textContent = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U";
   $("#nav-admin").classList.toggle("hidden", !user.roles.includes("ADMIN"));
+  if (user.mustChangePassword) {
+    openPasswordChange(true);
+    return;
+  }
   syncProfessorName();
   loadProjects();
+}
+
+function openPasswordChange(required = false) {
+  const layer = $("#password-change-layer");
+  const form = $("#password-change-form");
+  form.reset();
+  layer.dataset.required = String(required);
+  $("#password-change-title").textContent = required ? "Cambie su contraseña temporal" : "Cambiar mi contraseña";
+  $("#password-change-description").textContent = required
+    ? "Por seguridad, debe establecer una contraseña personal antes de continuar."
+    : "Ingrese su contraseña actual y establezca una nueva.";
+  $("#password-change-cancel").classList.toggle("hidden", required);
+  $("#password-change-message").classList.add("hidden");
+  layer.classList.remove("hidden");
+  form.elements.currentPassword.focus();
+}
+
+function closePasswordChange() {
+  const layer = $("#password-change-layer");
+  if (layer.dataset.required === "true") return;
+  $("#password-change-form").reset();
+  layer.classList.add("hidden");
+}
+
+function showTemporaryPassword(title, value, description = "Copie la credencial antes de cerrar esta ventana.") {
+  $("#temporary-password-title").textContent = title;
+  $("#temporary-password-description").textContent = description;
+  $("#temporary-password-value").value = value;
+  $("#temporary-password-copy-message").classList.add("hidden");
+  $("#temporary-password-layer").classList.remove("hidden");
+}
+
+function closeTemporaryPassword() {
+  $("#temporary-password-layer").classList.add("hidden");
+  $("#temporary-password-value").value = "";
+  $("#temporary-password-copy-message").classList.add("hidden");
 }
 $$("[data-auth-tab]").forEach((button) => {
   button.onclick = () => {
@@ -93,6 +133,49 @@ $("#logout").onclick = async () => {
   localStorage.removeItem("ggd-project-v2");
   location.reload();
 };
+$("#change-own-password").onclick = () => openPasswordChange(false);
+$("#password-change-cancel").onclick = closePasswordChange;
+$("#password-change-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const submittedForm = event.currentTarget;
+  const values = Object.fromEntries(new FormData(submittedForm));
+  const message = $("#password-change-message");
+  if (values.newPassword !== values.confirmPassword) {
+    message.textContent = "La confirmación no coincide con la nueva contraseña.";
+    message.classList.remove("hidden");
+    return;
+  }
+  const submitButton = submittedForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  try {
+    await authRequest("/api/auth/change-password", { method: "POST", body: JSON.stringify(values) });
+    authenticatedUserData.mustChangePassword = false;
+    $("#password-change-layer").dataset.required = "false";
+    closePasswordChange();
+    showAdminMessage("Contraseña actualizada. Las demás sesiones fueron cerradas.");
+    syncProfessorName();
+    loadProjects();
+  } catch (error) {
+    message.textContent = error.message;
+    message.classList.remove("hidden");
+  } finally {
+    submitButton.disabled = false;
+  }
+};
+$("#copy-temporary-password").onclick = async () => {
+  const field = $("#temporary-password-value");
+  try {
+    await navigator.clipboard.writeText(field.value);
+  } catch {
+    field.focus();
+    field.select();
+    document.execCommand("copy");
+  }
+  const message = $("#temporary-password-copy-message");
+  message.textContent = "Copiado al portapapeles.";
+  message.classList.remove("hidden");
+};
+$("#close-temporary-password").onclick = closeTemporaryPassword;
 const layer = $("#wizard-layer");
 const form = $("#project-form");
 const message = $("#form-message");
@@ -1321,14 +1404,17 @@ function renderAdminUsers() {
   const query = ($("#admin-user-search").value || "").toLowerCase();
   const users = adminData.users.filter((user) =>
     `${user.firstName} ${user.lastName} ${user.nationalId || ""} ${user.email}`.toLowerCase().includes(query));
-  $("#admin-users-body").innerHTML = users.map((user) => `
+  $("#admin-users-body").innerHTML = users.map((user) => {
+    const isCurrentUser = user.id === authenticatedUserData?.id;
+    return `
     <tr>
       <td><strong>${escapeHtml(`${user.firstName} ${user.lastName}`)}</strong>${user.mustChangePassword ? "<small>Debe cambiar la contraseña</small>" : ""}</td>
       <td>${escapeHtml(user.nationalId || "—")}</td><td>${escapeHtml(user.email)}</td>
       <td><span class="assigned-role">${escapeHtml(roleName(user))}</span></td>
       <td><span class="status-badge ${user.active ? "status-completed" : "status-draft"}">${user.active ? "Activa" : "Inactiva"}</span></td>
-      <td class="table-actions"><button type="button" data-edit-user="${user.id}">Editar datos</button><button type="button" data-password-user="${user.id}">Contraseña temporal</button><button type="button" data-toggle-user="${user.id}" data-active="${user.active}">${user.active ? "Desactivar" : "Activar"}</button></td>
-    </tr>`).join("") || `<tr><td colspan="6">No se encontraron usuarios.</td></tr>`;
+      <td class="table-actions"><button type="button" data-edit-user="${user.id}">Editar datos</button>${isCurrentUser ? "" : `<button type="button" data-password-user="${user.id}">Contraseña temporal</button>`}<button type="button" data-toggle-user="${user.id}" data-active="${user.active}">${user.active ? "Desactivar" : "Activar"}</button></td>
+    </tr>`;
+  }).join("") || `<tr><td colspan="6">No se encontraron usuarios.</td></tr>`;
 }
 function renderAssignments() {
   if (!adminData) return;
@@ -1446,7 +1532,7 @@ $("#admin-user-form").onsubmit = async (event) => {
     } else {
       delete values.userId;
       const result = await authRequest("/api/admin/users", { method: "POST", body: JSON.stringify(values) });
-      showAdminMessage(`Usuario creado. Contraseña temporal: ${result.temporaryPassword}`);
+      showTemporaryPassword("Usuario creado", result.temporaryPassword, "Entregue esta contraseña temporal al nuevo usuario por un medio seguro.");
     }
     resetAdminUserForm(); await loadAdminDashboard();
   } catch (error) { showAdminMessage(error.message, true); }
@@ -1472,7 +1558,7 @@ $("#admin-users-body").onclick = async (event) => {
       $("#admin-user-cancel").classList.remove("hidden"); form.scrollIntoView({ behavior: "smooth" }); return;
     } else if (button.dataset.passwordUser) {
       const result = await authRequest(`/api/admin/users/${button.dataset.passwordUser}/temporary-password`, { method: "POST", body: "{}" });
-      showAdminMessage(`Contraseña temporal asignada: ${result.temporaryPassword}`);
+      showTemporaryPassword("Contraseña temporal asignada", result.temporaryPassword);
     } else if (button.dataset.toggleUser) {
       await authRequest(`/api/admin/users/${button.dataset.toggleUser}`, { method: "PATCH", body: JSON.stringify({ active: button.dataset.active !== "true" }) });
       showAdminMessage("Estado de la cuenta actualizado.");
@@ -1506,7 +1592,7 @@ $("#bulk-user-form").onsubmit = async (event) => {
       body: JSON.stringify({ fileName: file.name, contentBase64: await fileToBase64(file) }),
     });
     const passwords = result.temporaryPasswords.map((item) => `${item.email}: ${item.temporaryPassword}`).join("\n");
-    showAdminMessage(`${result.created} usuarios procesados. Contraseñas temporales:\n${passwords}`);
+    showTemporaryPassword(`${result.created} usuarios procesados`, passwords, "Copie estas credenciales antes de cerrar la ventana y entréguelas por un medio seguro.");
     submittedForm.reset(); await loadAdminDashboard();
   } catch (error) { showAdminMessage(error.message, true); }
 };

@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import { URL } from "node:url";
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   Document, HeadingLevel, ImageRun, Packer, Paragraph, Table, TableCell, TableRow,
   TextRun, WidthType,
@@ -21,6 +21,13 @@ import {
 } from "./canonical-guide.js";
 import { parseMatrix, requiredColumns } from "./services/matrix-service.js";
 import { database, checkDatabaseConnection } from "./db/client.js";
+import {
+  assertPasswordChange,
+  assertTemporaryPasswordTarget,
+  otherSessionsWhere,
+  passwordHash,
+  passwordMatches,
+} from "./auth/password-security.js";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const serverName =
@@ -240,20 +247,6 @@ const projectPersistenceSchema = z.object({
   }
 });
 
-function passwordHash(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
-}
-
-function passwordMatches(password: string, stored: string | null) {
-  if (!stored) return false;
-  const [salt, expectedHex] = stored.split(":");
-  if (!salt || !expectedHex) return false;
-  const actual = scryptSync(password, salt, 64);
-  const expected = Buffer.from(expectedHex, "hex");
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-
 function cookieValue(request: IncomingMessage, name: string) {
   return (request.headers.cookie ?? "").split(";").map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`))?.slice(name.length + 1);
@@ -270,9 +263,15 @@ async function authenticatedUser(request: IncomingMessage) {
   return session.user;
 }
 
-async function requireUser(request: IncomingMessage) {
+async function requireUser(
+  request: IncomingMessage,
+  options: { allowPasswordChange?: boolean } = {},
+) {
   const user = await authenticatedUser(request);
   if (!user) throw Object.assign(new Error("Debe iniciar sesión."), { statusCode: 401 });
+  if (user.mustChangePassword && !options.allowPasswordChange) {
+    throw Object.assign(new Error("Debe cambiar su contraseña temporal antes de continuar."), { statusCode: 403 });
+  }
   return user;
 }
 
@@ -1070,9 +1069,38 @@ const httpServer = createServer(async (request, response) => {
         user: user ? {
           id: user.id, firstName: user.firstName, lastName: user.lastName,
           displayName: user.displayName, email: user.email,
+          mustChangePassword: user.mustChangePassword,
           roles: user.roles.map((entry) => entry.role.code),
         } : null,
       });
+      return;
+    }
+    if (request.method === "POST" && requestUrl.pathname === "/api/auth/change-password") {
+      const user = await requireUser(request, { allowPasswordChange: true });
+      const parsedBody = z.object({
+        currentPassword: z.string().max(200),
+        newPassword: z.string().max(200),
+        confirmPassword: z.string().max(200),
+      }).safeParse(await readJsonBody(request));
+      if (!parsedBody.success) {
+        json(response, 400, { error: "Complete correctamente los tres campos de contraseña." });
+        return;
+      }
+      const body = parsedBody.data;
+      assertPasswordChange(body, user.passwordHash);
+      const token = cookieValue(request, "ggd_session");
+      if (!token) throw Object.assign(new Error("Debe iniciar sesión."), { statusCode: 401 });
+      const currentTokenHash = createHash("sha256").update(token).digest("hex");
+      await database.$transaction([
+        database.user.update({
+          where: { id: user.id },
+          data: { passwordHash: passwordHash(body.newPassword), mustChangePassword: false },
+        }),
+        database.userSession.deleteMany({
+          where: otherSessionsWhere(user.id, currentTokenHash),
+        }),
+      ]);
+      json(response, 200, { ok: true });
       return;
     }
     if (request.method === "GET" && requestUrl.pathname === "/api/admin/dashboard") {
@@ -1189,6 +1217,7 @@ const httpServer = createServer(async (request, response) => {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
       const userId = z.string().uuid().parse(passwordAdminMatch[1]);
+      assertTemporaryPasswordTarget(admin.id, userId);
       const body = z.object({ password: z.string().min(8).max(200).optional() }).parse(await readJsonBody(request));
       const temporaryPassword = body.password || randomBytes(9).toString("base64url");
       await database.user.update({
@@ -2557,15 +2586,18 @@ CONTENIDO DE REFERENCIA: ${body.proposal.insertionAfter}`,
   } catch (error) {
     console.error("Error al procesar la solicitud:", error);
 
+    const statusCode = Number((error as { statusCode?: number }).statusCode ?? 500);
     if (!response.headersSent) {
-      response.writeHead(Number((error as { statusCode?: number }).statusCode ?? 500), {
+      response.writeHead(statusCode, {
         "Content-Type": "application/json; charset=utf-8",
       });
     }
 
     response.end(
       JSON.stringify({
-        error: "Error interno del servidor",
+        error: statusCode >= 400 && statusCode < 500 && error instanceof Error
+          ? error.message
+          : "Error interno del servidor",
       }),
     );
   }
