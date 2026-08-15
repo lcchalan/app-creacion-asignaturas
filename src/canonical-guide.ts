@@ -77,8 +77,8 @@ const canonicalGuideV1BaseSchema = z.strictObject({
   }),
   bibliography: z.strictObject({
     format: z.literal("markdown"),
-    basic: z.string().min(1),
-    complementary: z.string().min(1),
+    basic: z.string(),
+    complementary: z.string(),
     openEducationalResources: z.string(),
   }),
   weeks: z.array(canonicalWeekSchema).min(1),

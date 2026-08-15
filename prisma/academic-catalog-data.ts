@@ -1,4 +1,4 @@
-window.ACADEMIC_OFFER = {
+export const initialAcademicOffer = {
   "Tecnologías": {
     "En línea": {
       "Unidad Técnica y Tecnológica": [
@@ -165,4 +165,4 @@ window.ACADEMIC_OFFER = {
       ]
     }
   }
-};
+} as const;

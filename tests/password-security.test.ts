@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertPasswordChange,
+  assertPasswordResetChange,
   assertTemporaryPasswordTarget,
   MINIMUM_PASSWORD_LENGTH,
   otherSessionsWhere,
   passwordHash,
   passwordMatches,
+  passwordResetTokenHash,
+  passwordResetTokenIsUsable,
 } from "../src/auth/password-security.js";
 
 test("genera hashes con sal y valida únicamente la contraseña correcta", () => {
@@ -55,4 +58,36 @@ test("conserva la sesión actual al construir el filtro de revocación", () => {
     userId: "user-1",
     tokenHash: { not: "token-actual" },
   });
+});
+
+
+test("genera un hash estable para el token de restablecimiento sin guardar el token original", () => {
+  const token = "token-de-restablecimiento-seguro-123456";
+  const hashed = passwordResetTokenHash(token);
+  assert.equal(hashed.length, 64);
+  assert.equal(hashed, passwordResetTokenHash(token));
+  assert.notEqual(hashed, token);
+});
+
+test("acepta únicamente enlaces de restablecimiento vigentes y no utilizados", () => {
+  const now = new Date("2026-08-14T20:00:00.000Z");
+  assert.equal(passwordResetTokenIsUsable({ expiresAt: new Date("2026-08-14T20:30:00.000Z"), usedAt: null }, now), true);
+  assert.equal(passwordResetTokenIsUsable({ expiresAt: new Date("2026-08-14T19:59:59.000Z"), usedAt: null }, now), false);
+  assert.equal(passwordResetTokenIsUsable({ expiresAt: new Date("2026-08-14T20:30:00.000Z"), usedAt: now }, now), false);
+});
+
+test("el restablecimiento exige una contraseña nueva válida y confirmada", () => {
+  const stored = passwordHash("Contraseña anterior");
+  assert.doesNotThrow(() => assertPasswordResetChange({
+    newPassword: "Nueva contraseña segura 2026",
+    confirmPassword: "Nueva contraseña segura 2026",
+  }, stored));
+  assert.throws(() => assertPasswordResetChange({
+    newPassword: "Nueva contraseña segura 2026",
+    confirmPassword: "otra contraseña",
+  }, stored), /confirmación no coincide/);
+  assert.throws(() => assertPasswordResetChange({
+    newPassword: "Contraseña anterior",
+    confirmPassword: "Contraseña anterior",
+  }, stored), /debe ser diferente/);
 });

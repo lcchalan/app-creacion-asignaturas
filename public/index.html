@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Generador institucional de guías didácticas.">
-  <title>Generador de Guías Didácticas</title>
+  <meta name="description" content="Generador institucional de planes docentes y guías didácticas.">
+  <title>Planes Docentes y Guías Didácticas</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/editor-rich.css">
 </head>
@@ -12,35 +12,36 @@
   <div class="auth-layer" id="auth-layer">
     <section class="auth-card">
       <p class="eyebrow">Acceso institucional</p>
-      <h1>Generador de Guías Didácticas</h1>
-      <div class="auth-tabs">
-        <button type="button" class="active" data-auth-tab="login">Iniciar sesión</button>
-        <button type="button" data-auth-tab="register">Registrarse</button>
-      </div>
+      <h1>Planes Docentes y Guías Didácticas</h1>
+      <h2 id="auth-view-title" class="auth-view-title">Iniciar sesión</h2>
       <form id="login-form" class="auth-form">
-        <label>Correo electrónico<input name="email" type="email" required></label>
-        <label>Contraseña<input name="password" type="password" required></label>
+        <label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label>
+        <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
         <button class="button" type="submit">Ingresar</button>
+        <button class="auth-text-button" id="forgot-password-open" type="button">¿Olvidó su contraseña?</button>
       </form>
-      <form id="register-form" class="auth-form hidden">
-        <div class="grid">
-          <label>Nombre<input name="firstName" required></label>
-          <label>Apellido<input name="lastName" required></label>
-          <label>Cédula<input name="nationalId" required></label>
-          <label>Correo<input name="email" type="email" required></label>
-        </div>
-        <label>Contraseña<input name="password" type="password" minlength="8" required></label>
-        <small>El registro individual asigna automáticamente el rol Profesor.</small>
-        <button class="button" type="submit">Crear cuenta</button>
+      <form id="forgot-password-form" class="auth-form hidden">
+        <p class="auth-help">Ingrese el correo de su cuenta institucional. Si está registrada y activa, recibirá un enlace de restablecimiento de un solo uso.</p>
+        <label>Correo electrónico<input name="email" type="email" autocomplete="email" required></label>
+        <button class="button" type="submit">Enviar enlace de restablecimiento</button>
+        <button class="auth-text-button" id="forgot-password-back" type="button">Volver a iniciar sesión</button>
       </form>
-      <p id="auth-message" class="auth-message hidden"></p>
+      <form id="reset-password-form" class="auth-form hidden">
+        <p class="auth-help">Cree una nueva contraseña. El enlace puede utilizarse una sola vez y vence 30 minutos después de su solicitud.</p>
+        <input name="token" type="hidden">
+        <label>Nueva contraseña<input name="newPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></label>
+        <label>Confirmar nueva contraseña<input name="confirmPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></label>
+        <button class="button" type="submit">Guardar nueva contraseña</button>
+        <button class="auth-text-button" id="reset-password-cancel" type="button">Volver a iniciar sesión</button>
+      </form>
+      <p id="auth-message" class="auth-message hidden" role="status"></p>
     </section>
   </div>
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">◇</span><strong>GGD</strong></div>
     <nav aria-label="Navegación principal">
       <button class="nav active" id="nav-home">⌂ <span>Inicio</span></button>
-      <button class="nav" id="nav-projects">□ <span>Mis proyectos</span></button>
+      <button class="nav" id="nav-projects">□ <span>Mis asignaturas</span></button>
       <button class="nav hidden" id="nav-admin">⚙ <span>Administración</span></button>
       <button class="nav" id="nav-templates">▤ <span>Plantillas</span></button>
       <button class="nav" id="nav-help">? <span>Ayuda</span></button>
@@ -49,20 +50,20 @@
 
   <main class="workspace">
     <header class="topbar">
-      <div class="product"><i></i>Generador de Guías Didácticas</div>
+      <div class="product"><i></i>Planes Docentes y Guías Didácticas</div>
       <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="change-own-password" class="logout" type="button">Cambiar mi contraseña</button><button id="logout" class="logout" type="button">Salir</button></div>
     </header>
 
     <section class="content" id="main-content">
       <div class="heading">
-        <div><p class="eyebrow">Panel principal</p><h1>Proyectos académicos</h1><p>Cree y revise sus guías didácticas con trazabilidad por semana.</p></div>
-        <button class="button secondary" id="new-project">＋ Nuevo proyecto</button>
+        <div><p class="eyebrow">Panel principal</p><h1>Proyectos académicos</h1><p>Genere el plan docente y, a partir de él, prepare la guía didáctica.</p></div>
+        <button class="button secondary" id="refresh-projects" type="button">↻ Actualizar asignaturas</button>
       </div>
 
       <section class="projects-panel" aria-labelledby="projects-title">
         <div class="projects-toolbar">
           <div>
-            <h2 id="projects-title">Mis proyectos</h2>
+            <h2 id="projects-title">Mis asignaturas</h2>
             <p>Retome o consulte las guías almacenadas.</p>
           </div>
           <label class="project-search">
@@ -83,6 +84,7 @@
       </div>
       <div class="admin-tabs" role="tablist">
         <button class="active" data-admin-tab="users">Usuarios</button>
+        <button data-admin-tab="catalogs">Catálogos académicos</button>
         <button data-admin-tab="assignments">Asignaciones</button>
         <button data-admin-tab="knowledge">Conocimiento e IA</button>
         <button data-admin-tab="reports">Reporte de guías</button>
@@ -116,72 +118,230 @@
         </div>
       </section>
 
+      <section class="admin-panel" data-admin-panel="catalogs">
+        <div class="admin-grid catalog-admin-grid">
+          <form class="admin-card" id="catalog-form">
+            <h2 id="catalog-form-title">Crear registro de catálogo</h2>
+            <div class="catalog-help" role="note" aria-label="Funcionamiento de los catálogos">
+              <strong>Funcionamiento</strong>
+              <p>Primero configure los catálogos base: niveles, unidades académicas, modalidades, tipos de asignatura, periodos y asignaturas. Luego podrá registrar carreras y ofertas académicas.</p>
+              <p>Una oferta relaciona una asignatura con una carrera, modalidad, tipo y periodo; posteriormente esa oferta puede asignarse a un profesor.</p>
+            </div>
+            <input name="catalogId" type="hidden">
+            <label>Catálogo
+              <select name="kind" id="catalog-kind" required>
+                <option value="levels">Niveles académicos</option>
+                <option value="modalities">Modalidades</option>
+                <option value="units">Unidades académicas</option>
+                <option value="programs">Carreras o programas</option>
+                <option value="subject-types">Tipos de asignatura</option>
+                <option value="periods">Periodos académicos</option>
+                <option value="courses">Asignaturas</option>
+                <option value="departments">Departamentos docentes</option>
+                <option value="offerings">Ofertas académicas</option>
+              </select>
+            </label>
+            <div class="grid">
+              <label data-catalog-field="code">Código<input name="code" maxlength="80"></label>
+              <label data-catalog-field="name">Nombre<input name="name" maxlength="250"></label>
+              <label data-catalog-field="sortOrder">Orden<input name="sortOrder" type="number" min="1" max="9999" value="100"></label>
+              <label data-catalog-field="academicLevelId">Nivel académico<select name="academicLevelId"></select></label>
+              <label data-catalog-field="academicUnitId">Unidad académica<select name="academicUnitId"></select></label>
+              <label data-catalog-field="courseId">Asignatura<select name="courseId"></select></label>
+              <label data-catalog-field="programId">Carrera o programa<select name="programId"></select></label>
+              <label data-catalog-field="modalityId">Modalidad<select name="modalityId"></select></label>
+              <label data-catalog-field="subjectTypeId">Tipo de asignatura<select name="subjectTypeId"></select></label>
+              <label data-catalog-field="periodId">Periodo<select name="periodId"></select></label>
+              <label data-catalog-field="startsAt">Fecha de inicio del periodo<input name="startsAt" type="date"></label>
+              <label data-catalog-field="endsAt">Fecha final<input name="endsAt" type="date"></label>
+              <label data-catalog-field="bimestralEvaluationStartAt">Inicio de evaluación bimestral<input name="bimestralEvaluationStartAt" type="date"></label>
+              <label data-catalog-field="bimestralEvaluationEndAt">Fin de evaluación bimestral<input name="bimestralEvaluationEndAt" type="date"></label>
+              <label data-catalog-field="recoveryEvaluationStartAt">Inicio de evaluación de recuperación<input name="recoveryEvaluationStartAt" type="date"></label>
+              <label data-catalog-field="recoveryEvaluationEndAt">Fin de evaluación de recuperación<input name="recoveryEvaluationEndAt" type="date"></label>
+              <label data-catalog-field="totalWeeks">Número de semanas<input name="totalWeeks" type="number" min="1" max="100" value="8"></label>
+              <label data-catalog-field="planCategory">Categoría para el plan<select name="planCategory"><option value="">Seleccione</option><option value="CONCEPTUAL">Conceptual</option><option value="ACTIVE">Activa</option><option value="INTEGRATING">Integradora</option></select></label>
+              <label data-catalog-field="credits">Créditos<input name="credits" type="number" min="0" step="0.01"></label>
+              <label data-catalog-field="acdHours">Horas ACD<input name="acdHours" type="number" min="0" value="0"></label>
+              <label data-catalog-field="apeHours">Horas APE<input name="apeHours" type="number" min="0" value="0"></label>
+              <label data-catalog-field="aaHours">Horas AA<input name="aaHours" type="number" min="0" value="0"></label>
+              <label data-catalog-field="semester">Semestre<input name="semester"></label>
+              <label data-catalog-field="description">Descripción microcurricular<textarea name="description"></textarea></label>
+              <label data-catalog-field="prerequisites">Prerrequisitos<textarea name="prerequisites" placeholder="Uno por línea"></textarea></label>
+              <div class="structured-field" data-catalog-field="learningOutcomes">
+                <span class="field-label">Resultados de aprendizaje</span>
+                <div class="structured-add-row"><input id="learning-outcome-input" type="text" maxlength="2000" placeholder="Escriba un resultado de aprendizaje"><button class="button secondary compact" id="add-learning-outcome" type="button">Agregar</button></div>
+                <div class="structured-list" id="learning-outcomes-list"></div>
+                <textarea class="structured-storage" name="learningOutcomes" tabindex="-1" aria-hidden="true"></textarea>
+              </div>
+              <div class="structured-field" data-catalog-field="professionalProfileCompetencies">
+                <span class="field-label">Competencias profesionales</span>
+                <div class="structured-add-row"><input id="professional-competency-input" type="text" maxlength="2000" placeholder="Escriba una competencia profesional"><button class="button secondary compact" id="add-professional-competency" type="button">Agregar</button></div>
+                <div class="structured-list" id="professional-competencies-list"></div>
+                <textarea class="structured-storage" name="professionalProfileCompetencies" tabindex="-1" aria-hidden="true"></textarea>
+              </div>
+              <div class="structured-field" data-catalog-field="graduateProfileResults">
+                <span class="field-label">Resultados del perfil de egreso</span>
+                <div class="structured-add-row"><input id="graduate-result-input" type="text" maxlength="2000" placeholder="Escriba un resultado del perfil de egreso"><button class="button secondary compact" id="add-graduate-result" type="button">Agregar</button></div>
+                <div class="structured-list" id="graduate-results-list"></div>
+                <textarea class="structured-storage" name="graduateProfileResults" tabindex="-1" aria-hidden="true"></textarea>
+              </div>
+              <div class="structured-field" data-catalog-field="utplGenericCompetencies">
+                <span class="field-label">Competencias genéricas UTPL</span>
+                <details class="multi-select" id="generic-competency-selector">
+                  <summary>Seleccionar una o más competencias</summary>
+                  <div class="multi-select-options" id="generic-competency-options"></div>
+                </details>
+                <div class="selected-tags" id="generic-competency-tags"></div>
+                <textarea class="structured-storage" name="utplGenericCompetencies" tabindex="-1" aria-hidden="true"></textarea>
+              </div>
+              <div class="structured-field full-width" data-catalog-field="unitContents">
+                <span class="field-label">Unidades y contenidos</span>
+                <div class="unit-builder">
+                  <div class="structured-add-row"><input id="unit-title-input" type="text" maxlength="1000" placeholder="Título de la unidad"><button class="button secondary compact" id="add-unit" type="button">Agregar unidad</button></div>
+                  <p class="field-help">Cada unidad mantiene sus contenidos o subtemas asociados de forma independiente.</p>
+                  <div class="unit-list" id="unit-list"></div>
+                </div>
+                <textarea class="structured-storage" name="unitContents" tabindex="-1" aria-hidden="true"></textarea>
+              </div>
+            </div>
+            <label class="confirm"><input name="active" type="checkbox" checked> Registro activo</label>
+            <p class="field-help">Si un registro ya fue utilizado, la acción «Eliminar» lo desactiva y conserva su historial.</p>
+            <div class="form-actions">
+              <button class="button" type="submit">Guardar</button>
+              <button class="button secondary hidden" id="catalog-cancel" type="button">Cancelar edición</button>
+            </div>
+          </form>
+        </div>
+        <form class="admin-card" id="academic-offer-import-form">
+          <h2>Carga masiva de oferta académica</h2>
+          <p>Use la plantilla normalizada para registrar ofertas, resultados, perfiles, competencias, contenidos, docentes y asignaciones en una sola operación validada.</p>
+          <div class="form-actions">
+            <a class="button secondary" href="/api/admin/academic-offer/template">Descargar plantilla Excel</a>
+            <input id="academic-offer-file" type="file" accept=".xlsx" required>
+            <button class="button secondary" id="validate-academic-offer" type="button">Validar archivo</button>
+            <button class="button" id="import-academic-offer" type="submit" disabled>Importar oferta</button>
+          </div>
+          <div class="validation hidden" id="academic-offer-result"></div>
+        </form>
+        <div class="admin-card">
+          <div class="table-toolbar"><h2 id="catalog-table-title">Niveles académicos</h2><input id="catalog-search" type="search" placeholder="Buscar en el catálogo"></div>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Código o asignatura</th><th>Nombre y contexto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="catalog-table-body"></tbody></table></div>
+        </div>
+      </section>
+
       <section class="admin-panel" data-admin-panel="assignments">
         <form class="admin-card" id="assignment-form">
-          <h2>Asignar profesor a asignatura y periodo</h2>
+          <h2>Asignar profesor a una oferta académica</h2>
           <div class="grid">
             <label>Profesor<select name="teacherId" id="assignment-teacher" required></select></label>
-            <label>Carrera<select name="career" id="assignment-career" required><option value="">Seleccione una carrera</option></select></label>
-            <label>Asignatura<select name="courseId" id="assignment-course" required><option value="">Seleccione primero una carrera</option></select></label>
-            <label class="hidden" id="new-course-code-wrap">Código de asignatura nueva<input name="subjectCode" id="assignment-code"></label>
-            <label class="hidden" id="new-course-name-wrap">Nombre de asignatura nueva<input name="subjectName" id="assignment-name"></label>
-            <label>Periodo académico<select name="periodId" id="assignment-period" required><option value="">Seleccione un periodo</option></select></label>
+            <label>Oferta académica<select name="academicOfferingId" id="assignment-offering" required><option value="">Seleccione una oferta</option></select></label>
             <label>Guía finalizada como base<select name="sourceProjectId" id="assignment-source"><option value="">Crear guía nueva</option></select></label>
           </div>
           <button class="button" type="submit">Guardar asignación</button>
         </form>
-        <div class="admin-card"><h2>Asignaciones vigentes</h2><div id="assignment-list" class="assignment-list"></div></div>
+        <div class="admin-card"><h2>Historial de asignaciones</h2><div id="assignment-list" class="assignment-list"></div></div>
       </section>
 
       <section class="admin-panel" data-admin-panel="knowledge">
-        <div class="admin-grid">
-          <form class="admin-card" id="instruction-form">
-            <h2>Especificaciones funcionales</h2>
-            <p>Defina el contexto de aplicación. Facultad y Carrera no forman parte del ámbito.</p>
-            <label>Versión existente<select id="instruction-selector"><option value="">Nueva instrucción</option></select></label>
+        <form class="admin-card knowledge-config-card" id="knowledge-config-form">
+          <div class="knowledge-config-header">
+            <div>
+              <h2>Conocimiento e IA</h2>
+              <p>Administre documentos institucionales y especificaciones funcionales desde un único formulario versionado.</p>
+            </div>
+            <label class="knowledge-kind-select">Tipo de configuración
+              <select id="knowledge-config-kind" name="configurationKind">
+                <option value="DOCUMENT">Documento institucional para la IA</option>
+                <option value="SPECIFICATION">Especificación funcional</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="knowledge-context-note" data-config-copy="DOCUMENT">
+            <strong>Documento institucional para la IA</strong>
+            <span>La versión activa se incorpora automáticamente en las nuevas generaciones compatibles.</span>
+          </div>
+          <div class="knowledge-context-note hidden" data-config-copy="SPECIFICATION">
+            <strong>Especificación funcional</strong>
+            <span>Define reglas operativas y su contexto de aplicación. Los ámbitos se seleccionan desde los catálogos académicos vigentes.</span>
+          </div>
+
+          <label>Versión existente
+            <select id="knowledge-config-selector"><option value="">Nuevo documento</option></select>
+          </label>
+          <div class="knowledge-selected-version hidden" id="knowledge-selected-version" aria-live="polite"></div>
+          <div class="grid">
             <label>Clave<input name="key" required placeholder="general"></label>
             <label>Título<input name="title" required></label>
-            <label>Prioridad<input name="priority" type="number" min="1" max="999" value="100" required></label>
-            <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
-            <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
-            <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
-            <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
-            <p class="field-help">Deje un ámbito vacío para que la especificación sea compatible con cualquier valor de ese campo.</p>
-            <label>Contenido<textarea name="content" required minlength="20"></textarea></label>
-            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
-            <div class="inline-actions"><button class="button secondary" type="button" data-impact-kind="SPECIFICATION">Analizar impacto</button><button class="button" type="submit" disabled>Guardar nueva versión</button></div>
-            <div class="impact-result hidden" data-impact-result="SPECIFICATION"></div>
-          </form>
-          <form class="admin-card" id="knowledge-form">
-            <h2>Documentos institucionales para la IA</h2>
-            <p>La versión activa de cada documento se incorpora automáticamente en las nuevas generaciones.</p>
-            <p class="field-help">Los indicadores ya no se administran como documento: utilice la fuente oficial «Indicadores generales de la guía».</p>
-            <label>Archivo existente<select id="knowledge-selector"><option value="">Nuevo archivo</option></select></label>
-            <label>Clave<input name="key" required placeholder="normas-apa"></label>
-            <label>Título<input name="title" required></label>
             <label>Prioridad de aplicación<input name="priority" type="number" min="1" max="999" value="100" required></label>
-            <label class="confirm"><input name="appliesToAll" type="checkbox" checked> Aplicar a todos los contenidos</label>
-            <div data-document-scope>
-              <label>Niveles académicos<input name="academicLevels" placeholder="Grado, Posgrado, Tecnología"></label>
-              <label>Modalidades<input name="modalities" placeholder="En línea, A distancia"></label>
-              <label>Duraciones en semanas<input name="durations" placeholder="8, 16"></label>
-              <label>Tipos de asignatura<input name="subjectTypes" placeholder="Teórica, Práctica, Proyecto"></label>
+            <label data-document-only>Tipo de recurso
+              <select name="resourceKind">
+                <option value="INSTITUTIONAL_DOCUMENT">Documento institucional</option>
+                <option value="PLAN_TEMPLATE">Formato Word del plan docente</option>
+                <option value="PLAN_PROMPT">Prompt del plan docente</option>
+                <option value="GUIDE_PROMPT">Prompt de la guía</option>
+              </select>
+            </label>
+            <label data-document-only>Vigente desde<input name="effectiveFrom" type="date"></label>
+          </div>
+
+          <div class="knowledge-options" data-document-only>
+            <label class="confirm"><input name="appliesToPlan" type="checkbox"> <span>Aplicar al plan docente</span></label>
+            <label class="confirm"><input name="appliesToGuide" type="checkbox" checked> <span>Aplicar a la guía didáctica</span></label>
+            <label class="confirm"><input name="provisional" type="checkbox"> <span>Versión provisional</span></label>
+            <label class="confirm"><input name="appliesToAll" type="checkbox" checked> <span>Aplicar a todos los contenidos</span></label>
+          </div>
+
+          <div data-shared-scope>
+            <h3>Ámbito de aplicación</h3>
+            <p class="field-help" data-scope-help="DOCUMENT">Si «Aplicar a todos los contenidos» está marcado, estos filtros no son necesarios.</p>
+            <p class="field-help hidden" data-scope-help="SPECIFICATION">Deje un ámbito vacío para que la especificación sea compatible con cualquier valor registrado en ese catálogo.</p>
+            <div class="grid">
+              <label>Niveles académicos<div class="scope-picker" data-scope-picker="academicLevels"></div></label>
+              <label>Modalidades<div class="scope-picker" data-scope-picker="modalities"></div></label>
+              <label>Duraciones en semanas<div class="scope-picker" data-scope-picker="durations"></div></label>
+              <label>Tipos de asignatura<div class="scope-picker" data-scope-picker="subjectTypes"></div></label>
             </div>
-            <label>Contenido editable (Markdown)<textarea name="contentMarkdown" id="knowledge-content" required minlength="1" rows="18" placeholder="# Título&#10;&#10;Escriba o cargue aquí el contenido institucional."></textarea></label>
-            <label>Reemplazar desde archivo .txt o .md<input name="file" type="file" accept=".txt,.md,text/plain,text/markdown"></label>
-            <p class="field-help">El archivo es opcional. Al seleccionarlo, su texto se cargará en el editor. El original se conserva como respaldo de la nueva versión.</p>
-            <label class="confirm"><input name="activate" type="checkbox" checked> Activar esta versión</label>
-            <div class="inline-actions">
-              <button class="button secondary" type="button" data-impact-kind="DOCUMENT">Analizar impacto</button>
-              <button class="button" type="submit" disabled>Guardar como nueva versión</button>
-              <button class="button secondary hidden" id="activate-knowledge-version" type="button">Activar esta versión</button>
-              <a class="button secondary hidden" id="download-knowledge-original" href="#">Descargar original</a>
-            </div>
-            <div class="impact-result hidden" data-impact-result="DOCUMENT"></div>
-          </form>
-        </div>
-        <div class="admin-card"><h2>Versiones registradas</h2><div id="ai-version-list" class="assignment-list"></div></div>
-        <div class="admin-card" id="indicator-form">
+          </div>
+
+          <label><span id="knowledge-content-label">Texto extraído o síntesis controlada</span>
+            <textarea name="content" id="knowledge-config-content" required minlength="20" rows="18" placeholder="Pegue el texto extraído o una síntesis que facilite el análisis de impacto."></textarea>
+          </label>
+
+          <div data-document-only>
+            <label>Archivo original<input name="file" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"></label>
+            <p class="field-help">Se conserva el original. Los PDF y Word se adjuntan directamente a la IA cuando correspondan al plan o a la guía.</p>
+          </div>
+
+          <label class="confirm" id="knowledge-activate-option"><input name="activate" type="checkbox" checked> <span>Activar esta versión al guardarla</span></label>
+          <div class="inline-actions knowledge-actions">
+            <button class="button secondary" id="knowledge-impact-button" type="button">Analizar impacto</button>
+            <button class="button" id="knowledge-save-button" type="submit" value="SAVE" disabled>Guardar documento</button>
+            <button class="button secondary hidden" id="knowledge-create-version-button" type="submit" value="NEW_VERSION" disabled>Crear nueva versión</button>
+            <button class="button secondary hidden" id="activate-knowledge-version" type="button">Activar esta versión</button>
+            <a class="button secondary hidden" id="download-knowledge-original" href="#">Descargar original</a>
+            <a class="button secondary hidden" id="download-knowledge-text" href="#">Descargar texto procesado</a>
+            <button class="button danger-outline hidden" id="archive-knowledge-version" type="button">Dar de baja</button>
+          </div>
+          <div class="impact-result hidden" id="knowledge-impact-result"></div>
+        </form>
+        <form class="admin-card institutional-plan-text-card" id="institutional-plan-text-form">
+          <div class="knowledge-config-header">
+            <div><h2>Textos institucionales del Plan Docente</h2><p>Estos textos son definidos por la Universidad y se incorporan automáticamente en todos los planes nuevos.</p></div>
+          </div>
+          <label>Adaptaciones curriculares *
+            <textarea id="institutional-curricular-adaptations" name="curricularAdaptations" required minlength="80" maxlength="8000" rows="9"></textarea>
+            <small>Texto común para todos los Planes Docentes. La versión utilizada queda copiada dentro del plan generado.</small>
+          </label>
+          <fieldset class="download-format-settings"><legend>Formatos de descarga habilitados para el Plan Docente</legend>
+            <label class="choice"><input type="checkbox" name="downloadFormat" value="PDF" checked> PDF <small>Predeterminado</small></label>
+            <label class="choice"><input type="checkbox" name="downloadFormat" value="WORD"> Word</label>
+            <label class="choice"><input type="checkbox" name="downloadFormat" value="JSON"> JSON / API</label>
+          </fieldset>
+          <div class="inline-actions"><button class="button" type="submit">Guardar configuración</button></div>
+        </form>
+        <div class="admin-card"><h2>Recursos registrados</h2><p class="field-help">Se muestra la versión vigente o más reciente de cada recurso. Use «Ver versiones» para consultar el historial.</p><div id="ai-version-list" class="knowledge-resource-list"></div></div>
+        <div class="admin-card hidden" id="indicator-form">
           <h2>Indicadores generales de la guía</h2>
           <p>Esta es la fuente oficial única: la versión activa se aplica tanto a la generación con IA como a las nuevas listas de cotejo. Las revisiones iniciadas conservan su versión original.</p>
           <div class="table-toolbar">
@@ -203,11 +363,12 @@
 
       <section class="admin-panel" data-admin-panel="reports">
         <div id="guide-summary" class="report-cards"></div>
+        <div class="admin-card"><h2>Aprobación externa</h2><p>Los planes docentes y las guías se descargan en Word y se revisan, firman y aprueban fuera del sistema. El flujo por Par académico, Equipo de calidad y Dirección de carrera se incorporará en una fase posterior.</p></div>
         <div class="admin-card">
           <div class="table-toolbar"><h2>Estado de guías</h2><input id="guide-report-search" type="search" placeholder="Buscar por profesor, asignatura, código o periodo"></div>
           <div class="table-scroll"><table class="admin-table"><thead><tr><th>Guía</th><th>Profesor</th><th>Periodo</th><th>Progreso</th><th>Estado</th><th>Actualización</th></tr></thead><tbody id="guide-report-body"></tbody></table></div>
         </div>
-        <div class="admin-card">
+        <div class="admin-card hidden">
           <h2>Listas de cotejo institucionales</h2>
           <p>Cada guía conserva la versión de indicadores utilizada por el Par académico, el Equipo de calidad y DIITEP.</p>
           <label>Guía<select id="checklist-project"><option value="">Seleccione una guía</option></select></label>
@@ -262,18 +423,71 @@
   <div class="overlay hidden" id="wizard-layer">
     <section class="wizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
       <header class="wizard-header">
-        <div><p class="eyebrow">Nuevo proyecto</p><h2 id="wizard-title">Configure una guía didáctica</h2></div>
+        <div><p class="eyebrow">Asignatura asignada</p><h2 id="wizard-title">Plan docente y guía didáctica</h2></div>
         <button class="icon-button" id="close-wizard" aria-label="Cerrar">×</button>
       </header>
+      <section class="workflow-mode-gate hidden" id="workflow-mode-gate">
+        <div class="panel-title"><b>00</b><div><h3>¿Cómo elaborará esta asignatura?</h3><p>Seleccione el punto de partida. Esta decisión se guarda por asignatura.</p></div></div>
+        <div class="workflow-mode-options">
+          <button class="workflow-mode-card" type="button" data-workflow-mode="NEW">
+            <strong>Crear Plan Docente nuevo</strong>
+            <span>Utilice los datos institucionales vigentes para crear el Plan Docente y luego la Guía Didáctica.</span>
+          </button>
+          <button class="workflow-mode-card" type="button" data-workflow-mode="ADAPTATION_16_TO_8">
+            <strong>Adaptar Plan y Guía existentes de 16 a 8 semanas</strong>
+            <span>Suba los documentos anteriores. La IA propondrá agrupaciones, síntesis, traslados o eliminaciones justificadas para revisión del profesor.</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="adaptation-source-panel hidden" id="adaptation-source-panel">
+        <div class="panel-title"><b>00</b><div><h3>Documentos de origen · 16 semanas</h3><p>Los archivos originales se conservan con su huella y no se sobrescriben. El Plan Docente anterior es obligatorio; la Guía puede cargarse ahora o antes de comenzar su adaptación.</p></div></div>
+        <div class="adaptation-source-grid">
+          <form class="adaptation-upload-card" id="legacy-plan-form">
+            <div><span class="adaptation-document-label">Obligatorio</span><h4>Plan Docente de 16 semanas</h4></div>
+            <label>Archivo PDF o Word<input name="file" type="file" accept=".pdf,.docx" required></label>
+            <div class="grid">
+              <label>Periodo del documento<input name="academicPeriod" maxlength="200" placeholder="Ej.: abril–agosto 2026"></label>
+              <label>Versión o fecha<input name="versionLabel" maxlength="200" placeholder="Ej.: versión aprobada 2026"></label>
+            </div>
+            <button class="button" type="submit">Subir Plan Docente anterior</button>
+            <div class="adaptation-upload-summary" id="legacy-plan-summary"></div>
+          </form>
+          <form class="adaptation-upload-card" id="legacy-guide-form">
+            <div><span class="adaptation-document-label optional">Opcional en esta etapa</span><h4>Guía Didáctica de 16 semanas</h4></div>
+            <label>Archivo PDF o Word<input name="file" type="file" accept=".pdf,.docx"></label>
+            <div class="grid">
+              <label>Periodo del documento<input name="academicPeriod" maxlength="200" placeholder="Ej.: abril–agosto 2026"></label>
+              <label>Versión o fecha<input name="versionLabel" maxlength="200" placeholder="Ej.: edición 2025"></label>
+            </div>
+            <button class="button secondary" type="submit">Subir Guía Didáctica anterior</button>
+            <div class="adaptation-upload-summary" id="legacy-guide-summary"></div>
+          </form>
+        </div>
+        <div class="adaptation-source-actions">
+          <button class="button secondary" id="change-workflow-mode" type="button">Cambiar tipo de elaboración</button>
+          <button class="button" id="continue-after-legacy-upload" type="button" disabled>Continuar con la revisión institucional →</button>
+        </div>
+      </section>
+
+      <div class="workflow-main hidden" id="workflow-main">
+        <div class="workflow-selection-summary" id="workflow-selection-summary">
+          <div><span>Tipo de elaboración</span><strong id="workflow-selection-label">Pendiente</strong></div>
+          <button class="button secondary" id="change-workflow-mode-main" type="button">Cambiar tipo de elaboración</button>
+        </div>
+        <div class="adaptation-source-banner hidden" id="adaptation-source-banner">
+          <div><strong>Adaptación pedagógica 16 → 8 semanas</strong><span id="adaptation-source-banner-text">Documentos de origen registrados.</span></div>
+          <button class="button secondary" id="manage-legacy-documents" type="button">Ver o sustituir documentos</button>
+        </div>
       <div class="steps" id="steps">
-        <span class="active"><b>1</b>Asignatura</span><span><b>2</b>Matriz</span><span><b>3</b>Bibliografía</span><span><b>4</b>Confirmación</span><span><b>5</b>Semana 1</span>
+        <span class="active"><b>1</b>Asignatura</span><span><b>2</b>Contribución y docente</span><span><b>3</b>Bibliografía</span><span><b>4</b>Plan docente</span><span><b>5</b>Guía</span>
       </div>
 
       <form id="project-form" novalidate>
         <section class="panel active" data-step="1">
-          <div class="panel-title"><b>01</b><div><h3>Datos de la asignatura</h3><p>Registre la información oficial del proyecto académico.</p></div></div>
+          <div class="panel-title"><b>01</b><div><h3>Datos institucionales de la asignatura</h3><p>Revise la información cargada por el administrador. Estos datos son de solo lectura.</p></div></div>
           <div class="grid">
-            <label>Nombre del proyecto *<input name="projectName" required placeholder="Ej.: Guía de Derecho Administrativo"></label>
+            <label>Nombre del proyecto *<input name="projectName" required readonly></label>
             <label>Nivel *
               <select name="level" id="level" required>
                 <option value="">Seleccione un nivel</option>
@@ -295,90 +509,164 @@
               </select>
             </label>
             <label>Profesor *<input name="professorName" id="professor-name" required readonly aria-readonly="true"><small>Se completa con el usuario que inició sesión.</small></label>
-            <label>Código de la asignatura *<input name="subjectCode" required placeholder="Ej.: RELI_1105"></label>
-            <label>Asignatura *<input name="subjectName" required></label>
-            <label>Tipo de asignatura *
-              <select name="subjectType" required>
-                <option value="GENERAL">General</option>
-                <option value="TEORICA">Teórica</option>
-                <option value="PRACTICA">Práctica</option>
-                <option value="PROYECTO">Proyecto o integradora</option>
-                <option value="OTRA">Otra</option>
-              </select>
-            </label>
-            <label>Periodo académico *<input name="academicPeriod" required placeholder="Oct. 2026–Feb. 2027"></label>
+            <label>Código de la asignatura *<input name="subjectCode" required readonly></label>
+            <label>Asignatura *<input name="subjectName" required readonly></label>
+            <label>Tipo de asignatura *<select name="subjectType" id="project-subject-type" required disabled></select></label>
+            <label>Periodo académico *<input name="academicPeriod" required readonly></label>
             <label>Número de semanas *
-              <input type="number" name="weeks" id="weeks" required min="1" step="1" placeholder="Ej.: 8">
-              <small>Debe coincidir con las semanas únicas y consecutivas de la matriz.</small>
+              <input type="number" name="weeks" id="weeks" required min="1" step="1" readonly>
+              <small>Se obtiene de la oferta académica vigente.</small>
             </label>
           </div>
-          <div class="academic-profile-sections">
-            <section class="academic-profile-card" aria-labelledby="professional-competencies-title">
-              <h4 id="professional-competencies-title">Competencias del perfil profesional *</h4>
-              <p>Ingrese cada competencia por separado.</p>
-              <div class="list-entry-control">
-                <input id="professional-competency-input" maxlength="1000" placeholder="Escriba una competencia">
-                <button class="button secondary" id="add-professional-competency" type="button">Agregar</button>
-              </div>
-              <ul class="entered-values" id="professional-competencies-list" aria-live="polite"></ul>
-            </section>
-            <section class="academic-profile-card" aria-labelledby="graduate-results-title">
-              <h4 id="graduate-results-title">Resultados de perfil de egreso *</h4>
-              <p>Ingrese cada resultado por separado.</p>
-              <div class="list-entry-control">
-                <input id="graduate-result-input" maxlength="1000" placeholder="Escriba un resultado">
-                <button class="button secondary" id="add-graduate-result" type="button">Agregar</button>
-              </div>
-              <ul class="entered-values" id="graduate-results-list" aria-live="polite"></ul>
-            </section>
-            <section class="academic-profile-card" aria-labelledby="utpl-competencies-title">
-              <h4 id="utpl-competencies-title">Competencias genéricas de la UTPL *</h4>
-              <p>Seleccione una competencia del catálogo institucional y agréguela.</p>
-              <div class="list-entry-control">
-                <select id="utpl-generic-competency">
-                  <option value="">Seleccione una competencia</option>
-                  <option>Desarrollo personal integral</option>
-                  <option>Trabajo colaborativo</option>
-                  <option>Innovación y emprendimiento con visión de propósito</option>
-                  <option>Mentalidad sostenible</option>
-                  <option>Ciudadanía global</option>
-                </select>
-                <button class="button secondary" id="add-utpl-generic-competency" type="button">Agregar</button>
-              </div>
-              <ul class="entered-values" id="utpl-generic-competencies-list" aria-live="polite"></ul>
-            </section>
-          </div>
+          <div class="institutional-data-details" id="institutional-data-details"></div>
+          <label class="confirm"><input type="checkbox" id="institutional-data-reviewed"> Confirmo que revisé los datos institucionales asignados.</label>
         </section>
 
         <section class="panel" data-step="2">
-          <div class="panel-title"><b>02</b><div><h3>Carga y validación de la matriz</h3><p>Se admiten archivos Excel o CSV de hasta 10 MB.</p></div></div>
-          <label class="dropzone" id="dropzone">
-            <input type="file" id="matrix-file" accept=".xlsx,.csv">
-            <strong>Arrastre la matriz aquí o seleccione un archivo</strong>
-            <span id="file-name">Excel (.xlsx) o CSV</span>
-          </label>
-          <div class="requirements"><strong>Columnas obligatorias</strong><div id="column-list"><span>Semana</span><span>Resultado de aprendizaje</span><span>Unidad/Contenido</span><span>Metodología</span></div></div>
-          <div class="validation hidden" id="matrix-result"></div>
+          <div class="panel-title"><b>02</b><div><h3>Contribución al perfil y datos del docente</h3><p>Revise la presentación de la asignatura y relacione cada resultado con los valores institucionales disponibles.</p></div></div>
+          <section class="microcurricular-presentation-card">
+            <div class="microcurricular-presentation-header">
+              <div>
+                <h4>Presentación y Contextualización en el marco de la descripción microcurricular *</h4>
+                <p>Texto dirigido al estudiante. Debe explicar de forma breve qué abordará la asignatura, para qué le servirá y cómo aporta a su formación.</p>
+              </div>
+              <button class="button secondary" id="generate-microcurricular-presentation" type="button">Generar borrador con IA</button>
+            </div>
+            <textarea id="microcurricular-presentation" name="microcurricularPresentation" required minlength="80" maxlength="3000" rows="6" placeholder="Genere el borrador y edítelo si es necesario antes de continuar."></textarea>
+            <small id="microcurricular-presentation-status" class="field-help">El texto aprobado por el profesor se utilizará literalmente en el Plan Docente.</small>
+          </section>
+          <div class="outcome-mapping-toolbar">
+            <button class="button secondary" id="add-outcome-mapping" type="button">+ Agregar relación</button>
+            <span class="editor-help">Cada elemento institucional debe quedar relacionado al menos una vez. Puede repetir un resultado de aprendizaje en varias relaciones.</span>
+          </div>
+          <div class="table-scroll"><table class="admin-table outcome-mapping-table">
+            <thead><tr><th>Resultado de aprendizaje</th><th>Contribución</th><th>Competencia profesional</th><th>Resultado de perfil de egreso</th><th>Competencia genérica UTPL</th><th>Acción</th></tr></thead>
+            <tbody id="outcome-mapping-body"></tbody>
+          </table></div>
+          <div class="grid teacher-profile-grid">
+            <label>Título(s) de tercer nivel *<textarea id="third-level-degrees" required placeholder="Un título por línea"></textarea></label>
+            <label>Título(s) de cuarto nivel<textarea id="fourth-level-degrees" placeholder="Un título por línea"></textarea></label>
+            <label>Facultad *<input id="teacher-faculty" required></label>
+            <label>Departamento *<select id="teacher-department" required><option value="">Seleccione un departamento</option></select></label>
+            <label>Teléfono *<input id="teacher-phone" required></label>
+            <label class="wide">Currículo profesional resumido *<textarea id="teacher-short-cv" required minlength="30" maxlength="5000"></textarea></label>
+          </div>
         </section>
 
         <section class="panel" data-step="3">
-          <div class="panel-title"><b>03</b><div><h3>Bibliografía</h3><p>Registre únicamente fuentes disponibles y verificables.</p></div></div>
+          <div class="panel-title"><b>03</b><div><h3>Bibliografía</h3><p>La referencia de la guía didáctica es la única fuente obligatoria para el plan docente. Puede editarla si necesita ajustar su forma de citación.</p></div></div>
           <div class="bibliography-grid">
-            <label>Bibliografía básica *<textarea name="basic" required placeholder="Una referencia por línea, preferentemente en APA 7"></textarea></label>
-            <label>Bibliografía complementaria *<textarea name="complementary" required placeholder="Una referencia por línea"></textarea></label>
-            <label>Recursos educativos abiertos (opcional)<textarea name="rea" placeholder="Título y enlace del recurso"></textarea></label>
+            <label class="wide">Referencia de la guía didáctica para el Plan Docente *<textarea name="guideReference" required maxlength="4000"></textarea></label>
+            <section class="bibliography-guide-importance wide" id="guide-reference-importance-card">
+              <div>
+                <h4>Importancia de la guía didáctica para el estudiante *</h4>
+                <p id="guide-reference-importance-text">Pendiente de registrar.</p>
+                <small>Se incluirá junto con la referencia obligatoria dentro de la bibliografía básica del Plan Docente.</small>
+              </div>
+              <button class="button secondary" id="guide-reference-importance-edit" type="button">+ Agregar importancia</button>
+            </section>
+            <section class="bibliography-section wide" data-bibliography-type="BASIC">
+              <div class="bibliography-section-header"><div><h4>Otra bibliografía básica</h4><p>Opcional. Agregue cada referencia por separado.</p></div><button class="button secondary bibliography-add" type="button" data-type="BASIC">+ Agregar referencia</button></div>
+              <div class="bibliography-entry-list" id="bibliography-basic-list"></div>
+            </section>
+            <section class="bibliography-section wide" data-bibliography-type="COMPLEMENTARY">
+              <div class="bibliography-section-header"><div><h4>Bibliografía complementaria</h4><p>Opcional. Agregue cada referencia por separado.</p></div><button class="button secondary bibliography-add" type="button" data-type="COMPLEMENTARY">+ Agregar referencia</button></div>
+              <div class="bibliography-entry-list" id="bibliography-complementary-list"></div>
+            </section>
+            <section class="bibliography-section wide" data-bibliography-type="REA">
+              <div class="bibliography-section-header"><div><h4>Recursos educativos abiertos (REA)</h4><p>Opcional. Registre título y enlace de cada recurso.</p></div><button class="button secondary bibliography-add" type="button" data-type="REA">+ Agregar REA</button></div>
+              <div class="bibliography-entry-list" id="bibliography-rea-list"></div>
+            </section>
           </div>
-          <p class="notice">La guía didáctica no puede utilizarse como fuente bibliográfica.</p>
+          <p class="notice">La referencia de la propia guía se incluye en el Plan Docente, pero se excluye de las fuentes usadas para generar la Guía Didáctica. Para la guía se utilizarán únicamente las demás referencias y REA que registre aquí.</p>
         </section>
 
         <section class="panel" data-step="4">
-          <div class="panel-title"><b>04</b><div><h3>Confirme el proyecto</h3><p>Revise la información antes de crear la ruta semanal.</p></div></div>
+          <div class="panel-title"><b>04</b><div><h3>Generación del plan docente</h3><p>La IA prepara el plan con el formato y las reglas institucionales activas.</p></div></div>
+          <section class="adaptation-workspace hidden" id="plan-adaptation-workspace">
+            <div class="adaptation-workspace-header">
+              <div><p class="eyebrow">Adaptación pedagógica</p><h4>Propuesta del Plan Docente · 16 → 8 semanas</h4><p>La IA no modificará el documento silenciosamente. Revise y decida cada cambio antes de generar el Plan Docente modular.</p></div>
+              <button class="button" id="analyze-plan-adaptation" type="button">Analizar Plan anterior</button>
+            </div>
+            <div id="plan-adaptation-status" class="adaptation-status"></div>
+            <div id="plan-adaptation-proposal" class="adaptation-proposal"></div>
+            <div class="adaptation-approval-actions hidden" id="plan-adaptation-actions">
+              <button class="button secondary" id="regenerate-plan-adaptation" type="button">Generar nueva propuesta</button>
+              <button class="button approve" id="approve-plan-adaptation" type="button">Aprobar propuesta de adaptación</button>
+            </div>
+          </section>
           <div class="summary" id="project-summary"></div>
-          <label class="confirm"><input type="checkbox" id="confirm-data"> Confirmo que la matriz y las referencias corresponden a la planificación aprobada.</label>
+          <div class="plan-actions">
+            <button class="button" id="generate-teaching-plan" type="button"><span class="button-label">Generar plan docente con IA</span></button>
+          </div>
+          <div id="teaching-plan-result" class="hidden">
+            <section class="teaching-plan-preview-section" aria-labelledby="teaching-plan-preview-title">
+              <div class="teaching-plan-preview-heading">
+                <div>
+                  <p class="eyebrow">Revisión del profesor</p>
+                  <h4 id="teaching-plan-preview-title">Vista previa del Plan Docente</h4>
+                  <p>La vista reproduce la estructura del formato oficial para revisar el contenido antes de descargar el documento y continuar con la Guía Didáctica.</p>
+                  <p class="plan-template-applied" id="teaching-plan-template-applied"></p>
+                </div>
+              </div>
+              <section class="plan-methodologies-section plan-methodologies-section-top" id="plan-methodologies-section">
+                <div class="plan-methodologies-heading">
+                  <div><h4>Metodologías activas y TAC</h4><p>Revise y edite estos campos aquí antes de validar el Plan Docente.</p></div>
+                </div>
+                <div id="plan-methodologies"></div>
+                <button class="button secondary" id="save-plan-methodologies" type="button">Guardar ajustes metodológicos</button>
+              </section>
+              <div class="teaching-plan-preview-layout">
+                <nav class="teaching-plan-preview-nav" id="teaching-plan-preview-nav" aria-label="Secciones del Plan Docente"></nav>
+                <article class="teaching-plan-document" id="teaching-plan-preview"></article>
+              </div>
+              <div class="teaching-plan-validation-summary teaching-plan-validation-summary-bottom">
+                <div><strong id="teaching-plan-validation-summary-text">Validación automática</strong><span>Las comprobaciones automáticas no sustituyen la revisión pedagógica del profesor.</span></div>
+                <button class="button secondary" id="toggle-teaching-plan-validation" type="button" aria-expanded="false">Ver validación</button>
+              </div>
+              <aside class="teaching-plan-review-panel hidden" id="teaching-plan-review-panel" tabindex="-1">
+                <div class="teaching-plan-review-panel-heading"><h4>Validación del plan</h4><button class="icon-button" id="close-teaching-plan-validation" type="button" aria-label="Cerrar validación">×</button></div>
+                <div class="teaching-plan-review-checks" id="teaching-plan-review-checks"></div>
+                <label>Observaciones de la revisión
+                  <textarea id="teacher-plan-review-notes" maxlength="3000" placeholder="Opcional: registre observaciones o decisiones tomadas durante la revisión."></textarea>
+                </label>
+                <label class="teaching-plan-review-confirm">
+                  <input id="teacher-plan-review-confirm" type="checkbox">
+                  <span>Confirmo que revisé la información, la programación semanal, las actividades calificadas, la bibliografía y los datos del docente.</span>
+                </label>
+                <button class="button approve" id="confirm-teaching-plan-review" type="button">Confirmar revisión del plan</button>
+                <div class="teaching-plan-review-status" id="teaching-plan-review-status"></div>
+              </aside>
+              <section class="teaching-plan-download-footer" aria-label="Descargas del Plan Docente">
+                <div>
+                  <h4>Descargar Plan Docente</h4>
+                  <p>Los formatos disponibles son definidos por Administración. La descarga se habilita después de confirmar la revisión.</p>
+                </div>
+                <div class="plan-download-actions" id="plan-download-actions">
+                  <button class="button secondary" id="download-teaching-plan-pdf" type="button" disabled>Descargar PDF</button>
+                  <button class="button secondary hidden" id="download-teaching-plan" type="button" disabled>Descargar Word</button>
+                  <button class="button secondary hidden" id="download-teaching-plan-json" type="button" disabled>Descargar JSON</button>
+                </div>
+                <p class="notice compact">El Plan Docente se descarga para su revisión, firma y aprobación fuera del sistema. En esta versión no existe flujo interno de aprobación.</p>
+              </section>
+            </section>
+          </div>
         </section>
 
         <section class="panel" data-step="5">
           <div class="panel-title"><b>05</b><div><h3 id="week-title">Preparación de la semana 1</h3><p>Revise, ajuste y apruebe cada semana antes de continuar.</p></div></div>
+          <section class="adaptation-workspace hidden" id="guide-adaptation-workspace">
+            <div class="adaptation-workspace-header">
+              <div><p class="eyebrow">Adaptación pedagógica</p><h4>Propuesta de la Guía Didáctica · 16 → 8 semanas</h4><p>Cuando exista una guía anterior, revise la reorganización propuesta antes de generar las semanas modulares.</p></div>
+              <button class="button" id="analyze-guide-adaptation" type="button">Analizar Guía anterior</button>
+            </div>
+            <div id="guide-adaptation-status" class="adaptation-status"></div>
+            <div id="guide-adaptation-proposal" class="adaptation-proposal"></div>
+            <div class="adaptation-approval-actions hidden" id="guide-adaptation-actions">
+              <button class="button secondary" id="regenerate-guide-adaptation" type="button">Generar nueva propuesta</button>
+              <button class="button approve" id="approve-guide-adaptation" type="button">Aprobar propuesta de adaptación</button>
+            </div>
+          </section>
           <div class="criteria"><span>✓ Resultado de aprendizaje exacto</span><span>✓ Contenidos sin renombrar</span><span>✓ Metodología declarada</span><span>✓ Citas APA 7 verificables</span></div>
           <div class="week-navigation">
             <div id="week-tabs" class="week-tabs" aria-label="Semanas de la guía"></div>
@@ -404,7 +692,7 @@
               <button type="button" class="format-button" data-command="insertOrderedList" aria-label="Lista numerada">1. Lista</button>
             </div>
             <div class="generation content-editor" id="generation-output" contenteditable="true" spellcheck="true" aria-describedby="editor-help" role="textbox" aria-multiline="true"></div>
-            <p class="editor-help" id="editor-help">Haga clic en el contenido para corregirlo. Seleccione texto para aplicar negrita, título, subtítulo o listas. Los cambios se conservarán al aprobar.</p>
+            <p class="editor-help" id="editor-help">Haga clic en el contenido para corregirlo. Seleccione texto para aplicar negrita, título, subtítulo o listas. Los cambios se conservarán al confirmar.</p>
             <label class="adjustment-label" for="adjustment-instructions">Instrucciones adicionales para el ajuste</label>
             <textarea id="adjustment-instructions" class="adjustment-instructions" placeholder="Ej.: Amplíe el ejemplo del apartado 2, incorpore mayor diálogo didáctico y mantenga sin cambios las citas verificadas."></textarea>
             <label class="adjustment-label" for="adjustment-files">Archivos de apoyo para este ajuste (opcional)</label>
@@ -414,7 +702,7 @@
             <div class="review-actions">
               <button type="button" class="button secondary hidden" id="modify-week">Modificar semana</button>
               <button type="button" class="button secondary" id="regenerate-with-instructions">Regenerar con instrucciones</button>
-              <button type="button" class="button approve" id="approve-week">Aprobar semana</button>
+              <button type="button" class="button approve" id="approve-week">Confirmar semana</button>
             </div>
             <div class="regeneration-progress hidden" id="regeneration-progress" role="status" aria-live="polite">
               <span class="progress-spinner" aria-hidden="true"></span>
@@ -431,6 +719,80 @@
           <button type="button" class="button" id="next">Continuar →</button>
         </footer>
       </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="validation-modal-overlay hidden" id="bibliography-entry-modal" role="dialog" aria-modal="true" aria-labelledby="bibliography-entry-title">
+    <section class="bibliography-entry-modal-card">
+      <div class="bibliography-entry-modal-header"><div><p class="eyebrow">Bibliografía</p><h2 id="bibliography-entry-title">Agregar referencia</h2></div><button class="icon-button" id="bibliography-entry-close" type="button" aria-label="Cerrar">×</button></div>
+      <form id="bibliography-entry-form" class="bibliography-entry-form">
+        <input type="hidden" name="entryIndex" value="">
+        <input type="hidden" name="entryType" value="BASIC">
+        <label class="bibliography-citation-field">Referencia bibliográfica *<textarea name="citation" maxlength="4000" placeholder="Referencia preferentemente en APA 7"></textarea></label>
+        <div class="bibliography-citation-field bibliography-apa-tools"><button class="button secondary" id="bibliography-apa-review" type="button">Revisar referencia con APA</button><span class="field-help">Busca metadatos en la web y propone un ajuste sin modificar la referencia hasta que usted lo acepte.</span></div>
+        <section class="bibliography-citation-field bibliography-apa-suggestion hidden" id="bibliography-apa-suggestion" aria-live="polite"></section>
+        <label class="bibliography-rea-field hidden">Título del REA *<input name="title" maxlength="1000"></label>
+        <label class="bibliography-rea-field hidden">Enlace del REA *<input name="url" maxlength="4000" type="url" placeholder="https://..."></label>
+        <label><span id="bibliography-importance-label">Importancia para el estudiante *</span><textarea name="notes" maxlength="4000" placeholder="Explique brevemente por qué esta fuente es relevante para el aprendizaje del estudiante."></textarea></label>
+        <div class="bibliography-entry-modal-actions"><button class="button secondary" id="bibliography-entry-cancel" type="button">Cancelar</button><button class="button" type="submit">Guardar</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="validation-modal-overlay hidden" id="teaching-plan-week-modal" role="dialog" aria-modal="true" aria-labelledby="teaching-plan-week-title">
+    <section class="bibliography-entry-modal-card teaching-plan-week-modal-card">
+      <div class="bibliography-entry-modal-header"><div><p class="eyebrow">Plan Docente · Sección D</p><h2 id="teaching-plan-week-title">Editar semana</h2></div><button class="icon-button" id="teaching-plan-week-close" type="button" aria-label="Cerrar">×</button></div>
+      <form id="teaching-plan-week-form" class="teaching-plan-week-form">
+        <input type="hidden" name="learningOutcome"><input type="hidden" name="week">
+        <div class="teaching-plan-week-locked" id="teaching-plan-week-locked"></div>
+        <section><div class="bibliography-section-header"><div><h4>Actividades de aprendizaje</h4><p>Cada fila relaciona componente, actividad, recurso y horas. La suma por componente debe coincidir con las horas institucionales de la semana.</p></div><button class="icon-action" id="teaching-plan-add-activity" type="button" aria-label="Agregar actividad" title="Agregar actividad">＋</button></div><div id="teaching-plan-week-activities" class="teaching-plan-week-activities"></div><div class="activity-hours-summary" id="teaching-plan-activity-hours-summary"></div></section>
+        <section id="teaching-plan-evaluated-editor" class="teaching-plan-evaluated-editor hidden">
+          <h4>Actividad calificada <span id="teaching-plan-evaluation-code"></span></h4>
+          <p class="notice compact">El instrumento se configura sobre 10 puntos para EVA. La calificación real de la actividad se calcula mediante regla de tres.</p>
+          <label>Actividad evaluada *<textarea name="evaluatedActivity" rows="3" maxlength="3000"></textarea></label>
+          <label>Estrategias de trabajo · un ítem por línea *<textarea name="workStrategies" rows="4" maxlength="5000" placeholder="Una estrategia por línea"></textarea></label>
+          <div class="two-cols">
+            <label>Tipo de instrumento *<select name="instrumentType"><option value="QUESTIONNAIRE">Cuestionario</option><option value="RUBRIC">Rúbrica</option><option value="CHECKLIST">Lista de cotejo</option><option value="RATING_SCALE">Escala de valoración</option><option value="OTHER">Otro</option></select></label>
+            <label>Nombre del instrumento *<input name="instrumentTitle" maxlength="300"></label>
+          </div>
+          <div id="teaching-plan-questionnaire-config" class="teaching-plan-questionnaire-config hidden">
+            <label>Tipo de calificación<select name="gradingMode"><option value="LAST_ATTEMPT">Último intento</option><option value="HIGHEST_GRADE">Calificación más alta</option></select></label>
+            <label>Número de preguntas<input name="questionCount" type="number" min="1" max="200" step="1"></label>
+            <label>Tiempo (minutos)<input name="timeMinutes" type="number" min="1" max="600" step="1"></label>
+          </div>
+          <section id="teaching-plan-criteria-editor" class="teaching-plan-criteria-editor hidden">
+            <div class="bibliography-section-header"><div><h4>Criterios del instrumento</h4><p>La suma de los máximos de los criterios debe ser exactamente 10 puntos.</p></div><button class="icon-action" id="teaching-plan-add-criterion" type="button" aria-label="Agregar criterio" title="Agregar criterio">＋</button></div>
+            <div id="teaching-plan-instrument-criteria"></div>
+            <div class="instrument-score-summary">Puntaje máximo del instrumento: <strong id="teaching-plan-instrument-total">0.00 / 10</strong></div>
+          </section>
+        </section>
+        <div class="bibliography-entry-modal-actions"><button class="button secondary" id="teaching-plan-week-cancel" type="button">Cancelar</button><button class="button" type="submit">Guardar ajustes de la semana</button></div>
+      </form>
+    </section>
+  </div>
+  <div class="validation-modal-overlay hidden" id="knowledge-retire-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-retire-title">
+    <section class="bibliography-entry-modal-card knowledge-retire-card">
+      <div class="bibliography-entry-modal-header"><div><p class="eyebrow">Conocimiento e IA</p><h2 id="knowledge-retire-title">Dar de baja recurso</h2></div><button class="icon-button" id="knowledge-retire-close" type="button" aria-label="Cerrar">×</button></div>
+      <p id="knowledge-retire-description">El recurso dejará de utilizarse en nuevas generaciones. Las generaciones históricas conservarán su referencia.</p>
+      <div class="knowledge-retire-warning hidden" id="knowledge-retire-warning"></div>
+      <form id="knowledge-retire-form">
+        <label>Motivo de la baja *<textarea name="reason" required minlength="10" maxlength="5000" rows="5" placeholder="Explique por qué este recurso deja de estar vigente."></textarea></label>
+        <div class="bibliography-entry-modal-actions"><button class="button secondary" id="knowledge-retire-cancel" type="button">Cancelar</button><button class="button danger" type="submit">Confirmar baja</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="validation-modal-overlay hidden" id="contribution-validation-modal" role="dialog" aria-modal="true" aria-labelledby="contribution-validation-title">
+    <section class="validation-modal-card">
+      <div class="validation-modal-icon" aria-hidden="true">!</div>
+      <div class="validation-modal-content">
+        <p class="eyebrow" id="validation-modal-eyebrow">Validación del proceso</p>
+        <h2 id="contribution-validation-title">No se puede continuar</h2>
+        <div id="contribution-validation-body" class="validation-modal-body"></div>
+        <div class="validation-modal-actions">
+          <button type="button" class="button" id="contribution-validation-close">Corregir</button>
+        </div>
+      </div>
     </section>
   </div>
   <div class="visual-modal-overlay hidden" id="visual-modal" role="dialog" aria-modal="true" aria-labelledby="visual-modal-title">
@@ -462,7 +824,6 @@
       </div>
     </section>
   </div>
-  <script src="/academic-offer.js" defer></script>
   <script src="/app.js" defer></script>
 </body>
 </html>

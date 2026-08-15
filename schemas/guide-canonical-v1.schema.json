@@ -89,8 +89,8 @@
       "required": ["format", "basic", "complementary", "openEducationalResources"],
       "properties": {
         "format": { "const": "markdown" },
-        "basic": { "type": "string", "minLength": 1 },
-        "complementary": { "type": "string", "minLength": 1 },
+        "basic": { "type": "string" },
+        "complementary": { "type": "string" },
         "openEducationalResources": { "type": "string" }
       }
     },

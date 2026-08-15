@@ -40,3 +40,6 @@ backups/
 # Residuos históricos de desarrollo
 cambios-src-index.patch
 index.html.antes-de-separar
+
+# Respaldos locales del proyecto
+app-creacion-asignaturas-v31-*.zip

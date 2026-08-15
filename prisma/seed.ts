@@ -1,8 +1,17 @@
 import { PrismaClient } from "@prisma/client";
-import { randomBytes, scryptSync } from "node:crypto";
+import { createHash, randomBytes, scryptSync } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { initialAcademicOffer } from "./academic-catalog-data.js";
 
 const database = new PrismaClient();
+
+function catalogCode(prefix: string, ...parts: string[]) {
+  const source = parts.join("|");
+  const readable = parts.join("-").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 38).toUpperCase();
+  const checksum = createHash("sha256").update(source).digest("hex").slice(0, 8).toUpperCase();
+  return `${prefix}-${readable}-${checksum}`;
+}
 
 async function main() {
   const adminRole = await database.role.upsert({
@@ -59,6 +68,93 @@ async function main() {
     update: {},
     create: { userId: admin.id, roleId: adminRole.id },
   });
+
+  let levelOrder = 10;
+  let modalityOrder = 10;
+  let unitOrder = 10;
+  const knownModalities = new Map<string, string>();
+  const knownUnits = new Map<string, string>();
+  for (const [levelName, modalities] of Object.entries(initialAcademicOffer)) {
+    const level = await database.academicLevel.upsert({
+      where: { code: catalogCode("NIV", levelName) },
+      update: { name: levelName, active: true, sortOrder: levelOrder },
+      create: {
+        code: catalogCode("NIV", levelName), name: levelName, active: true, sortOrder: levelOrder,
+      },
+    });
+    levelOrder += 10;
+    for (const [modalityName, units] of Object.entries(modalities)) {
+      let modalityId = knownModalities.get(modalityName);
+      if (!modalityId) {
+        const modality = await database.modality.upsert({
+          where: { code: catalogCode("MOD", modalityName) },
+          update: { name: modalityName, active: true, sortOrder: modalityOrder },
+          create: {
+            code: catalogCode("MOD", modalityName), name: modalityName,
+            active: true, sortOrder: modalityOrder,
+          },
+        });
+        modalityId = modality.id;
+        knownModalities.set(modalityName, modality.id);
+        modalityOrder += 10;
+      }
+      for (const [unitName, programNames] of Object.entries(units) as Array<[string, readonly string[]]>) {
+        let academicUnitId = knownUnits.get(unitName);
+        if (!academicUnitId) {
+          const unit = await database.academicUnit.upsert({
+            where: { code: catalogCode("UNI", unitName) },
+            update: { name: unitName, active: true, sortOrder: unitOrder },
+            create: {
+              code: catalogCode("UNI", unitName), name: unitName,
+              active: true, sortOrder: unitOrder,
+            },
+          });
+          academicUnitId = unit.id;
+          knownUnits.set(unitName, unit.id);
+          unitOrder += 10;
+        }
+        for (const programName of programNames) {
+          await database.academicProgram.upsert({
+            where: { code: catalogCode("PRG", levelName, unitName, programName) },
+            update: {
+              name: programName, academicLevelId: level.id, academicUnitId, active: true,
+            },
+            create: {
+              code: catalogCode("PRG", levelName, unitName, programName),
+              name: programName, academicLevelId: level.id, academicUnitId, active: true,
+            },
+          });
+        }
+      }
+    }
+  }
+  for (const [sortOrder, competency] of [
+    { code: "DESARROLLO_PERSONAL_INTEGRAL", name: "Desarrollo personal integral" },
+    { code: "TRABAJO_COLABORATIVO", name: "Trabajo colaborativo" },
+    { code: "INNOVACION_EMPRENDIMIENTO_PROPOSITO", name: "Innovación y emprendimiento con visión de propósito" },
+    { code: "MENTALIDAD_SOSTENIBLE", name: "Mentalidad sostenible" },
+    { code: "CIUDADANIA_GLOBAL", name: "Ciudadanía global" },
+  ].entries()) {
+    await database.utplGenericCompetency.upsert({
+      where: { code: competency.code },
+      update: { name: competency.name, active: true, sortOrder: (sortOrder + 1) * 10 },
+      create: { ...competency, active: true, sortOrder: (sortOrder + 1) * 10 },
+    });
+  }
+
+  for (const [sortOrder, subjectType] of [
+    { code: "GENERAL", name: "General", planCategory: null },
+    { code: "TEORICA", name: "Teórica", planCategory: "CONCEPTUAL" },
+    { code: "PRACTICA", name: "Práctica", planCategory: "ACTIVE" },
+    { code: "PROYECTO", name: "Proyecto o integradora", planCategory: "INTEGRATING" },
+    { code: "OTRA", name: "Otra", planCategory: null },
+  ].entries()) {
+    await database.subjectType.upsert({
+      where: { code: subjectType.code },
+      update: { name: subjectType.name, planCategory: subjectType.planCategory, active: true, sortOrder: (sortOrder + 1) * 10 },
+      create: { ...subjectType, active: true, sortOrder: (sortOrder + 1) * 10 },
+    });
+  }
   const knowledgeDocuments = [
     { key: "especificacion-funcional", title: "Especificación funcional", file: "especificacion-funcional-v1.txt", priority: 10 },
     { key: "metodologias-activas", title: "Metodologías activas", file: "metodologias-activas.txt", priority: 40 },
