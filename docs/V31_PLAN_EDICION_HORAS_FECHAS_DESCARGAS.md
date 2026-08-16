@@ -6,4 +6,4 @@
 - Las estrategias de trabajo de la sección E se almacenan como elementos normalizados para EVA y se visualizan como lista.
 - AcademicPeriod incorpora bimestralEvaluationAt. Las semanas se calculan lunes-domingo desde la semana que contiene startsAt.
 - Administración habilita formatos de descarga del Plan: PDF obligatorio/predeterminado, Word y JSON opcionales.
-- La estructura oficial del formato institucional permanece controlada por LUIS; el prompt no altera columnas ni secuencia.
+- La estructura oficial del formato institucional permanece controlada por Sistema de Gestión Guía didáctica; el prompt no altera columnas ni secuencia.

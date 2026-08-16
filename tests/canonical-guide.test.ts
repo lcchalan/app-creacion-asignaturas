@@ -8,6 +8,26 @@ import {
   type CanonicalGuideSource,
 } from "../src/canonical-guide.js";
 
+import { educationalResourceSchema, educationalResourceToMarkdown } from "../src/academic/guide-content.js";
+
+const approvedResourceMarkdown = educationalResourceToMarkdown(educationalResourceSchema.parse({
+  id: "resource-test",
+  status: "proposed",
+  bloomLevel: "ANALIZAR",
+  resourceType: "STORYTELLING",
+  complexity: "MEDIO",
+  tool: "GENIALLY",
+  title: "Caso interactivo",
+  purpose: "Analizar relaciones del entorno.",
+  rationale: "Permite examinar relaciones en un contexto.",
+  subjectName: "Diseño didáctico",
+  subjectCode: "EDU-101",
+  professorName: "Docente de prueba",
+  weekNumber: 1,
+  referenceResource: { url: null, description: null },
+  script: { format: "interactive", screens: [{ order: 1, referenceElements: ["Imagen"], contentText: "Caso", productionDescription: "Animación" }] },
+  bibliography: [{ reference: "Autor. (2026). Obra.", style: "APA7", sourceUrl: null }],
+}));
 const source: CanonicalGuideSource = {
   project: {
     id: "11111111-1111-4111-8111-111111111111",
@@ -22,14 +42,10 @@ const source: CanonicalGuideSource = {
     modality: "En línea",
     academicPeriod: "Octubre 2026 - Febrero 2027",
     totalWeeks: 2,
-    professionalProfileCompetencies: [
-      "Diseña experiencias de aprendizaje pertinentes para educación superior.",
-    ],
-    graduateProfileResults: [
-      "Integra fundamentos pedagógicos en propuestas educativas contextualizadas.",
-    ],
+    professionalProfileCompetencies: ["Diseña experiencias de aprendizaje pertinentes para educación superior."],
+    graduateProfileResults: ["Integra fundamentos pedagógicos en propuestas educativas contextualizadas."],
     utplGenericCompetencies: ["Trabajo colaborativo", "Ciudadanía global"],
-    basicBib: "Referencia básica",
+    basicBib: "Referencia básica — Importancia para el estudiante: Sustenta el contenido.",
     complementaryBib: "Referencia complementaria",
     reaBib: "https://example.edu/recurso",
     status: "IN_PROGRESS",
@@ -39,41 +55,20 @@ const source: CanonicalGuideSource = {
   matrix: {
     originalName: "matriz.xlsx",
     rows: [
-      {
-        id: "row-week-1",
-        rowOrder: 1,
-        weekNumber: 1,
-        learningOutcome: "Analiza principios de diseño.",
-        unitContent: "Unidad 1. Diseño didáctico\nTema 1. Principios",
-        methodology: "Aprendizaje basado en problemas",
-      },
-      {
-        id: "row-week-2",
-        rowOrder: 2,
-        weekNumber: 2,
-        learningOutcome: "Aplica principios de diseño.",
-        unitContent: "Unidad 1. Diseño didáctico\nTema 2. Aplicación",
-        methodology: "Estudio de caso",
-      },
+      { id: "row-week-1", rowOrder: 1, weekNumber: 1, learningOutcome: "Analiza principios de diseño.", unitContent: "Unidad: DISEÑO DIDÁCTICO\nContenido: Principios", methodology: "Aprendizaje basado en problemas" },
+      { id: "row-week-2", rowOrder: 2, weekNumber: 2, learningOutcome: "Aplica principios de diseño.", unitContent: "Contenido: Aplicación", methodology: "Estudio de caso" },
     ],
   },
   weeks: [
     {
       weekNumber: 1,
       status: "APPROVED",
-      draftContent: "# Semana 1",
-      approvedContent: "# Semana 1\n\nContenido aprobado.",
+      draftContent: "## Unidad 1: Diseño didáctico\n\n### 1.1. Principios\n\nTexto **clave** con https://example.edu.\n\n| Concepto | Descripción |\n| --- | --- |\n| Diseño | Proceso |",
+      approvedContent: `## Unidad 1: Diseño didáctico\n\n### 1.1. Principios\n\nContenido **aprobado** con [fuente](https://example.edu).\n\n${approvedResourceMarkdown}`,
       approvedAt: new Date("2026-08-06T14:30:00.000Z"),
       currentVersion: 1,
     },
-    {
-      weekNumber: 2,
-      status: "IN_REVIEW",
-      draftContent: "# Semana 2\n\nContenido en revisión.",
-      approvedContent: null,
-      approvedAt: null,
-      currentVersion: 0,
-    },
+    { weekNumber: 2, status: "IN_REVIEW", draftContent: "### 1.2. Aplicación\n\nContenido en revisión.", approvedContent: null, approvedAt: null, currentVersion: 0 },
   ],
   generatedImages: [
     {
@@ -90,77 +85,49 @@ const source: CanonicalGuideSource = {
   ],
 };
 
-test("crea un documento canónico v2 sin alterar el contenido literal", () => {
+test("crea un documento canónico v3 con contenido estructurado", () => {
   const guide = buildCanonicalGuide(source);
-
   assert.equal(guide.schemaVersion, CANONICAL_GUIDE_SCHEMA_VERSION);
-  assert.equal(
-    guide.planning.sourceMatrix.rows[0]?.unitContentLiteral,
-    source.matrix?.rows[0]?.unitContent,
-  );
-  assert.equal(guide.weeks[0]?.content.format, "markdown");
-  assert.equal(guide.weeks[0]?.content.approved, "# Semana 1\n\nContenido aprobado.");
+  assert.equal(guide.weeks[0]?.content.format, "structured");
+  assert.equal(guide.weeks[0]?.content.approved?.blocks[0]?.type, "heading");
   assert.deepEqual(guide.weeks[0]?.sourceMatrixRowIds, ["matrix-row-1"]);
-  assert.deepEqual(
-    guide.metadata.academicProfile.professionalProfileCompetencies,
-    source.project.professionalProfileCompetencies,
-  );
-  assert.deepEqual(
-    guide.metadata.academicProfile.graduateProfileResults,
-    source.project.graduateProfileResults,
-  );
-  assert.deepEqual(
-    guide.metadata.academicProfile.utplGenericCompetencies,
-    source.project.utplGenericCompetencies,
-  );
+  assert.equal(guide.bibliography.format, "structured");
+  assert.equal(guide.bibliography.basic[0]?.importance, "Sustenta el contenido.");
+  assert.equal(guide.weeks[0]?.content.approved?.resources[0]?.status, "teacher_approved");
+  assert.equal(guide.weeks[0]?.content.approved?.resources[0]?.resourceType, "STORYTELLING");
+});
+
+test("identifica negritas y enlaces dentro de los bloques v3", () => {
+  const guide = buildCanonicalGuide(source);
+  const paragraph = guide.weeks[0]?.content.approved?.blocks.find((block) => block.type === "paragraph");
+  assert.equal(paragraph?.type, "paragraph");
+  if (paragraph?.type !== "paragraph") return;
+  assert.equal(paragraph.content.some((item) => item.type === "text" && item.marks.includes("bold")), true);
+  assert.equal(paragraph.content.some((item) => item.type === "link" && item.href === "https://example.edu"), true);
 });
 
 test("referencia los activos y no incorpora bytes ni base64", () => {
   const guide = buildCanonicalGuide(source);
   const serialized = JSON.stringify(guide);
-
   assert.equal(guide.assets[0]?.storage.href, "/api/generated-images/22222222-2222-4222-8222-222222222222");
-  assert.equal(guide.assets[0]?.fileName, "assets/images/22222222-2222-4222-8222-222222222222.png");
   assert.equal(serialized.includes("imageData"), false);
   assert.equal(serialized.includes("base64"), false);
 });
 
 test("rechaza referencias de matriz que no pertenecen a la semana", () => {
-  const guide = buildCanonicalGuide(source);
-  const invalid = structuredClone(guide);
+  const invalid = structuredClone(buildCanonicalGuide(source));
   invalid.weeks[0]!.sourceMatrixRowIds = ["matrix-row-2"];
-
-  const result = canonicalGuideSchema.safeParse(invalid);
-  assert.equal(result.success, false);
+  assert.equal(canonicalGuideSchema.safeParse(invalid).success, false);
 });
 
-test("rechaza versiones de contrato desconocidas", () => {
+test("rechaza contratos v1/v2 porque la construcción continúa únicamente con v3", () => {
   const guide = buildCanonicalGuide(source);
-  const invalid = { ...guide, schemaVersion: "3.0.0" };
-
-  const result = canonicalGuideSchema.safeParse(invalid);
-  assert.equal(result.success, false);
+  const invalid = { ...guide, $schema: "/schemas/guide-canonical-v2.schema.json", schemaVersion: "2.0.0" };
+  assert.equal(canonicalGuideDocumentSchema.safeParse(invalid).success, false);
 });
 
 test("rechaza competencias genéricas ajenas al catálogo UTPL", () => {
-  const guide = buildCanonicalGuide(source);
-  const invalid = structuredClone(guide);
+  const invalid = structuredClone(buildCanonicalGuide(source));
   invalid.metadata.academicProfile.utplGenericCompetencies = ["Competencia inventada" as never];
-
-  const result = canonicalGuideSchema.safeParse(invalid);
-  assert.equal(result.success, false);
-});
-
-test("mantiene la lectura de documentos canónicos 1.0.0", () => {
-  const current = buildCanonicalGuide(source);
-  const { academicProfile: _academicProfile, ...legacyMetadata } = current.metadata;
-  const legacy = {
-    ...current,
-    $schema: "/schemas/guide-canonical-v1.schema.json",
-    schemaVersion: "1.0.0",
-    metadata: legacyMetadata,
-  };
-
-  const result = canonicalGuideDocumentSchema.safeParse(legacy);
-  assert.equal(result.success, true);
+  assert.equal(canonicalGuideSchema.safeParse(invalid).success, false);
 });

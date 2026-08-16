@@ -280,6 +280,7 @@
                 <option value="PLAN_TEMPLATE">Formato Word del plan docente</option>
                 <option value="PLAN_PROMPT">Prompt del plan docente</option>
                 <option value="GUIDE_PROMPT">Prompt de la guía</option>
+                <option value="GUIDE_RESOURCE_SPEC">Especificación de recursos educativos para la guía</option>
               </select>
             </label>
             <label data-document-only>Vigente desde<input name="effectiveFrom" type="date"></label>
@@ -339,6 +340,17 @@
             <label class="choice"><input type="checkbox" name="downloadFormat" value="JSON"> JSON / API</label>
           </fieldset>
           <div class="inline-actions"><button class="button" type="submit">Guardar configuración</button></div>
+        </form>
+        <form class="admin-card" id="guide-download-format-form">
+          <div class="knowledge-config-header">
+            <div><h2>Descargas de la Guía Didáctica</h2><p>Defina qué formatos puede descargar el profesor cuando haya confirmado todas las semanas de la Guía.</p></div>
+          </div>
+          <fieldset class="download-format-settings"><legend>Formatos de descarga habilitados para la Guía Didáctica</legend>
+            <label class="choice"><input type="checkbox" name="guideDownloadFormat" value="PDF" checked> PDF <small>Predeterminado</small></label>
+            <label class="choice"><input type="checkbox" name="guideDownloadFormat" value="WORD"> Word</label>
+            <label class="choice"><input type="checkbox" name="guideDownloadFormat" value="JSON"> JSON / API</label>
+          </fieldset>
+          <div class="inline-actions"><button class="button" type="submit">Guardar formatos de la Guía</button></div>
         </form>
         <div class="admin-card"><h2>Recursos registrados</h2><p class="field-help">Se muestra la versión vigente o más reciente de cada recurso. Use «Ver versiones» para consultar el historial.</p><div id="ai-version-list" class="knowledge-resource-list"></div></div>
         <div class="admin-card hidden" id="indicator-form">
@@ -670,8 +682,6 @@
           <div class="criteria"><span>✓ Resultado de aprendizaje exacto</span><span>✓ Contenidos sin renombrar</span><span>✓ Metodología declarada</span><span>✓ Citas APA 7 verificables</span></div>
           <div class="week-navigation">
             <div id="week-tabs" class="week-tabs" aria-label="Semanas de la guía"></div>
-            <button type="button" class="button secondary" id="download-json" disabled>Descargar JSON canónico</button>
-            <button type="button" class="button secondary" id="download-word" disabled>Descargar avance en Word</button>
           </div>
           <button type="button" class="generate" id="generate-week">Generar semana 1 con IA</button>
           <section class="weekly-review hidden" id="weekly-review">
@@ -702,6 +712,11 @@
             <div class="review-actions">
               <button type="button" class="button secondary hidden" id="modify-week">Modificar semana</button>
               <button type="button" class="button secondary" id="regenerate-with-instructions">Regenerar con instrucciones</button>
+              <div class="week-review-downloads" id="week-review-downloads" aria-label="Formatos de descarga de la semana para revisión">
+                <button type="button" class="button secondary week-review-download" id="download-week-pdf" title="Descargar esta semana en PDF para revisión" aria-label="Descargar esta semana en PDF para revisión"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>PDF</strong><span class="week-review-download-label">· Semana 1</span></button>
+                <button type="button" class="button secondary week-review-download hidden" id="download-week-word" title="Descargar esta semana en Word para revisión" aria-label="Descargar esta semana en Word para revisión"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>Word</strong><span class="week-review-download-label">· Semana 1</span></button>
+                <button type="button" class="button secondary week-review-download hidden" id="download-week-json" title="Descargar esta semana en JSON para revisión" aria-label="Descargar esta semana en JSON para revisión"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>JSON</strong><span class="week-review-download-label">· Semana 1</span></button>
+              </div>
               <button type="button" class="button approve" id="approve-week">Confirmar semana</button>
             </div>
             <div class="regeneration-progress hidden" id="regeneration-progress" role="status" aria-live="polite">
@@ -710,6 +725,16 @@
             </div>
           </section>
           <div class="generation-error hidden" id="generation-error" role="alert"></div>
+          <section class="guide-download-section" id="guide-download-section">
+            <div class="guide-download-heading">
+              <div><h4>Descargar Guía Didáctica</h4><p id="guide-download-status">Confirme todas las semanas para habilitar las descargas finales.</p></div>
+            </div>
+            <div class="guide-download-actions" aria-label="Formatos de descarga de la Guía Didáctica">
+              <button type="button" class="button secondary guide-download-button" id="download-guide-pdf" disabled title="Descargar Guía Didáctica en PDF" aria-label="Descargar Guía Didáctica en PDF"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>PDF</strong></button>
+              <button type="button" class="button secondary guide-download-button hidden" id="download-guide-word" disabled title="Descargar Guía Didáctica en Word" aria-label="Descargar Guía Didáctica en Word"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>Word</strong></button>
+              <button type="button" class="button secondary guide-download-button hidden" id="download-guide-json" disabled title="Descargar JSON canónico de la Guía Didáctica" aria-label="Descargar JSON canónico de la Guía Didáctica"><span class="download-format-icon" aria-hidden="true">⇩</span><strong>JSON</strong></button>
+            </div>
+          </section>
         </section>
 
         <p class="form-message hidden" id="form-message" role="alert"></p>

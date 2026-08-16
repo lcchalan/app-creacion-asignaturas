@@ -1,3 +1,5 @@
+> **Documento histórico V30.** El contrato canónico 2.0.0 descrito aquí fue reemplazado por la Guía canónica 3.0.0 del Sistema de Gestión Guía didáctica. No debe usarse como contrato vigente.
+
 # Correcciones de perfiles y datos de asignatura
 
 Este paquete parte de la versión estable `v29`. Debe aplicarse en una rama nueva; no se debe mover ni

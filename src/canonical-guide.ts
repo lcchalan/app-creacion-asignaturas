@@ -1,9 +1,11 @@
 import { z } from "zod";
+import {
+  guideWeekStructuredContentSchema,
+  markdownToStructuredGuideContent,
+} from "./academic/guide-content.js";
 
-export const LEGACY_CANONICAL_GUIDE_SCHEMA_VERSION = "1.0.0" as const;
-export const LEGACY_CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v1.schema.json" as const;
-export const CANONICAL_GUIDE_SCHEMA_VERSION = "2.0.0" as const;
-export const CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v2.schema.json" as const;
+export const CANONICAL_GUIDE_SCHEMA_VERSION = "3.0.0" as const;
+export const CANONICAL_GUIDE_SCHEMA_PATH = "/schemas/guide-canonical-v3.schema.json" as const;
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
@@ -21,9 +23,9 @@ const canonicalWeekSchema = z.strictObject({
   status: z.enum(["pending", "generated", "in_review", "approved", "requires_review"]),
   sourceMatrixRowIds: z.array(z.string().min(1)),
   content: z.strictObject({
-    format: z.literal("markdown"),
-    draft: z.string(),
-    approved: z.string().nullable(),
+    format: z.literal("structured"),
+    draft: guideWeekStructuredContentSchema,
+    approved: guideWeekStructuredContentSchema.nullable(),
   }),
   currentVersion: z.number().int().nonnegative(),
   approvedAt: isoDateTimeSchema.nullable(),
@@ -47,9 +49,29 @@ const canonicalImageAssetSchema = z.strictObject({
   }),
 });
 
-const canonicalGuideV1BaseSchema = z.strictObject({
-  $schema: z.literal(LEGACY_CANONICAL_GUIDE_SCHEMA_PATH),
-  schemaVersion: z.literal(LEGACY_CANONICAL_GUIDE_SCHEMA_VERSION),
+const canonicalAcademicProfileSchema = z.strictObject({
+  professionalProfileCompetencies: z.array(z.string().min(1))
+    .refine((items) => new Set(items).size === items.length),
+  graduateProfileResults: z.array(z.string().min(1))
+    .refine((items) => new Set(items).size === items.length),
+  utplGenericCompetencies: z.array(z.enum([
+    "Desarrollo personal integral",
+    "Trabajo colaborativo",
+    "Innovación y emprendimiento con visión de propósito",
+    "Mentalidad sostenible",
+    "Ciudadanía global",
+  ])).refine((items) => new Set(items).size === items.length),
+});
+
+const canonicalBibliographyEntrySchema = z.strictObject({
+  id: z.string().min(1),
+  reference: z.string(),
+  importance: z.string().nullable(),
+});
+
+const canonicalGuideBaseSchema = z.strictObject({
+  $schema: z.literal(CANONICAL_GUIDE_SCHEMA_PATH),
+  schemaVersion: z.literal(CANONICAL_GUIDE_SCHEMA_VERSION),
   documentType: z.literal("didactic-guide"),
   documentId: z.string().uuid(),
   language: z.literal("es"),
@@ -68,6 +90,7 @@ const canonicalGuideV1BaseSchema = z.strictObject({
     modality: z.string().min(1),
     academicPeriod: z.string().min(1),
     totalWeeks: z.number().int().positive(),
+    academicProfile: canonicalAcademicProfileSchema,
   }),
   planning: z.strictObject({
     sourceMatrix: z.strictObject({
@@ -76,10 +99,10 @@ const canonicalGuideV1BaseSchema = z.strictObject({
     }),
   }),
   bibliography: z.strictObject({
-    format: z.literal("markdown"),
-    basic: z.string(),
-    complementary: z.string(),
-    openEducationalResources: z.string(),
+    format: z.literal("structured"),
+    basic: z.array(canonicalBibliographyEntrySchema),
+    complementary: z.array(canonicalBibliographyEntrySchema),
+    openEducationalResources: z.array(canonicalBibliographyEntrySchema),
   }),
   weeks: z.array(canonicalWeekSchema).min(1),
   assets: z.array(canonicalImageAssetSchema),
@@ -90,31 +113,7 @@ const canonicalGuideV1BaseSchema = z.strictObject({
   }),
 });
 
-const canonicalAcademicProfileSchema = z.strictObject({
-  professionalProfileCompetencies: z.array(z.string().min(1))
-    .refine((items) => new Set(items).size === items.length),
-  graduateProfileResults: z.array(z.string().min(1))
-    .refine((items) => new Set(items).size === items.length),
-  utplGenericCompetencies: z.array(z.enum([
-    "Desarrollo personal integral",
-    "Trabajo colaborativo",
-    "Innovación y emprendimiento con visión de propósito",
-    "Mentalidad sostenible",
-    "Ciudadanía global",
-  ])).refine((items) => new Set(items).size === items.length),
-});
-
-const canonicalGuideV2BaseSchema = canonicalGuideV1BaseSchema.extend({
-  $schema: z.literal(CANONICAL_GUIDE_SCHEMA_PATH),
-  schemaVersion: z.literal(CANONICAL_GUIDE_SCHEMA_VERSION),
-  metadata: canonicalGuideV1BaseSchema.shape.metadata.extend({
-    academicProfile: canonicalAcademicProfileSchema,
-  }),
-});
-
-type StructurallyValidCanonicalGuide =
-  | z.infer<typeof canonicalGuideV1BaseSchema>
-  | z.infer<typeof canonicalGuideV2BaseSchema>;
+type StructurallyValidCanonicalGuide = z.infer<typeof canonicalGuideBaseSchema>;
 
 function validateCanonicalGuideStructure(
   guide: StructurallyValidCanonicalGuide,
@@ -127,7 +126,6 @@ function validateCanonicalGuideStructure(
       message: "El número de semanas debe coincidir con metadata.totalWeeks.",
     });
   }
-
   guide.weeks.forEach((week, index) => {
     if (week.weekNumber !== index + 1) {
       context.addIssue({
@@ -140,63 +138,34 @@ function validateCanonicalGuideStructure(
 
   const matrixRows = new Map(guide.planning.sourceMatrix.rows.map((row) => [row.id, row]));
   if (matrixRows.size !== guide.planning.sourceMatrix.rows.length) {
-    context.addIssue({
-      code: "custom",
-      path: ["planning", "sourceMatrix", "rows"],
-      message: "Los identificadores de las filas de matriz deben ser únicos.",
-    });
+    context.addIssue({ code: "custom", path: ["planning", "sourceMatrix", "rows"], message: "Los identificadores de las filas de matriz deben ser únicos." });
   }
   guide.planning.sourceMatrix.rows.forEach((row, index) => {
     if (row.order !== index + 1 || row.weekNumber > guide.metadata.totalWeeks) {
-      context.addIssue({
-        code: "custom",
-        path: ["planning", "sourceMatrix", "rows", index],
-        message: "Las filas deben conservar su orden y pertenecer a una semana del proyecto.",
-      });
+      context.addIssue({ code: "custom", path: ["planning", "sourceMatrix", "rows", index], message: "Las filas deben conservar su orden y pertenecer a una semana del proyecto." });
     }
   });
   for (const [weekIndex, week] of guide.weeks.entries()) {
     if (!week.sourceMatrixRowIds.length) {
-      context.addIssue({
-        code: "custom",
-        path: ["weeks", weekIndex, "sourceMatrixRowIds"],
-        message: "Cada semana debe estar vinculada al menos a una fila de la matriz.",
-      });
+      context.addIssue({ code: "custom", path: ["weeks", weekIndex, "sourceMatrixRowIds"], message: "Cada semana debe estar vinculada al menos a una fila de la matriz." });
     }
     for (const [referenceIndex, rowId] of week.sourceMatrixRowIds.entries()) {
       const row = matrixRows.get(rowId);
       if (!row || row.weekNumber !== week.weekNumber) {
-        context.addIssue({
-          code: "custom",
-          path: ["weeks", weekIndex, "sourceMatrixRowIds", referenceIndex],
-          message: "La fila de matriz referenciada debe existir y pertenecer a la misma semana.",
-        });
+        context.addIssue({ code: "custom", path: ["weeks", weekIndex, "sourceMatrixRowIds", referenceIndex], message: "La fila de matriz referenciada debe existir y pertenecer a la misma semana." });
       }
     }
   }
 
   guide.assets.forEach((asset, index) => {
     if (asset.weekNumber > guide.metadata.totalWeeks) {
-      context.addIssue({
-        code: "custom",
-        path: ["assets", index, "weekNumber"],
-        message: "El activo no puede referirse a una semana fuera del proyecto.",
-      });
+      context.addIssue({ code: "custom", path: ["assets", index, "weekNumber"], message: "El activo no puede referirse a una semana fuera del proyecto." });
     }
   });
 }
 
-export const canonicalGuideV1Schema = canonicalGuideV1BaseSchema.superRefine(
-  validateCanonicalGuideStructure,
-);
-export const canonicalGuideSchema = canonicalGuideV2BaseSchema.superRefine(
-  validateCanonicalGuideStructure,
-);
-export const canonicalGuideDocumentSchema = z.union([
-  canonicalGuideV1Schema,
-  canonicalGuideSchema,
-]);
-
+export const canonicalGuideSchema = canonicalGuideBaseSchema.superRefine(validateCanonicalGuideStructure);
+export const canonicalGuideDocumentSchema = canonicalGuideSchema;
 export type CanonicalGuide = z.infer<typeof canonicalGuideSchema>;
 
 export interface CanonicalGuideSource {
@@ -277,6 +246,18 @@ function imageExtension(mimeType: string) {
   return "png";
 }
 
+function bibliographyEntries(value: string, prefix: string) {
+  return value.split(/\r?\n/u).map((item) => item.trim()).filter(Boolean).map((item, index) => {
+    const marker = /\s+—\s+Importancia para el estudiante:\s*/iu;
+    const match = marker.exec(item);
+    return {
+      id: `${prefix}-${index + 1}`,
+      reference: match ? item.slice(0, match.index).trim() : item,
+      importance: match ? item.slice(match.index + match[0].length).trim() || null : null,
+    };
+  });
+}
+
 export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuide {
   if (!source.matrix?.rows.length) {
     throw new Error("No se puede crear el JSON canónico sin filas de la matriz.");
@@ -294,25 +275,22 @@ export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuid
     }));
 
   const weeksByNumber = new Map(source.weeks.map((week) => [week.weekNumber, week]));
-  const weeks: CanonicalGuide["weeks"] = Array.from(
-    { length: source.project.totalWeeks },
-    (_, index) => {
-      const weekNumber = index + 1;
-      const week = weeksByNumber.get(weekNumber);
-      return {
-        weekNumber,
-        status: canonicalWeekStatus(week?.status ?? "PENDING"),
-        sourceMatrixRowIds: rows.filter((row) => row.weekNumber === weekNumber).map((row) => row.id),
-        content: {
-          format: "markdown" as const,
-          draft: week?.draftContent ?? "",
-          approved: week?.approvedContent || null,
-        },
-        currentVersion: week?.currentVersion ?? 0,
-        approvedAt: week?.approvedAt?.toISOString() ?? null,
-      };
-    },
-  );
+  const weeks: CanonicalGuide["weeks"] = Array.from({ length: source.project.totalWeeks }, (_, index) => {
+    const weekNumber = index + 1;
+    const week = weeksByNumber.get(weekNumber);
+    return {
+      weekNumber,
+      status: canonicalWeekStatus(week?.status ?? "PENDING"),
+      sourceMatrixRowIds: rows.filter((row) => row.weekNumber === weekNumber).map((row) => row.id),
+      content: {
+        format: "structured" as const,
+        draft: markdownToStructuredGuideContent(week?.draftContent ?? "", weekNumber, "proposed"),
+        approved: week?.approvedContent ? markdownToStructuredGuideContent(week.approvedContent, weekNumber, "teacher_approved") : null,
+      },
+      currentVersion: week?.currentVersion ?? 0,
+      approvedAt: week?.approvedAt?.toISOString() ?? null,
+    };
+  });
 
   return canonicalGuideSchema.parse({
     $schema: CANONICAL_GUIDE_SCHEMA_PATH,
@@ -327,11 +305,7 @@ export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuid
       faculty: source.project.faculty,
       career: source.project.career,
       professorName: source.project.professorName,
-      subject: {
-        code: source.project.subjectCode,
-        name: source.project.subjectName,
-        type: source.project.subjectType,
-      },
+      subject: { code: source.project.subjectCode, name: source.project.subjectName, type: source.project.subjectType },
       modality: source.project.modality,
       academicPeriod: source.project.academicPeriod,
       totalWeeks: source.project.totalWeeks,
@@ -341,17 +315,12 @@ export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuid
         utplGenericCompetencies: source.project.utplGenericCompetencies,
       },
     },
-    planning: {
-      sourceMatrix: {
-        fileName: source.matrix.originalName,
-        rows,
-      },
-    },
+    planning: { sourceMatrix: { fileName: source.matrix.originalName, rows } },
     bibliography: {
-      format: "markdown",
-      basic: source.project.basicBib,
-      complementary: source.project.complementaryBib,
-      openEducationalResources: source.project.reaBib ?? "",
+      format: "structured",
+      basic: bibliographyEntries(source.project.basicBib, "basic"),
+      complementary: bibliographyEntries(source.project.complementaryBib, "complementary"),
+      openEducationalResources: bibliographyEntries(source.project.reaBib ?? "", "rea"),
     },
     weeks,
     assets: [...source.generatedImages]
@@ -369,10 +338,7 @@ export function buildCanonicalGuide(source: CanonicalGuideSource): CanonicalGuid
         style: image.style,
         mimeType: image.mimeType,
         fileName: `assets/images/${image.id}.${imageExtension(image.mimeType)}`,
-        storage: {
-          type: "endpoint" as const,
-          href: `/api/generated-images/${image.id}`,
-        },
+        storage: { type: "endpoint" as const, href: `/api/generated-images/${image.id}` },
       })),
     traceability: {
       sourceSystem: "app-creacion-asignaturas",

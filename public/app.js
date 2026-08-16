@@ -1146,7 +1146,7 @@ async function syncDatabase() {
   const local = JSON.parse(localStorage.getItem(storageKey) || "{}");
   local.projectId = projectId;
   localStorage.setItem(storageKey, JSON.stringify(local));
-  $("#download-json").disabled = false;
+  updateGuideDownloadButtons();
 }
 function scheduleDatabaseSync() {
   clearTimeout(syncTimer);
@@ -1293,6 +1293,8 @@ function adminActionButton(kind, label, attributes, extraClass = "") {
 }
 function inlineMarkdownToHtml(value) {
   return escapeHtml(value)
+    .replace(/&lt;br\s*\/?&gt;/gi, "<br>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
     .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>");
@@ -1308,6 +1310,7 @@ function markdownToHtml(markdown) {
   const html = [];
   let listType = "";
   let tableNumber = 0;
+  let pendingResourceTableKind = "";
   const tableCells = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim());
   const isTableSeparator = (line) => {
     const cells = tableCells(line);
@@ -1324,28 +1327,57 @@ function markdownToHtml(markdown) {
       closeList();
       continue;
     }
+    const resourceTableMarker = line.match(/^<!--\s*GUIDE_RESOURCE_TABLE:(FICHA|GUION)\s*-->$/i);
+    if (resourceTableMarker) {
+      closeList();
+      pendingResourceTableKind = resourceTableMarker[1].toLowerCase();
+      continue;
+    }
+    const callout = line.match(/^>\s*\[!(IMPORTANT|NOTE|TIP|WARNING|QUESTION|EXAMPLE|DEFINITION|REFLECTION)\]\s*(.*)$/i);
+    if (callout) {
+      closeList();
+      const variants = { IMPORTANT: "important", NOTE: "remember", TIP: "tip", WARNING: "warning", QUESTION: "question", EXAMPLE: "example", DEFINITION: "definition", REFLECTION: "reflection" };
+      const labels = { important: "Importante", remember: "Recuerde", tip: "Sugerencia", warning: "Atención", question: "Pregunta", example: "Ejemplo", definition: "Definición", reflection: "Reflexione" };
+      const variant = variants[callout[1].toUpperCase()] || "important";
+      const body = [];
+      let cursor = index + 1;
+      while (cursor < lines.length) {
+        const quoted = String(lines[cursor] || "").trim().match(/^>\s?(.*)$/);
+        if (!quoted) break;
+        if (quoted[1].trim()) body.push(quoted[1].trim());
+        cursor += 1;
+      }
+      const title = callout[2].trim() || labels[variant];
+      html.push(`<aside class="guide-callout guide-callout-${variant}" data-callout="${variant}"><strong class="guide-callout-title">${inlineMarkdownToHtml(title)}</strong>${body.length ? `<p>${inlineMarkdownToHtml(body.join(" "))}</p>` : ""}</aside>`);
+      index = cursor - 1;
+      continue;
+    }
     const image = line.match(/^!\[([^\]]*)\]\((\/api\/generated-images\/[0-9a-f-]{36}|data:image\/[^)]+|https?:\/\/[^)]+)\)$/i);
     if (image) {
       closeList();
       html.push(`<figure class="generated-figure"><img src="${escapeHtml(image[2])}" alt="${escapeHtml(image[1])}" loading="lazy"><figcaption>${escapeHtml(image[1])}</figcaption></figure>`);
       continue;
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) {
       closeList();
-      const level = heading[1].length === 1 ? 2 : 3;
+      const level = Math.min(4, Math.max(2, heading[1].length));
       html.push(`<h${level}>${inlineMarkdownToHtml(heading[2])}</h${level}>`);
       continue;
     }
     const nextLine = String(lines[index + 1] || "").trim();
     if (line.includes("|") && isTableSeparator(nextLine)) {
       closeList();
-      tableNumber += 1;
-      let previousIndex = index - 1;
-      while (previousIndex >= 0 && !String(lines[previousIndex] || "").trim()) previousIndex -= 1;
-      const previousLine = String(lines[previousIndex] || "").trim();
-      if (!/^(?:\*\*)?tabla\s+\d+/i.test(previousLine)) {
-        html.push(`<p class="table-caption"><strong>Tabla ${tableNumber}</strong></p>`);
+      const resourceTableKind = pendingResourceTableKind;
+      pendingResourceTableKind = "";
+      if (!resourceTableKind) {
+        tableNumber += 1;
+        let previousIndex = index - 1;
+        while (previousIndex >= 0 && !String(lines[previousIndex] || "").trim()) previousIndex -= 1;
+        const previousLine = String(lines[previousIndex] || "").trim();
+        if (!/^(?:\*\*)?tabla\s+\d+/i.test(previousLine)) {
+          html.push(`<p class="table-caption"><strong>Tabla ${tableNumber}</strong></p>`);
+        }
       }
       const headers = tableCells(line);
       index += 2;
@@ -1355,7 +1387,7 @@ function markdownToHtml(markdown) {
         index += 1;
       }
       index -= 1;
-      html.push('<div class="generated-table-wrapper"><table class="generated-table"><thead><tr>');
+      html.push(`<div class="generated-table-wrapper${resourceTableKind ? " resource-production-table" : ""}"${resourceTableKind ? ` data-resource-table="${resourceTableKind}"` : ""}><table class="generated-table"><thead><tr>`);
       headers.forEach((cell) => html.push(`<th scope="col">${inlineMarkdownToHtml(cell)}</th>`));
       html.push("</tr></thead><tbody>");
       rows.forEach((cells) => {
@@ -1400,6 +1432,8 @@ function inlineHtmlToMarkdown(element) {
     const content = inlineHtmlToMarkdown(node);
     if (tag === "strong" || tag === "b") result += `**${content}**`;
     else if (tag === "em" || tag === "i") result += `*${content}*`;
+    else if (tag === "u") result += content;
+    else if (tag === "a") result += `[${content}](${node.getAttribute("href") || ""})`;
     else if (tag === "br") result += "\n";
     else result += content;
   });
@@ -1415,21 +1449,33 @@ function editorToMarkdown(editor) {
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const tag = node.tagName.toLowerCase();
-    if (tag === "figure") {
+    if (tag === "aside" && node.classList.contains("guide-callout")) {
+      const reverse = { important: "IMPORTANT", remember: "NOTE", tip: "TIP", warning: "WARNING", question: "QUESTION", example: "EXAMPLE", definition: "DEFINITION", reflection: "REFLECTION" };
+      const variant = reverse[node.dataset.callout] || "IMPORTANT";
+      const titleNode = node.querySelector(".guide-callout-title");
+      const bodyNode = node.querySelector("p");
+      const title = titleNode ? inlineHtmlToMarkdown(titleNode).trim() : "";
+      const body = bodyNode ? inlineHtmlToMarkdown(bodyNode).trim() : "";
+      blocks.push(`> [!${variant}]${title ? ` ${title}` : ""}${body ? `\n> ${body}` : ""}`);
+    }
+    else if (tag === "figure") {
       const image = node.querySelector("img");
       if (image) blocks.push(`![${image.getAttribute("alt") || "Imagen educativa"}](${image.getAttribute("src") || ""})`);
     }
     else if (tag === "div" && node.classList.contains("generated-table-wrapper")) {
       const table = node.querySelector("table");
       if (table) {
-        const rows = [...table.rows].map((row) => [...row.cells].map((cell) => inlineHtmlToMarkdown(cell).trim()));
+        const rows = [...table.rows].map((row) => [...row.cells].map((cell) => inlineHtmlToMarkdown(cell).trim().replace(/\n/g, "<br>")));
         if (rows.length) {
-          blocks.push(`| ${rows[0].join(" | ")} |\n| ${rows[0].map(() => "---").join(" | ")} |${rows.slice(1).map((row) => `\n| ${row.join(" | ")} |`).join("")}`);
+          const resourceTableKind = node.dataset.resourceTable;
+          const marker = resourceTableKind ? `<!-- GUIDE_RESOURCE_TABLE:${resourceTableKind.toUpperCase()} -->\n` : "";
+          blocks.push(`${marker}| ${rows[0].join(" | ")} |\n| ${rows[0].map(() => "---").join(" | ")} |${rows.slice(1).map((row) => `\n| ${row.join(" | ")} |`).join("")}`);
         }
       }
     }
     else if (tag === "h1" || tag === "h2") blocks.push(`## ${inlineHtmlToMarkdown(node)}`);
     else if (tag === "h3") blocks.push(`### ${inlineHtmlToMarkdown(node)}`);
+    else if (tag === "h4") blocks.push(`#### ${inlineHtmlToMarkdown(node)}`);
     else if (tag === "ul" || tag === "ol") {
       [...node.children].forEach((item, index) => {
         blocks.push(`${tag === "ol" ? `${index + 1}.` : "-"} ${inlineHtmlToMarkdown(item)}`);
@@ -3348,6 +3394,23 @@ $("#institutional-plan-text-form")?.addEventListener("submit", async (event) => 
     showAdminMessage("Texto institucional del Plan Docente actualizado correctamente.");
   } catch (error) { showValidationModal(error.message, "#institutional-curricular-adaptations"); }
 });
+$("#guide-download-format-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const downloadFormats = $$('input[name="guideDownloadFormat"]', event.currentTarget).filter((input) => input.checked).map((input) => input.value);
+  if (!downloadFormats.length) return showValidationModal("Formatos de descarga: habilite al menos un formato para la Guía Didáctica.", "#guide-download-format-form");
+  if (!downloadFormats.includes("PDF")) return showValidationModal("PDF es el formato predeterminado de la Guía Didáctica y debe permanecer habilitado.", "#guide-download-format-form");
+  try {
+    const payload = await authRequest("/api/admin/settings/guide-downloads", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ downloadFormats }),
+    });
+    if (authenticatedUserData) authenticatedUserData.guideDownloadFormats = payload.downloadFormats || downloadFormats;
+    await loadAdminDashboard();
+    updateGuideDownloadButtons();
+    updateWeekReviewDownloadButtons();
+    showAdminMessage("Formatos de descarga de la Guía Didáctica actualizados correctamente.");
+  } catch (error) { showValidationModal(error.message, "#guide-download-format-form"); }
+});
 
 $("#add-outcome-mapping")?.addEventListener("click", addOutcomeMapping);
 $("#outcome-mapping-body")?.addEventListener("click", (event) => {
@@ -3374,6 +3437,11 @@ async function ensureGuideGenerationReady() {
   let payload = {};
   try { payload = await response.json(); } catch {}
   if (!response.ok) throw new Error(payload.error || "La configuración institucional de la Guía Didáctica todavía no está lista.");
+  if (authenticatedUserData && Array.isArray(payload.downloadFormats) && payload.downloadFormats.length) {
+    authenticatedUserData.guideDownloadFormats = payload.downloadFormats;
+    updateGuideDownloadButtons();
+    updateWeekReviewDownloadButtons();
+  }
   return payload;
 }
 
@@ -3599,11 +3667,9 @@ function updateWeekInterface() {
   $("#regenerate-with-instructions").classList.toggle("hidden", approved);
   $("#approve-week").classList.toggle("hidden", approved);
   $("#generate-week").classList.toggle("hidden", Boolean(displayContent));
+  updateWeekReviewDownloadButtons(Boolean(displayContent));
   renderWeekTabs();
-  const approvedCount = consecutiveApprovedWeeks();
-  $("#download-json").disabled = !canSyncDatabase();
-  $("#download-word").disabled = approvedCount === 0;
-  $("#download-word").textContent = approvedCount === totalWeeks() ? "Descargar guía completa" : `Descargar avance (semanas 1–${approvedCount})`;
+  updateGuideDownloadButtons();
   renderAdaptationWorkspaces();
 }
 function renderWeekTabs() {
@@ -3661,6 +3727,12 @@ function visualDecision(proposal, figureNumber) {
       progress: "Generando el storytelling… El contenido continuará cuando esté listo.",
       alt: "Descripción accesible del recurso",
     },
+    podcast_script: {
+      eyebrow: "Oportunidad para un guion de podcast",
+      legend: "Seleccione un enfoque de guion",
+      progress: "Generando el guion de podcast… El contenido continuará cuando esté listo.",
+      alt: "Descripción accesible del recurso",
+    },
   };
   const labels = resourceLabels[editableProposal.kind] || resourceLabels.image;
   const setText = (selector, value) => {
@@ -3674,7 +3746,7 @@ function visualDecision(proposal, figureNumber) {
   if (altLabel?.firstChild?.nodeType === Node.TEXT_NODE) altLabel.firstChild.textContent = labels.alt;
   setText("#visual-modal-title", editableProposal.title);
   setText("#visual-topic", editableProposal.topic);
-  setText("#visual-type", editableProposal.type);
+  setText("#visual-type", [editableProposal.type, editableProposal.bloomLevel ? `Bloom: ${editableProposal.bloomLevel}` : "", editableProposal.complexity ? `Complejidad: ${editableProposal.complexity}` : ""].filter(Boolean).join(" · "));
   setText("#visual-purpose", editableProposal.purpose);
   $("#visual-title-input").value = editableProposal.title;
   $("#visual-alt-input").value = editableProposal.altText;
@@ -3777,7 +3849,7 @@ async function presentGeneratedContent(content, proposals) {
         const alt = `Figura ${resource.figureNumber}. ${resource.title}. ${resource.altText}`;
         assembled += `\n\n![${alt}](${resource.url})\n\n*Fuente: ${resource.source}*\n`;
       } else {
-        assembled += `\n\n### ${resource.title}\n\n${resource.content}\n`;
+        assembled += `\n\n${resource.content}\n`;
       }
       output.innerHTML = markdownToHtml(assembled);
     }
@@ -3919,10 +3991,8 @@ $("#approve-week").onclick = async () => {
     try {
       clearTimeout(syncTimer);
       await syncDatabase();
-      const downloadNow = window.confirm(
-        "La guía didáctica se ha completado y guardado correctamente.\n\n¿Desea descargar la guía completa ahora?",
-      );
-      if (downloadNow) $("#download-word").click();
+      showMessage("Guía Didáctica completada. Los formatos habilitados por Administración están disponibles al final de esta pantalla.");
+      updateGuideDownloadButtons();
     } catch (error) {
       console.error(error);
       $("#generation-error").textContent =
@@ -3948,72 +4018,165 @@ $("#modify-week").onclick = () => {
   $("#generation-output").focus();
 };
 
-$("#download-json").onclick = async () => {
-  const button = $("#download-json");
-  button.disabled = true;
-  try {
-    clearTimeout(syncTimer);
-    await syncDatabase();
-    if (!projectId) throw new Error("Guarde el proyecto antes de descargar el JSON canónico.");
-    const response = await fetch(`/api/projects/${projectId}/canonical-json`, { cache: "no-store" });
-    if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload.error || "No fue posible descargar el JSON canónico.");
-    }
-    const blob = await response.blob();
-    const disposition = response.headers.get("Content-Disposition") || "";
-    const serverName = disposition.match(/filename="([^"]+)"/)?.[1];
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = serverName || `${data().subjectName || "guia-didactica"}.canonical.v2.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  } catch (error) {
-    $("#generation-error").textContent = error.message;
-    $("#generation-error").classList.remove("hidden");
-  } finally {
-    button.disabled = !canSyncDatabase();
+function configuredGuideDownloadFormats() {
+  const raw = authenticatedUserData?.guideDownloadFormats || ["PDF"];
+  return Array.isArray(raw) && raw.length ? raw : ["PDF"];
+}
+function updateWeekReviewDownloadButtons(hasContent = Boolean(weekState(currentWeek).draftContent || weekState(currentWeek).approvedContent)) {
+  const formats = configuredGuideDownloadFormats();
+  [["#download-week-pdf", "PDF"], ["#download-week-word", "WORD"], ["#download-week-json", "JSON"]].forEach(([selector, format]) => {
+    const button = $(selector);
+    if (!button) return;
+    const enabled = formats.includes(format);
+    button.classList.toggle("hidden", !enabled);
+    button.disabled = !enabled || !hasContent;
+    const label = button.querySelector(".week-review-download-label");
+    if (label) label.textContent = `· Semana ${currentWeek}`;
+  });
+}
+function guideDownloadPayload() {
+  const project = data();
+  return {
+    projectId,
+    project: {
+      projectName: project.projectName, subjectName: project.subjectName,
+      career: project.career, modality: project.modality,
+      academicPeriod: project.academicPeriod, totalWeeks: totalWeeks(),
+    },
+    weeks: Array.from({ length: totalWeeks() }, (_, index) => ({
+      week: index + 1, content: weekState(index + 1).approvedContent,
+    })),
+  };
+}
+function updateGuideDownloadButtons() {
+  const formats = configuredGuideDownloadFormats();
+  const complete = totalWeeks() > 0 && consecutiveApprovedWeeks() === totalWeeks();
+  const status = $("#guide-download-status");
+  if (status) status.textContent = complete
+    ? "Guía completa. Descargue únicamente los formatos habilitados por Administración."
+    : `Confirme todas las semanas para habilitar las descargas finales (${consecutiveApprovedWeeks()} de ${totalWeeks() || 0}).`;
+  [["#download-guide-pdf", "PDF"], ["#download-guide-word", "WORD"], ["#download-guide-json", "JSON"]].forEach(([selector, format]) => {
+    const button = $(selector);
+    if (!button) return;
+    const enabled = formats.includes(format);
+    button.classList.toggle("hidden", !enabled);
+    button.disabled = !enabled || !complete;
+  });
+}
+async function saveDownloadResponse(response, fallbackName) {
+  if (!response.ok) {
+    let payload = {};
+    try { payload = await response.json(); } catch {}
+    throw new Error(payload.error || "No fue posible descargar la Guía Didáctica.");
   }
-};
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const serverName = disposition.match(/filename="([^"]+)"/)?.[1];
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = serverName || fallbackName;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
 
-$("#download-word").onclick = async () => {
-  const count = consecutiveApprovedWeeks();
-  if (!count) return;
-  const button = $("#download-word");
-  button.disabled = true;
-  try {
-    const project = data();
-    const response = await fetch("/api/download-word", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        projectId,
-        project: {
-          projectName: project.projectName, subjectName: project.subjectName,
-          career: project.career, modality: project.modality,
-          academicPeriod: project.academicPeriod, totalWeeks: totalWeeks(),
-        },
-        weeks: Array.from({ length: count }, (_, index) => ({
-          week: index + 1, content: weekState(index + 1).approvedContent,
-        })),
-      }),
-    });
-    if (!response.ok) {
-      const payload = await response.json();
-      throw new Error(payload.error || "No fue posible generar el documento.");
-    }
-    const blob = await response.blob();
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `${project.subjectName || "guia-didactica"}-${count === totalWeeks() ? "completa" : `avance-semana-${count}`}.docx`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-  } catch (error) {
-    $("#generation-error").textContent = error.message;
-    $("#generation-error").classList.remove("hidden");
-  } finally {
-    button.disabled = false;
+function weekReviewDownloadPayload() {
+  const state = weekState(currentWeek);
+  const content = editorToMarkdown($("#generation-output")).trim() || state.draftContent || state.approvedContent || "";
+  const project = data();
+  return {
+    content,
+    payload: {
+      projectId,
+      project: {
+        projectName: project.projectName,
+        subjectName: project.subjectName,
+        subjectCode: project.subjectCode,
+        career: project.career,
+        modality: project.modality,
+        academicPeriod: project.academicPeriod,
+        professorName: project.professorName,
+      },
+      week: currentWeek,
+      content,
+      status: state.status === "approved" ? "CONFIRMED" : state.status === "review" ? "REVIEW" : "DRAFT",
+    },
+    project,
+  };
+}
+
+async function downloadWeekReviewFormat(format) {
+  const enabledFormats = configuredGuideDownloadFormats();
+  if (!enabledFormats.includes(format)) {
+    throw new Error(`La descarga ${format} de la Guía Didáctica no está habilitada por Administración.`);
   }
-};
+  const { content, payload, project } = weekReviewDownloadPayload();
+  if (!content.trim()) throw new Error("Genere contenido para esta semana antes de descargarla para revisión.");
+  if (!projectId) throw new Error("Guarde la asignatura antes de descargar la semana para revisión.");
+  const route = format === "PDF" ? "pdf" : format === "JSON" ? "json" : "word";
+  const button = format === "PDF" ? $("#download-week-pdf") : format === "JSON" ? $("#download-week-json") : $("#download-week-word");
+  if (button) button.disabled = true;
+  $("#generation-error").classList.add("hidden");
+  try {
+    const response = await fetch(`/api/download-week-${route}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const safeSubject = String(project.subjectName || "guia-didactica").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "-");
+    const extension = format === "PDF" ? "pdf" : format === "JSON" ? "json" : "docx";
+    await saveDownloadResponse(response, `${safeSubject}-semana-${currentWeek}-revision.${extension}`);
+  } finally {
+    updateWeekReviewDownloadButtons(true);
+  }
+}
+
+[["#download-week-pdf", "PDF"], ["#download-week-word", "WORD"], ["#download-week-json", "JSON"]].forEach(([selector, format]) => {
+  const button = $(selector);
+  if (!button) return;
+  button.onclick = async () => {
+    try {
+      await downloadWeekReviewFormat(format);
+    } catch (error) {
+      $("#generation-error").textContent = error.message;
+      $("#generation-error").classList.remove("hidden");
+    }
+  };
+});
+
+async function downloadGuideDocument(format) {
+  if (consecutiveApprovedWeeks() !== totalWeeks()) {
+    throw new Error("Confirme todas las semanas de la Guía Didáctica antes de descargarla.");
+  }
+  clearTimeout(syncTimer);
+  await syncDatabase();
+  if (!projectId) throw new Error("Guarde la asignatura antes de descargar la Guía Didáctica.");
+  const subject = data().subjectName || "guia-didactica";
+  if (format === "JSON") {
+    const response = await fetch(`/api/projects/${projectId}/canonical-json`, { cache: "no-store" });
+    return saveDownloadResponse(response, `${subject}.canonical.v3.json`);
+  }
+  const response = await fetch(format === "PDF" ? "/api/download-pdf" : "/api/download-word", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(guideDownloadPayload()),
+  });
+  return saveDownloadResponse(response, `${subject}.${format === "PDF" ? "pdf" : "docx"}`);
+}
+[["#download-guide-pdf", "PDF"], ["#download-guide-word", "WORD"], ["#download-guide-json", "JSON"]].forEach(([selector, format]) => {
+  const button = $(selector);
+  if (!button) return;
+  button.onclick = async () => {
+    button.disabled = true;
+    $("#generation-error")?.classList.add("hidden");
+    try {
+      await downloadGuideDocument(format);
+    } catch (error) {
+      $("#generation-error").textContent = error.message;
+      $("#generation-error").classList.remove("hidden");
+    } finally {
+      updateGuideDownloadButtons();
+    }
+  };
+});
 
 form.addEventListener("input", () => {
   if (step === 5) persistProject();
@@ -4223,6 +4386,7 @@ const knowledgeResourceLabels = {
   PLAN_TEMPLATE: "Formato del Plan Docente",
   PLAN_PROMPT: "Prompt del Plan Docente",
   GUIDE_PROMPT: "Prompt de la Guía Didáctica",
+  GUIDE_RESOURCE_SPEC: "Especificación de recursos educativos para la Guía Didáctica",
 };
 const knowledgeStatusLabels = {
   ACTIVE: "Activo",
@@ -4519,13 +4683,19 @@ function renderInstitutionalPlanText() {
   const formats = institutionalSettingValue("TEACHING_PLAN_DOWNLOAD_FORMATS", "PDF").split(",").map((item) => item.trim().toUpperCase());
   $$('input[name="downloadFormat"]', $("#institutional-plan-text-form")).forEach((input) => input.checked = formats.includes(input.value));
 }
+function renderGuideDownloadSettings() {
+  const form = $("#guide-download-format-form");
+  if (!form) return;
+  const formats = institutionalSettingValue("GUIDE_DOWNLOAD_FORMATS", "PDF").split(",").map((item) => item.trim().toUpperCase());
+  $$('input[name="guideDownloadFormat"]', form).forEach((input) => input.checked = formats.includes(input.value));
+}
 
 async function loadAdminDashboard() {
   adminData = await authRequest("/api/admin/dashboard");
   renderKnowledgeScopePickers();
   const enabledRoles = adminData.roles.filter((role) => ["ADMIN", "TEACHER"].includes(role.code));
   $("#admin-user-role").innerHTML = `<option value="">Seleccione un rol</option>${enabledRoles.map((role) => `<option value="${role.code}">${escapeHtml(role.name)}</option>`).join("")}`;
-  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideReport();
+  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderGuideReport();
   $("#checklist-project").innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
 }
 $("#nav-admin").onclick = async () => {
@@ -4925,6 +5095,7 @@ function suggestedKnowledgeResourceKind(title) {
   if (/\bformato\b/.test(normalized) && /\bplan docente\b/.test(normalized)) return "PLAN_TEMPLATE";
   if (/\bprompt\b/.test(normalized) && /\bplan docente\b/.test(normalized)) return "PLAN_PROMPT";
   if (/\bprompt\b/.test(normalized) && (/\bguia didactica\b/.test(normalized) || /\bprompt de la guia\b/.test(normalized))) return "GUIDE_PROMPT";
+  if (/\bespecificacion\b/.test(normalized) && /\brecursos? educativos?\b/.test(normalized) && /\bguia didactica\b/.test(normalized)) return "GUIDE_RESOURCE_SPEC";
   return null;
 }
 

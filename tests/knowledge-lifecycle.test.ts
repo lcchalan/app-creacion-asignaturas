@@ -14,6 +14,7 @@ test("detecta el formato del Plan Docente por su título", () => {
 test("detecta los prompts del plan y de la guía", () => {
   assert.equal(suggestedResourceKind("Prompt del plan docente"), "PLAN_PROMPT");
   assert.equal(suggestedResourceKind("Prompt para la Guía Didáctica"), "GUIDE_PROMPT");
+  assert.equal(suggestedResourceKind("Especificación de recursos educativos para Guía Didáctica"), "GUIDE_RESOURCE_SPEC");
 });
 
 test("rechaza una configuración evidente con un tipo de recurso incorrecto", () => {

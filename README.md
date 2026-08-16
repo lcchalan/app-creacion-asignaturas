@@ -137,15 +137,15 @@ administrador si se ejecuta otra vez.
 | `MCP_SERVER_VERSION` | No | Versión publicada por el servidor MCP. |
 | `LOCAL_USER_EMAIL` | Solo `seed` | Correo del administrador inicial. |
 | `INITIAL_ADMIN_PASSWORD` | Solo `seed` | Contraseña inicial; debe ser larga, única y segura. |
-| `APP_BASE_URL` | Para recuperación | URL pública de LUIS usada para construir el enlace de restablecimiento. En producción debe ser HTTPS. |
+| `APP_BASE_URL` | Para recuperación | URL pública del Sistema de Gestión Guía didáctica usada para construir el enlace de restablecimiento. En producción debe ser HTTPS. |
 | `SMTP_HOST` | Para recuperación | Servidor SMTP que enviará los correos de recuperación. |
 | `SMTP_PORT` | Para recuperación | Puerto SMTP; normalmente `587` con STARTTLS o `465` con TLS implícito. |
 | `SMTP_SECURE` | Para recuperación | `true` para TLS implícito (habitualmente puerto 465). |
 | `SMTP_STARTTLS` | Para recuperación | `true` para elevar una conexión SMTP a TLS (habitualmente puerto 587). |
 | `SMTP_USER` | Según servidor SMTP | Usuario SMTP. Puede dejarse vacío si el relay autorizado no requiere autenticación. |
 | `SMTP_PASSWORD` | Según servidor SMTP | Contraseña SMTP; debe permanecer únicamente en secretos del servidor. |
-| `SMTP_FROM` | Para recuperación | Remitente de los mensajes, por ejemplo `LUIS <no-reply@institucion.edu>`. |
-| `SMTP_HELO_NAME` | No | Nombre enviado por el cliente en `EHLO`; por defecto `luis.local`. |
+| `SMTP_FROM` | Para recuperación | Remitente de los mensajes, por ejemplo `Sistema de Gestión Guía didáctica <no-reply@institucion.edu>`. |
+| `SMTP_HELO_NAME` | No | Nombre enviado por el cliente en `EHLO`; por defecto `gestion-guia.local`. |
 
 La API oficial recomienda mantener las claves en variables del servidor o en un
 gestor de secretos, nunca en código ni en el cliente:

@@ -1,0 +1,1161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/schemas/guide-canonical-v3.schema.json",
+  "title": "LUIS Didactic Guide Canonical Contract v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "documentType",
+    "documentId",
+    "language",
+    "status",
+    "metadata",
+    "planning",
+    "bibliography",
+    "weeks",
+    "assets",
+    "traceability"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "/schemas/guide-canonical-v3.schema.json"
+    },
+    "schemaVersion": {
+      "const": "3.0.0"
+    },
+    "documentType": {
+      "const": "didactic-guide"
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "language": {
+      "const": "es"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "in_progress",
+        "completed",
+        "archived"
+      ]
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "planning": {
+      "$ref": "#/$defs/planning"
+    },
+    "bibliography": {
+      "$ref": "#/$defs/bibliography"
+    },
+    "weeks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/week"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/imageAsset"
+      }
+    },
+    "traceability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceSystem",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "sourceSystem": {
+          "const": "app-creacion-asignaturas"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectName",
+        "academicLevel",
+        "faculty",
+        "career",
+        "professorName",
+        "subject",
+        "modality",
+        "academicPeriod",
+        "totalWeeks",
+        "academicProfile"
+      ],
+      "properties": {
+        "projectName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "academicLevel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "faculty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "career": {
+          "type": "string",
+          "minLength": 1
+        },
+        "professorName": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "name",
+            "type"
+          ],
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "modality": {
+          "type": "string",
+          "minLength": 1
+        },
+        "academicPeriod": {
+          "type": "string",
+          "minLength": 1
+        },
+        "totalWeeks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "academicProfile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "professionalProfileCompetencies",
+            "graduateProfileResults",
+            "utplGenericCompetencies"
+          ],
+          "properties": {
+            "professionalProfileCompetencies": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "graduateProfileResults": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "utplGenericCompetencies": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "Desarrollo personal integral",
+                  "Trabajo colaborativo",
+                  "Innovación y emprendimiento con visión de propósito",
+                  "Mentalidad sostenible",
+                  "Ciudadanía global"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "planning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceMatrix"
+      ],
+      "properties": {
+        "sourceMatrix": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "fileName",
+            "rows"
+          ],
+          "properties": {
+            "fileName": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "rows": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/matrixRow"
+              }
+            }
+          }
+        }
+      }
+    },
+    "matrixRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "order",
+        "weekNumber",
+        "learningOutcome",
+        "unitContentLiteral",
+        "methodology"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "weekNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "learningOutcome": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unitContentLiteral": {
+          "type": "string",
+          "minLength": 1
+        },
+        "methodology": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "bibliography": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "basic",
+        "complementary",
+        "openEducationalResources"
+      ],
+      "properties": {
+        "format": {
+          "const": "structured"
+        },
+        "basic": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bibliographyEntry"
+          }
+        },
+        "complementary": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bibliographyEntry"
+          }
+        },
+        "openEducationalResources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/bibliographyEntry"
+          }
+        }
+      }
+    },
+    "bibliographyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "reference",
+        "importance"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reference": {
+          "type": "string"
+        },
+        "importance": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "week": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "weekNumber",
+        "status",
+        "sourceMatrixRowIds",
+        "content",
+        "currentVersion",
+        "approvedAt"
+      ],
+      "properties": {
+        "weekNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "generated",
+            "in_review",
+            "approved",
+            "requires_review"
+          ]
+        },
+        "sourceMatrixRowIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "content": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "format",
+            "draft",
+            "approved"
+          ],
+          "properties": {
+            "format": {
+              "const": "structured"
+            },
+            "draft": {
+              "$ref": "#/$defs/structuredContent"
+            },
+            "approved": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/structuredContent"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "currentVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "approvedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        }
+      }
+    },
+    "structuredContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "blocks",
+        "resources"
+      ],
+      "properties": {
+        "format": {
+          "const": "structured"
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/educationalResource"
+          }
+        }
+      }
+    },
+    "inline": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text",
+            "marks"
+          ],
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "marks": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "bold",
+                  "italic",
+                  "underline"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "text",
+            "href",
+            "marks"
+          ],
+          "properties": {
+            "type": {
+              "const": "link"
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "href": {
+              "type": "string",
+              "minLength": 1
+            },
+            "marks": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "bold",
+                  "italic",
+                  "underline"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "block": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "role",
+            "level",
+            "number",
+            "text",
+            "sourceId"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "heading"
+            },
+            "role": {
+              "enum": [
+                "unit",
+                "topic",
+                "subtopic"
+              ]
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 3
+            },
+            "number": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "sourceId": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "content"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "paragraph"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inline"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "style",
+            "items"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "list"
+            },
+            "style": {
+              "enum": [
+                "bullet",
+                "ordered"
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/inline"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "caption",
+            "headers",
+            "rows"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "table"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "headers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "resourceId",
+            "title",
+            "status"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "educational_resource"
+            },
+            "resourceId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "title": {
+              "type": "string"
+            },
+            "status": {
+              "enum": [
+                "proposed",
+                "teacher_approved",
+                "rejected"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "assetId",
+            "src",
+            "altText",
+            "caption",
+            "source"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "image"
+            },
+            "assetId": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            },
+            "src": {
+              "type": "string"
+            },
+            "altText": {
+              "type": "string"
+            },
+            "caption": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "variant",
+            "title",
+            "content"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "callout"
+            },
+            "variant": {
+              "enum": [
+                "important",
+                "remember",
+                "definition",
+                "example",
+                "reflection",
+                "question",
+                "tip",
+                "warning"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inline"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "type",
+            "content",
+            "attribution"
+          ],
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "type": {
+              "const": "quote"
+            },
+            "content": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inline"
+              }
+            },
+            "attribution": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "educationalResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "status",
+        "bloomLevel",
+        "resourceType",
+        "complexity",
+        "tool",
+        "title",
+        "purpose",
+        "rationale",
+        "subjectName",
+        "subjectCode",
+        "professorName",
+        "weekNumber",
+        "referenceResource",
+        "script",
+        "bibliography"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "teacher_approved",
+            "rejected"
+          ]
+        },
+        "bloomLevel": {
+          "enum": [
+            "RECORDAR",
+            "COMPRENDER",
+            "APLICAR",
+            "ANALIZAR",
+            "EVALUAR",
+            "CREAR"
+          ]
+        },
+        "resourceType": {
+          "enum": [
+            "DICTADO",
+            "SOPA_DE_LETRAS",
+            "CRUCIGRAMA",
+            "MARCAR_CASILLAS",
+            "INFOGRAFIA",
+            "IMAGEN_INTERACTIVA",
+            "PRESENTACION_INTERACTIVA",
+            "COMPLETAR_TEXTO",
+            "ROMPECABEZAS",
+            "ARRASTRAR_Y_SOLTAR",
+            "UNIR_CON_LINEAS",
+            "VIDEO_QUIZ",
+            "QUIZ",
+            "IMAGEN_INTERACTIVA_360",
+            "VIDEO_INTERACTIVO",
+            "STORYTELLING",
+            "SIMULACION",
+            "GAMIFICACION",
+            "MODULO_DIDACTICO",
+            "REALIDAD_AUMENTADA",
+            "REALIDAD_VIRTUAL",
+            "REALIDAD_MIXTA",
+            "MODELADO_3D",
+            "VIDEO",
+            "PODCAST"
+          ]
+        },
+        "complexity": {
+          "enum": [
+            "SIMPLE",
+            "MEDIO",
+            "ALTO"
+          ]
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "enum": [
+                "GENIALLY",
+                "POWTOON",
+                "CANVA",
+                "EDUCAPLAY",
+                "PODCAST",
+                "VIDEO_CORTO",
+                "OTRA"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subjectName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subjectCode": {
+          "type": "string"
+        },
+        "professorName": {
+          "type": "string"
+        },
+        "weekNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "referenceResource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "description"
+          ],
+          "properties": {
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        },
+        "script": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/interactiveScript"
+            },
+            {
+              "$ref": "#/$defs/audiovisualScript"
+            }
+          ]
+        },
+        "bibliography": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "style",
+              "sourceUrl"
+            ],
+            "properties": {
+              "reference": {
+                "type": "string",
+                "minLength": 1
+              },
+              "style": {
+                "const": "APA7"
+              },
+              "sourceUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "imageAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "weekNumber",
+        "figureNumber",
+        "title",
+        "altText",
+        "source",
+        "prompt",
+        "style",
+        "mimeType",
+        "fileName",
+        "storage"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "kind": {
+          "const": "image"
+        },
+        "weekNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "figureNumber": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "altText": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string"
+        },
+        "mimeType": {
+          "type": "string",
+          "pattern": "^image/"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "href"
+          ],
+          "properties": {
+            "type": {
+              "const": "endpoint"
+            },
+            "href": {
+              "type": "string",
+              "pattern": "^/api/generated-images/"
+            }
+          }
+        }
+      }
+    },
+    "interactiveScreen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "referenceElements",
+        "contentText",
+        "productionDescription"
+      ],
+      "properties": {
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "referenceElements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contentText": {
+          "type": "string"
+        },
+        "productionDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "audiovisualScene": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "referenceElements",
+        "voiceOver",
+        "onScreenText",
+        "productionDescription"
+      ],
+      "properties": {
+        "order": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "referenceElements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "voiceOver": {
+          "type": "string"
+        },
+        "onScreenText": {
+          "type": "string"
+        },
+        "productionDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "interactiveScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "screens"
+      ],
+      "properties": {
+        "format": {
+          "const": "interactive"
+        },
+        "screens": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/interactiveScreen"
+          }
+        }
+      }
+    },
+    "audiovisualScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "hook",
+        "development",
+        "motivationalClosing",
+        "scenes"
+      ],
+      "properties": {
+        "format": {
+          "const": "audiovisual"
+        },
+        "hook": {
+          "type": "string",
+          "minLength": 1
+        },
+        "development": {
+          "type": "string",
+          "minLength": 1
+        },
+        "motivationalClosing": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scenes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/audiovisualScene"
+          }
+        }
+      }
+    }
+  }
+}

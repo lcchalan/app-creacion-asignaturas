@@ -175,10 +175,10 @@ export async function sendPlainTextEmail(input: {
   try {
     const greeting = await readSmtpResponse(socket);
     if (greeting.code !== 220) throw new Error(`SMTP no aceptó la conexión: ${greeting.text}`);
-    await smtpCommand(socket, `EHLO ${safeHeader(process.env.SMTP_HELO_NAME || "luis.local")}`, [250]);
+    await smtpCommand(socket, `EHLO ${safeHeader(process.env.SMTP_HELO_NAME || "gestion-guia.local")}`, [250]);
     if (config.startTls) {
       socket = await upgradeStartTls(socket, config.host);
-      await smtpCommand(socket, `EHLO ${safeHeader(process.env.SMTP_HELO_NAME || "luis.local")}`, [250]);
+      await smtpCommand(socket, `EHLO ${safeHeader(process.env.SMTP_HELO_NAME || "gestion-guia.local")}`, [250]);
     }
     if (config.user) {
       await smtpCommand(socket, "AUTH LOGIN", [334]);
@@ -227,7 +227,7 @@ export async function sendPasswordResetEmail(input: {
   const body = [
     greeting,
     "",
-    "Se solicitó restablecer la contraseña de su cuenta en LUIS - Planes Docentes y Guías Didácticas.",
+    "Se solicitó restablecer la contraseña de su cuenta en el Sistema de Gestión Guía didáctica.",
     "",
     "Abra el siguiente enlace para crear una nueva contraseña:",
     input.resetUrl,
@@ -236,11 +236,11 @@ export async function sendPasswordResetEmail(input: {
     "",
     "Si usted no solicitó este cambio, ignore este mensaje. Su contraseña actual seguirá vigente.",
     "",
-    "LUIS",
+    "Sistema de Gestión Guía didáctica",
   ].join("\n");
   await sendPlainTextEmail({
     to: input.to,
-    subject: "Restablecimiento de contraseña - LUIS",
+    subject: "Restablecimiento de contraseña - Sistema de Gestión Guía didáctica",
     body,
   });
 }

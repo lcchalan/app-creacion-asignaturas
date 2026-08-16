@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-LUIS incorpora un segundo modo de elaboración para asignaturas que ya disponen de un Plan Docente y, opcionalmente, una Guía Didáctica organizados en 16 semanas. El sistema conserva esos documentos como fuentes históricas y ayuda al profesor a proponer una adaptación pedagógica al sistema modular de 8 semanas lectivas.
+Sistema de Gestión Guía didáctica incorpora un segundo modo de elaboración para asignaturas que ya disponen de un Plan Docente y, opcionalmente, una Guía Didáctica organizados en 16 semanas. El sistema conserva esos documentos como fuentes históricas y ayuda al profesor a proponer una adaptación pedagógica al sistema modular de 8 semanas lectivas.
 
 Este flujo no sustituye la revisión del profesor. La IA propone cambios trazables y justificados; el profesor acepta, edita, rechaza o solicita una nueva propuesta antes de generar el documento modular.
 
@@ -49,7 +49,7 @@ Una nueva carga no borra el archivo anterior: lo desactiva y conserva su histori
 9. Si existe una Guía anterior, solicitar y aprobar su propuesta de adaptación.
 10. Generar y aprobar las semanas de la Guía Didáctica.
 
-Si no se carga una Guía anterior, LUIS genera una guía nueva a partir del Plan Docente modular aprobado por el profesor.
+Si no se carga una Guía anterior, Sistema de Gestión Guía didáctica genera una guía nueva a partir del Plan Docente modular aprobado por el profesor.
 
 ## Propuesta de adaptación
 

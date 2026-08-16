@@ -3,6 +3,7 @@ export const knowledgeResourceKindLabels = {
   PLAN_TEMPLATE: "Formato del Plan Docente",
   PLAN_PROMPT: "Prompt del Plan Docente",
   GUIDE_PROMPT: "Prompt de la Guía Didáctica",
+  GUIDE_RESOURCE_SPEC: "Especificación de recursos educativos para la Guía Didáctica",
 } as const;
 
 export type KnowledgeResourceKind = keyof typeof knowledgeResourceKindLabels;
@@ -23,6 +24,7 @@ export function suggestedResourceKind(title: string): KnowledgeResourceKind | nu
   if (/\bformato\b/.test(normalized) && mentionsPlan) return "PLAN_TEMPLATE";
   if (/\bprompt\b/.test(normalized) && mentionsPlan) return "PLAN_PROMPT";
   if (/\bprompt\b/.test(normalized) && mentionsGuide) return "GUIDE_PROMPT";
+  if (/\bespecificacion\b/.test(normalized) && /\brecursos? educativos?\b/.test(normalized) && mentionsGuide) return "GUIDE_RESOURCE_SPEC";
   return null;
 }
 
