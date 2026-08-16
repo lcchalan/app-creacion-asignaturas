@@ -68,6 +68,27 @@ Los códigos internos, por ejemplo `TA-AC`, se mantienen para las relaciones de 
 
 La compatibilidad de un recurso se evalúa contra el código y el nombre del tipo de asignatura para mantener soporte a datos históricos.
 
+## Ámbito por proceso de las Especificaciones funcionales
+
+Las Especificaciones funcionales pueden aplicarse de forma independiente a estos procesos:
+
+- generación del Plan Docente;
+- adaptación del Plan Docente 16 → 8;
+- generación de la Guía Didáctica;
+- adaptación de la Guía Didáctica 16 → 8.
+
+El ámbito por proceso se almacena en `GenerationInstruction.processes` y se combina con nivel académico, modalidad, duración y tipo de asignatura. Esto permite ajustar una política pedagógica de adaptación sin alterar otros procesos de generación.
+
+La propuesta de adaptación y el Plan Docente conservan snapshots de las Especificaciones funcionales utilizadas, de modo que una actualización posterior no se aplique retroactivamente a una propuesta ya aprobada.
+
+## Limpieza controlada durante construcción
+
+Mientras el sistema se encuentra en construcción puede ejecutarse `npm run db:cleanup-ai-knowledge` para obtener una vista previa de las versiones no activas. La ejecución real requiere `--apply`.
+
+La limpieza conserva todos los registros con estado `ACTIVE` y elimina de la base de datos versiones anteriores de Especificaciones funcionales y documentos de conocimiento. También depura snapshots que apuntaban a versiones eliminadas. Las versiones de indicadores inactivas solo se eliminan cuando no tienen revisiones académicas asociadas; una versión con revisiones se conserva para no destruir trazabilidad de evaluación.
+
+Antes de eliminar registros, el comando genera un respaldo JSON en `backups/`. Los archivos físicos de conocimiento no se borran automáticamente y quedan como respaldo de seguridad fuera del catálogo activo.
+
 ## Migración
 
 La migración `20260813020000_v31_knowledge_lifecycle` agrega:
@@ -77,3 +98,5 @@ La migración `20260813020000_v31_knowledge_lifecycle` agrega:
 - `retirementReason`;
 - `retiredById`;
 - relaciones con el usuario que ejecutó la baja.
+
+La migración `20260816113000_v31_adaptation_functional_specs` agrega el ámbito `processes` a las Especificaciones funcionales y los snapshots de especificaciones utilizados por propuestas de adaptación y Planes Docentes.

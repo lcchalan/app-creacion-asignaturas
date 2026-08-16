@@ -1,5 +1,21 @@
 import { normalizeCatalogCode } from "./catalog-policy.js";
 
+export const knowledgeInstructionProcesses = [
+  "PLAN_GENERATION",
+  "PLAN_ADAPTATION",
+  "GUIDE_GENERATION",
+  "GUIDE_ADAPTATION",
+] as const;
+
+export type KnowledgeInstructionProcess = typeof knowledgeInstructionProcesses[number];
+
+export const knowledgeInstructionProcessLabels: Record<KnowledgeInstructionProcess, string> = {
+  PLAN_GENERATION: "Generación del Plan Docente",
+  PLAN_ADAPTATION: "Adaptación del Plan Docente 16 → 8",
+  GUIDE_GENERATION: "Generación de la Guía Didáctica",
+  GUIDE_ADAPTATION: "Adaptación de la Guía Didáctica 16 → 8",
+};
+
 export type KnowledgePromptContext = {
   level: string;
   modality: string;
@@ -13,6 +29,10 @@ export type KnowledgeScope = {
   modalities: string[];
   durations: number[];
   subjectTypes: string[];
+};
+
+export type KnowledgeProcessScope = {
+  processes: string[];
 };
 
 function normalizedScopeCode(value: string) {
@@ -51,6 +71,13 @@ export function appliesToKnowledgeContext(item: KnowledgeScope, context: Knowled
     && exactScopeMatch(item.modalities, context.modality)
     && (!item.durations.length || item.durations.includes(context.weeks))
     && subjectTypeScopeMatch(item.subjectTypes, context);
+}
+
+export function appliesToKnowledgeProcess(item: KnowledgeProcessScope, process: KnowledgeInstructionProcess) {
+  if (!item.processes.length) {
+    return process === "GUIDE_GENERATION" || process === "GUIDE_ADAPTATION";
+  }
+  return item.processes.includes(process);
 }
 
 export function knowledgeScopeMismatches(item: KnowledgeScope, context: KnowledgePromptContext) {

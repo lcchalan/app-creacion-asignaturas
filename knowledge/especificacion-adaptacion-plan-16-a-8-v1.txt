@@ -1,0 +1,41 @@
+ESPECIFICACIÓN FUNCIONAL — REESTRUCTURACIÓN PEDAGÓGICA DEL PLAN DOCENTE DE 16 A 8 SEMANAS
+
+1. La adaptación de un Plan Docente de 16 a 8 semanas es una reestructuración pedagógica integral. No debe resolverse como una compresión mecánica, una división aritmética ni un emparejamiento fijo de dos semanas anteriores por una semana nueva.
+
+2. La planificación de 8 semanas debe construirse prioritariamente desde los resultados de aprendizaje institucionales vigentes, los contenidos oficiales de la oferta académica, las horas, el tipo de asignatura y las reglas de evaluación. El Plan Docente anterior se utiliza como antecedente, experiencia previa y fuente de trazabilidad, pero no determina por sí solo la nueva secuencia.
+
+3. Para cada resultado de aprendizaje se deben identificar las unidades, temas y subtemas que contribuyen de manera directa y suficiente a su logro. Los contenidos deben organizarse en función del aprendizaje que se espera alcanzar y no únicamente por su posición en el documento anterior.
+
+4. Como criterio pedagógico general, un resultado de aprendizaje debe desarrollarse en un bloque de una o más semanas consecutivas. Una vez que se inicia el desarrollo principal de un resultado posterior, no se debe regresar a un resultado anterior salvo que exista una actividad integradora explícita y académicamente justificada.
+
+5. Un resultado de aprendizaje puede requerir una, dos o más semanas. La cantidad de semanas debe responder a la complejidad del resultado, la amplitud de los contenidos, la progresión cognitiva, las actividades previstas y la evidencia de aprendizaje requerida.
+
+6. Dentro de cada bloque se debe favorecer una progresión coherente: fundamentos y comprensión antes de análisis, aplicación, integración, resolución de problemas, producción o evaluación, según la naturaleza de la asignatura.
+
+7. La semana final puede tener carácter integrador cuando exista una justificación pedagógica explícita. En ese caso puede recuperar resultados previamente desarrollados, pero debe conservar un resultado principal de cierre y no utilizar la integración como mecanismo para cubrir resultados que no fueron desarrollados previamente.
+
+8. Las unidades institucionales de la oferta académica deben conservarse y mantenerse identificables. Los nombres y la jerarquía de unidad, tema y subtema no deben inventarse, renombrarse ni sustituirse por denominaciones creadas por la IA.
+
+9. Los temas y subtemas institucionales pueden reorganizarse, trasladarse, agruparse, articularse, sintetizarse o integrarse pedagógicamente cuando ello mejore la progresión del aprendizaje y permita desarrollar adecuadamente los resultados en 8 semanas.
+
+10. La reducción de semanas no constituye por sí sola una justificación para eliminar un tema o subtema institucional.
+
+11. Se puede proponer la omisión de un tema o subtema cuando su alcance esté explícita y suficientemente cubierto por otro tema o subtema institucional que se conserva, de manera que no se pierda el aprendizaje esperado ni la cobertura curricular necesaria.
+
+12. Toda propuesta de omisión de un tema o subtema institucional debe presentarse de forma independiente para decisión del profesor. Debe identificar: el contenido que se propone omitir, el contenido institucional que conserva la cobertura, la semana o semanas donde permanece esa cobertura, los resultados de aprendizaje relacionados y una justificación pedagógica concreta del solapamiento o redundancia.
+
+13. La IA nunca debe ejecutar automáticamente una omisión curricular. La decisión final corresponde al profesor. Una omisión solo puede aplicarse al Plan Docente final cuando haya sido aceptada expresamente dentro de la propuesta de adaptación.
+
+14. Si el profesor rechaza una omisión o solicita conservar un contenido, la siguiente propuesta debe considerar esa observación y reorganizar la estructura semanal sin ignorar la decisión docente.
+
+15. Cuando dos contenidos oficiales deban permanecer pero puedan trabajarse de forma articulada, se debe preferir la agrupación, unificación o síntesis pedagógica antes que la omisión.
+
+16. La propuesta debe cubrir todos los resultados de aprendizaje institucionales vigentes y debe mostrar de forma clara qué semanas contribuyen a cada uno. No se deben inventar resultados adicionales ni alterar su redacción oficial.
+
+17. La propuesta debe evitar concentrar artificialmente numerosas unidades al final del módulo solo para declarar que fueron cubiertas. Cada semana debe contener una carga académica razonable y una relación clara entre resultado, contenidos y propósito pedagógico.
+
+18. La distribución de ACD, APE y AA debe respetar exactamente los totales institucionales de la oferta vigente y reorganizarse de forma coherente dentro de las 8 semanas. La reestructuración no puede crear ni eliminar horas oficiales.
+
+19. Las actividades y la evaluación deben alinearse con el resultado principal y los contenidos de cada bloque. Las actividades calificadas deben respetar las reglas oficiales del tipo de asignatura y no deben añadirse calificaciones únicamente para completar la distribución semanal.
+
+20. La propuesta debe explicar la trazabilidad respecto del Plan Docente anterior, el impacto en horas y evaluación, y la justificación de cada decisión relevante. La aprobación de la estructura final corresponde al profesor antes de generar el Plan Docente modular.

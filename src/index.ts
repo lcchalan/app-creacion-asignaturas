@@ -90,7 +90,10 @@ import { buildTeachingPlanWord, extractTemplateLogo } from "./teaching-plan-word
 import { sendPasswordResetEmail } from "./services/smtp-mailer.js";
 import {
   appliesToKnowledgeContext,
+  appliesToKnowledgeProcess,
+  knowledgeInstructionProcesses,
   knowledgeScopeMismatches,
+  type KnowledgeInstructionProcess,
   type KnowledgePromptContext,
 } from "./academic/knowledge-scope.js";
 import {
@@ -108,6 +111,9 @@ import {
   adaptationProposalOutputSchema,
   adaptationTargetSchema,
   assertAdaptationProposalConsistency,
+  assertCurrentAdaptationWeeklyStructure,
+  assertTeachingPlanRespectsApprovedAdaptation,
+  normalizeAdaptationProposalWeekReferences,
   legacyDocumentTypeSchema,
   projectWorkflowModeSchema,
   resolvedAdaptationContent,
@@ -513,6 +519,8 @@ const knowledgeResourceKindSchema = z.enum([
 
 const impactDecisionSchema = z.enum(["USE_NEW", "KEEP_CURRENT", "DO_NOT_ACTIVATE"]);
 
+const knowledgeInstructionProcessSchema = z.enum(knowledgeInstructionProcesses);
+
 const instructionWriteSchema = z.object({
   key: z.string().trim().min(1).max(100),
   title: z.string().trim().min(1).max(200),
@@ -522,6 +530,7 @@ const instructionWriteSchema = z.object({
   conflictResolution: z.string().trim().max(5000).default(""),
   conflictDecision: impactDecisionSchema.optional(),
   sourceId: z.string().uuid().optional(),
+  processes: z.array(knowledgeInstructionProcessSchema).min(1).max(knowledgeInstructionProcesses.length),
 }).merge(contextScopeSchema);
 
 const knowledgeWriteSchema = z.object({
@@ -662,6 +671,50 @@ function bibliographyLegacyStrings(entries: Array<z.infer<typeof bibliographyEnt
   };
 }
 
+function canonicalJsonForComparison(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJsonForComparison);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, item]) => [key, canonicalJsonForComparison(item)]),
+    );
+  }
+  return value;
+}
+
+function sameJsonValue(left: unknown, right: unknown) {
+  return JSON.stringify(canonicalJsonForComparison(left)) === JSON.stringify(canonicalJsonForComparison(right));
+}
+
+type BibliographyEntryComparisonInput = {
+  type: string;
+  citation: string;
+  title: string;
+  url: string;
+  notes: string;
+  sortOrder: number;
+};
+
+function normalizeBibliographyEntriesForComparison(entries: BibliographyEntryComparisonInput[]) {
+  return entries
+    .map((entry) => ({
+      type: entry.type,
+      citation: entry.citation,
+      title: entry.title,
+      url: entry.url,
+      notes: entry.notes,
+      sortOrder: entry.sortOrder,
+    }))
+    .sort((left, right) =>
+      left.type.localeCompare(right.type) ||
+      left.sortOrder - right.sortOrder ||
+      left.citation.localeCompare(right.citation) ||
+      left.title.localeCompare(right.title) ||
+      left.url.localeCompare(right.url) ||
+      left.notes.localeCompare(right.notes));
+}
+
 const projectSetupSchema = z.object({
   institutionalDataReviewed: z.literal(true),
   microcurricularPresentation: microcurricularPresentationSchema,
@@ -761,6 +814,7 @@ const adaptationChangeReviewSchema = z.object({
 const adaptationAnalyzeRequestSchema = z.object({
   target: adaptationTargetSchema,
   teacherFeedback: z.string().trim().max(12_000).optional().default(""),
+  reopenConfirmedPlan: z.boolean().optional().default(false),
 });
 
 const teachingPlanMethodologiesSchema = z.object({
@@ -1289,6 +1343,27 @@ function appliesToContext(item: {
   return appliesToKnowledgeContext(item, context);
 }
 
+async function activeFunctionalSpecifications(
+  context: PromptContext,
+  process: KnowledgeInstructionProcess,
+) {
+  const instructions = await database.generationInstruction.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: [{ priority: "asc" }, { activatedAt: "asc" }, { version: "desc" }],
+  });
+  return instructions.filter((item) =>
+    appliesToKnowledgeProcess(item, process) && appliesToContext(item, context));
+}
+
+function functionalSpecificationContext(
+  instructions: Array<{ title: string; version: number; priority: number; content: string }>,
+) {
+  if (!instructions.length) return "";
+  return `ESPECIFICACIONES FUNCIONALES APLICABLES\n${instructions.map((item) =>
+    `### ${item.title} · versión ${item.version} · prioridad ${item.priority}\n${item.content.trim()}`
+  ).join("\n\n")}`;
+}
+
 function impactChecksum(input: unknown) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
@@ -1406,13 +1481,17 @@ function analyzeImpactDraft(input: {
   modalities: string[];
   durations: number[];
   subjectTypes: string[];
+  processes?: string[];
   priority: number;
   appliesToAll?: boolean;
   resourceKind?: string;
-}, existing: Array<{ title: string; content: string; priority: number; key?: string; version?: number; resourceKind?: string }>) {
+}, existing: Array<{ title: string; content: string; priority: number; key?: string; version?: number; resourceKind?: string; processes?: string[] }>) {
   const rules = extractRules(input.content);
+  const comparableExisting = input.kind === "SPECIFICATION" && input.processes?.length
+    ? existing.filter((item) => !item.processes?.length || item.processes.some((process) => input.processes!.includes(process)))
+    : existing;
   const newTerms = new Set(input.content.toLocaleLowerCase("es").match(/[a-záéíóúñ]{5,}/g) || []);
-  const comparisons = existing.map((item) => {
+  const comparisons = comparableExisting.map((item) => {
     const terms = new Set(item.content.toLocaleLowerCase("es").match(/[a-záéíóúñ]{5,}/g) || []);
     const overlap = [...newTerms].filter((term) => terms.has(term)).length;
     return {
@@ -1432,7 +1511,7 @@ function analyzeImpactDraft(input: {
   const contradictions = conflictPatterns.flatMap((pattern) => {
     const proposed = matchingContext(input.content, pattern.expression);
     if (!proposed) return [];
-    return existing.flatMap((item) => {
+    return comparableExisting.flatMap((item) => {
       const current = matchingContext(item.content, pattern.expression);
       if (!current || current === proposed) return [];
       const currentAuthority = sourceAuthority(input.kind === "DOCUMENT" ? "DOCUMENT" : "SPECIFICATION", item.resourceKind);
@@ -1463,6 +1542,7 @@ function analyzeImpactDraft(input: {
       modalities: input.modalities,
       durations: input.durations,
       subjectTypes: input.subjectTypes,
+      processes: input.processes || [],
     },
     improvements: [
       "Actualiza el contexto que se incorporará en futuras generaciones compatibles.",
@@ -2045,7 +2125,11 @@ REGLA DE EJECUCIÓN DEL SISTEMA
 `.trim();
 }
 
-async function activeAdministrativeContext(context: PromptContext, projectId?: string) {
+async function activeAdministrativeContext(
+  context: PromptContext,
+  projectId?: string,
+  process: KnowledgeInstructionProcess = "GUIDE_GENERATION",
+) {
   const projectSnapshot = projectId ? await database.project.findUnique({
     where: { id: projectId },
     select: {
@@ -2083,7 +2167,8 @@ async function activeAdministrativeContext(context: PromptContext, projectId?: s
       include: { indicators: { orderBy: { sortOrder: "asc" } } },
     }),
   ]);
-  const applicableInstructions = instructions.filter((item) => appliesToContext(item, context));
+  const applicableInstructions = instructions.filter((item) =>
+    appliesToKnowledgeProcess(item, process) && appliesToContext(item, context));
   const applicableDocuments = documents.filter((item) => item.appliesToAll || appliesToContext(item, context));
   if (projectId && projectSnapshot && !guideStarted) {
     await database.project.update({
@@ -2361,8 +2446,10 @@ function adaptationProposalPayload(proposal: AdaptationProposalWithDetails) {
       action: change.action,
       sourceWeeks: change.sourceWeeks,
       sourceContent: change.sourceContent,
+      sourceWeekBreakdown: change.sourceWeekBreakdown ?? [],
       proposedWeeks: change.proposedWeeks,
       proposedContent: change.proposedContent,
+      proposedWeekBreakdown: change.proposedWeekBreakdown ?? [],
       rationale: change.rationale,
       learningOutcomes: change.learningOutcomes,
       hoursImpact: change.hoursImpact,
@@ -2373,6 +2460,23 @@ function adaptationProposalPayload(proposal: AdaptationProposalWithDetails) {
       teacherComment: change.teacherComment ?? "",
       decidedAt: change.decidedAt?.toISOString() ?? null,
     })),
+  };
+}
+
+async function adaptationProposalPayloadWithSpecifications(proposal: AdaptationProposalWithDetails) {
+  const snapshotIds = proposal.specificationSnapshotIds || [];
+  const specifications = snapshotIds.length
+    ? await database.generationInstruction.findMany({
+        where: { id: { in: snapshotIds } },
+        select: { id: true, title: true, version: true, priority: true, processes: true },
+      })
+    : [];
+  const order = new Map(snapshotIds.map((id, index) => [id, index]));
+  specifications.sort((left, right) =>
+    (order.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(right.id) ?? Number.MAX_SAFE_INTEGER));
+  return {
+    ...adaptationProposalPayload(proposal),
+    specificationSnapshots: specifications,
   };
 }
 
@@ -2391,15 +2495,15 @@ async function legacyDocumentInputFile(document: {
 
 function adaptationActionLabel(action: string) {
   return ({
-    KEEP: "Conservar",
-    GROUP: "Agrupar",
-    MERGE: "Unificar",
-    SYNTHESIZE: "Sintetizar",
-    MOVE: "Trasladar",
+    KEEP: "Conservar con ajuste de secuencia",
+    GROUP: "Consolidar semanas",
+    MERGE: "Integrar contenidos",
+    SYNTHESIZE: "Sintetizar contenidos",
+    MOVE: "Trasladar a otras semanas",
     REFORMULATE: "Reformular pedagógicamente",
-    DELETE: "Eliminar",
-    SPLIT: "Dividir",
-    UPDATE: "Actualizar",
+    DELETE: "Proponer omisión",
+    SPLIT: "Dividir en semanas consecutivas",
+    UPDATE: "Actualizar formulación",
   } as Record<string, string>)[action] || action;
 }
 
@@ -2410,6 +2514,11 @@ function approvedAdaptationContext(proposal: AdaptationProposalWithDetails) {
     sourceContent: change.sourceContent,
     proposedWeeks: change.proposedWeeks,
     finalContent: resolvedAdaptationContent(change),
+    coverageRetainedIn: change.action === "DELETE"
+      ? (change.decision === "EDITED"
+          ? (change.teacherEditedContent?.trim() || change.proposedContent)
+          : change.proposedContent)
+      : "",
     rationale: change.rationale,
     learningOutcomes: change.learningOutcomes,
     hoursImpact: change.hoursImpact,
@@ -2432,7 +2541,10 @@ ${JSON.stringify(resolvedChanges, null, 2)}
 
 REGLAS DE EJECUCIÓN
 - Respete esta propuesta como decisión pedagógica revisada por el profesor.
-- No reincorpore contenidos que fueron eliminados ni revierta agrupaciones, síntesis o traslados aprobados.
+- Mantenga en cada semana el primaryLearningOutcome y los contenidos institucionales aprobados para esa semana.
+- No reincorpore contenidos cuya omisión fue aceptada por el profesor.
+- Cuando una omisión aprobada identifique contenido conservado como cobertura, mantenga esa cobertura sin convertir la referencia en un contenido nuevo.
+- Respete literalmente la jerarquía y los nombres de las unidades, temas y subtemas institucionales que permanezcan.
 - Use exclusivamente los resultados de aprendizaje y contenidos institucionales vigentes suministrados por el sistema.
 - Mantenga la distribución oficial de evaluación correspondiente al tipo de asignatura.
 `.trim();
@@ -2457,7 +2569,9 @@ function buildPlanAdaptationAnalysisInput(input: {
   const category = planCategorySchema.parse(input.offering.subjectType.planCategory);
   return `
 TAREA
-Analice el Plan Docente existente de 16 semanas adjunto y elabore una propuesta pedagógica trazable para adaptarlo a ${input.project.totalWeeks} semanas lectivas del sistema modular. No genere todavía el Plan Docente final.
+Analice el Plan Docente existente de 16 semanas adjunto y elabore una propuesta pedagógica trazable para adaptarlo a ${input.project.totalWeeks} semanas lectivas. No genere todavía el Plan Docente final.
+
+Aplique como política pedagógica las ESPECIFICACIONES FUNCIONALES ACTIVAS suministradas en las instrucciones del sistema. Si una directriz pedagógica cambia en el futuro, prevalece la versión activa aplicable al contexto de esta asignatura.
 
 DATOS DE LA ASIGNATURA VIGENTE
 ${JSON.stringify(input.project, null, 2)}
@@ -2478,17 +2592,33 @@ ${JSON.stringify({
 ${input.teacherFeedback ? `RETROALIMENTACIÓN DEL PROFESOR SOBRE LA PROPUESTA ANTERIOR
 ${input.teacherFeedback}
 ` : ""}
-CRITERIOS OBLIGATORIOS
-1. El documento antiguo es una fuente de contenido y experiencia previa; los datos institucionales vigentes y los documentos institucionales adjuntos tienen prioridad.
-2. La propuesta debe cubrir exactamente las semanas 1 a ${input.project.totalWeeks} y relacionar todos los resultados de aprendizaje y contenidos institucionales vigentes.
-3. Puede conservar, agrupar, unificar, sintetizar, trasladar, reformular pedagógicamente, eliminar, dividir o actualizar contenidos del documento anterior.
-4. Cada cambio debe identificar las semanas de origen, la acción, las semanas de destino, el contenido propuesto y una justificación pedagógica específica.
-5. Toda eliminación debe explicar por qué el contenido es repetido, desactualizado, no pertinente o ajeno a los resultados vigentes. No elimine silenciosamente.
-6. No invente resultados de aprendizaje ni contenidos institucionales. En weeklyStructure use literalmente los valores vigentes suministrados por el sistema.
-7. Explique el impacto en horas y evaluación. La evaluación final debe respetar las reglas oficiales del tipo ${category}.
-8. En institutionalBasis cite el nombre concreto del lineamiento, formato, guía o norma que respalda la decisión.
-9. sourceWeeks debe ser 16 y targetWeeks debe ser ${input.project.totalWeeks}.
-10. La salida será revisada cambio por cambio por el profesor antes de generar el documento final.
+CONTRATO ESTRUCTURAL DE SALIDA
+1. sourceWeeks debe ser 16 y targetWeeks debe ser ${input.project.totalWeeks}.
+2. weeklyStructure debe contener exactamente una entrada para cada semana 1 a ${input.project.totalWeeks}.
+3. En cada semana:
+   - primaryLearningOutcome debe copiar literalmente un resultado vigente de la oferta.
+   - learningOutcomes debe contener primaryLearningOutcome y solo resultados vigentes.
+   - integrative indica si la semana integra más de un resultado conforme a las especificaciones funcionales activas.
+   - contents debe usar exclusivamente valores literales de unitContents de la oferta.
+   - si incluye un tema, incluya también su unidad; si incluye un subtema, incluya también su unidad y su tema.
+   - pedagogicalPurpose debe explicar el avance esperado en esa semana.
+   - sourceWeeks identifica únicamente semanas de origen 1-16 usadas como trazabilidad.
+4. Cada resultado de aprendizaje vigente debe quedar cubierto por al menos una semana.
+5. No invente, renombre ni cambie de jerarquía resultados, unidades, temas o subtemas institucionales.
+6. Si las especificaciones funcionales permiten proponer la omisión de un tema o subtema institucional, represéntela como un cambio independiente con action = DELETE para decisión explícita del profesor:
+   - sourceContent: texto institucional exacto que se propone omitir.
+   - proposedContent: texto institucional exacto del contenido conservado que mantiene la cobertura.
+   - proposedWeeks: semana(s) donde permanece esa cobertura.
+   - rationale: justificación pedagógica concreta.
+   - learningOutcomes: resultados cuya cobertura se mantiene.
+7. Si action = DELETE retira material del documento anterior que NO pertenece a la oferta vigente, proposedContent y proposedWeeks deben quedar vacíos.
+8. Para acciones distintas de DELETE, proposedContent y proposedWeeks son obligatorios.
+9. sourceWeeks de cada cambio siempre corresponde al documento anterior (1-16); proposedWeeks siempre corresponde al módulo de destino (1-${input.project.totalWeeks}).
+10. En cada cambio, sourceWeekBreakdown debe desglosar qué contenido correspondía a cada semana de origen incluida en sourceWeeks. Use una entrada por semana, con week y content exactos según el documento anterior.
+11. En cada cambio distinto de DELETE, proposedWeekBreakdown debe desglosar qué contenido quedará en cada semana de destino incluida en proposedWeeks. Use una entrada por semana, con week y content exactos según la propuesta.
+12. Explique hoursImpact y evaluationImpact. La evaluación final debe respetar las reglas oficiales del tipo ${category}.
+13. institutionalBasis debe identificar las fuentes institucionales que respaldan el cambio.
+14. La propuesta será revisada cambio por cambio y luego aprobada expresamente por el profesor antes de generar el Plan Docente.
 `.trim();
 }
 
@@ -2508,6 +2638,8 @@ function buildGuideAdaptationAnalysisInput(input: {
 TAREA
 Analice la Guía Didáctica existente de 16 semanas adjunta y elabore una propuesta pedagógica trazable para adaptarla a ${input.project.totalWeeks} semanas lectivas. No genere todavía la guía final ni el contenido completo de las semanas.
 
+Aplique como política pedagógica las ESPECIFICACIONES FUNCIONALES ACTIVAS suministradas en las instrucciones del sistema. El Plan Docente modular vigente es la fuente obligatoria de secuencia, resultados y contenidos para la Guía Didáctica.
+
 DATOS DE LA ASIGNATURA
 ${JSON.stringify(input.project, null, 2)}
 
@@ -2517,15 +2649,20 @@ ${JSON.stringify(input.plan, null, 2)}
 ${input.teacherFeedback ? `RETROALIMENTACIÓN DEL PROFESOR SOBRE LA PROPUESTA ANTERIOR
 ${input.teacherFeedback}
 ` : ""}
-CRITERIOS OBLIGATORIOS
-1. La Guía Didáctica adaptada debe derivarse del Plan Docente modular vigente.
-2. Puede conservar, agrupar, unificar, sintetizar, trasladar, reformular, eliminar, dividir o actualizar contenidos y orientaciones del documento anterior.
-3. Cada cambio debe identificar las semanas de origen, la acción, las semanas de destino y una justificación pedagógica concreta.
-4. No invente unidades, contenidos, subcontenidos ni resultados de aprendizaje. En weeklyStructure use literalmente los que aparecen en el Plan Docente vigente.
-5. Explique el impacto en la orientación didáctica, actividades, recursos y evaluación.
-6. No use la referencia de la propia guía como fuente bibliográfica para generarla.
-7. Toda eliminación o sustitución debe quedar justificada y sujeta a revisión del profesor.
-8. sourceWeeks debe ser 16 y targetWeeks debe ser ${input.project.totalWeeks}.
+CONTRATO ESTRUCTURAL DE SALIDA
+1. sourceWeeks debe ser 16 y targetWeeks debe ser ${input.project.totalWeeks}.
+2. weeklyStructure debe contener exactamente una entrada para cada semana 1 a ${input.project.totalWeeks}.
+3. La estructura semanal debe derivarse del Plan Docente modular vigente; no puede omitir contenidos ni resultados que el Plan Docente asigne a la semana correspondiente.
+4. primaryLearningOutcome debe copiar literalmente un resultado del Plan Docente; learningOutcomes solo puede contener resultados del mismo Plan Docente.
+5. contents debe usar exclusivamente contenidos literales del Plan Docente y mantener visible su jerarquía unidad → tema → subtema.
+6. integrative debe reflejar una integración real respaldada por el Plan Docente o por las Especificaciones funcionales activas; no invente integraciónes para resolver restricciones de formato.
+7. Cada cambio debe identificar semanas de origen, acción, semanas de destino y una justificación pedagógica concreta.
+8. Puede conservar, agrupar, unificar, sintetizar, trasladar, reformular, dividir o actualizar orientaciones del documento anterior según las Especificaciones funcionales, pero no puede retirar contenidos obligatorios del Plan Docente modular aprobado.
+9. Explique el impacto en orientación didáctica, actividades, recursos y evaluación.
+10. No use la referencia de la propia guia como fuente bibliográfica para generarla.
+11. Toda omisión o sustitución de material de la guía anterior debe quedar justificada y sujeta a revisión del profesor.
+12. En cada cambio, sourceWeeks corresponde exclusivamente a semanas de la guía anterior (1-16) y proposedWeeks exclusivamente a semanas de la guía modular de destino (1-${input.project.totalWeeks}).
+13. En weeklyStructure, week solo puede estar entre 1 y ${input.project.totalWeeks}; sourceWeeks puede estar entre 1 y 16.
 `.trim();
 }
 
@@ -2539,23 +2676,27 @@ function sameIdentifierSet(left: string[], right: string[]) {
 function assertPlanAdaptationSourcesStillMatch(
   proposal: AdaptationProposalWithDetails,
   context: Awaited<ReturnType<typeof activePlanContext>>,
+  currentSpecificationIds: string[],
 ) {
   const currentDocuments = context.institutionalDocuments.map((item) => item.id);
   if (proposal.templateSnapshotId !== context.template.id ||
       proposal.promptSnapshotId !== context.prompt.id ||
-      !sameIdentifierSet(proposal.documentSnapshotIds, currentDocuments)) {
-    throw new Error("Las fuentes institucionales activas cambiaron después de aprobar la propuesta. Genere y revise una nueva propuesta de adaptación antes de crear el Plan Docente.");
+      !sameIdentifierSet(proposal.documentSnapshotIds, currentDocuments) ||
+      !sameIdentifierSet(proposal.specificationSnapshotIds, currentSpecificationIds)) {
+    throw Object.assign(new Error("Las fuentes institucionales o las Especificaciones funcionales activas cambiaron después de aprobar la propuesta. Genere y revise una nueva propuesta de adaptación antes de crear el Plan Docente."), { statusCode: 409 });
   }
 }
 
 function assertGuideAdaptationSourcesStillMatch(
   proposal: AdaptationProposalWithDetails,
   context: Awaited<ReturnType<typeof activeGuideContext>>,
+  currentSpecificationIds: string[],
 ) {
   const currentDocuments = context.institutionalDocuments.map((item) => item.id);
   if (proposal.promptSnapshotId !== context.prompt.id ||
-      !sameIdentifierSet(proposal.documentSnapshotIds, currentDocuments)) {
-    throw new Error("Las fuentes institucionales activas cambiaron después de aprobar la propuesta. Genere y revise una nueva propuesta de adaptación antes de crear la Guía Didáctica.");
+      !sameIdentifierSet(proposal.documentSnapshotIds, currentDocuments) ||
+      !sameIdentifierSet(proposal.specificationSnapshotIds, currentSpecificationIds)) {
+    throw Object.assign(new Error("Las fuentes institucionales o las Especificaciones funcionales activas cambiaron después de aprobar la propuesta. Genere y revise una nueva propuesta de adaptación antes de crear la Guía Didáctica."), { statusCode: 409 });
   }
 }
 
@@ -3677,14 +3818,14 @@ URL adicional: ${body.url || "No indicada"}`,
       const analyzedInput = {
         kind: "SPECIFICATION" as const, key: body.key, title: body.title, content: body.content,
         academicLevels: body.academicLevels, modalities: body.modalities, durations: body.durations,
-        subjectTypes: body.subjectTypes, priority: body.priority,
+        subjectTypes: body.subjectTypes, processes: body.processes, priority: body.priority,
       };
       if (body.impactChecksum !== impactChecksum(analyzedInput)) {
         json(response, 409, { error: "El contenido o el ámbito cambió después del análisis. Analice nuevamente antes de guardar." });
         return;
       }
       const existingForImpact = await database.generationInstruction.findMany({
-        where: { status: "ACTIVE" }, select: { key: true, title: true, version: true, content: true, priority: true },
+        where: { status: "ACTIVE" }, select: { key: true, title: true, version: true, content: true, priority: true, processes: true },
       });
       const impactAnalysis = analyzeImpactDraft(analyzedInput, existingForImpact);
       if (impactAnalysis.contradictions.length && !body.conflictDecision) {
@@ -3710,7 +3851,7 @@ URL adicional: ${body.url || "No indicada"}`,
             key: body.key, title: body.title, content: body.content,
             version: (latest?.version ?? 0) + 1, status: effectiveActivate ? "ACTIVE" : "DRAFT",
             academicLevels: body.academicLevels, modalities: body.modalities,
-            durations: body.durations, subjectTypes: body.subjectTypes, priority: body.priority,
+            durations: body.durations, subjectTypes: body.subjectTypes, processes: body.processes, priority: body.priority,
             impactAnalysis: { ...impactAnalysis, conflictDecision: body.conflictDecision || null, conflictResolution: recordedResolution || null },
             impactChecksum: body.impactChecksum,
             activatedAt: effectiveActivate ? new Date() : null, createdById: admin.id,
@@ -3734,7 +3875,7 @@ URL adicional: ${body.url || "No indicada"}`,
       const analyzedInput = {
         kind: "SPECIFICATION" as const, key: body.key, title: body.title, content: body.content,
         academicLevels: body.academicLevels, modalities: body.modalities, durations: body.durations,
-        subjectTypes: body.subjectTypes, priority: body.priority,
+        subjectTypes: body.subjectTypes, processes: body.processes, priority: body.priority,
       };
       if (body.impactChecksum !== impactChecksum(analyzedInput)) {
         json(response, 409, { error: "El contenido o el ámbito cambió después del análisis. Analice nuevamente antes de guardar." });
@@ -3742,7 +3883,7 @@ URL adicional: ${body.url || "No indicada"}`,
       }
       const existingForImpact = await database.generationInstruction.findMany({
         where: { status: "ACTIVE", id: { not: id } },
-        select: { key: true, title: true, version: true, content: true, priority: true },
+        select: { key: true, title: true, version: true, content: true, priority: true, processes: true },
       });
       const impactAnalysis = analyzeImpactDraft(analyzedInput, existingForImpact);
       if (impactAnalysis.contradictions.length && !body.conflictDecision) {
@@ -3766,7 +3907,7 @@ URL adicional: ${body.url || "No indicada"}`,
           data: {
             key: body.key, title: body.title, content: body.content,
             academicLevels: body.academicLevels, modalities: body.modalities,
-            durations: body.durations, subjectTypes: body.subjectTypes, priority: body.priority,
+            durations: body.durations, subjectTypes: body.subjectTypes, processes: body.processes, priority: body.priority,
             impactAnalysis: { ...impactAnalysis, conflictDecision: body.conflictDecision || null, conflictResolution: recordedResolution || null },
             impactChecksum: body.impactChecksum,
           },
@@ -3833,10 +3974,11 @@ URL adicional: ${body.url || "No indicada"}`,
         appliesToGuide: z.boolean().optional(),
         effectiveFrom: z.string().date().nullable().optional(),
         provisional: z.boolean().optional(),
+        processes: z.array(knowledgeInstructionProcessSchema).max(knowledgeInstructionProcesses.length).optional(),
       }).merge(contextScopeSchema).parse(await readJsonBody(request));
       const existing = body.kind === "SPECIFICATION"
         ? await database.generationInstruction.findMany({
-            where: { status: "ACTIVE" }, select: { key: true, title: true, version: true, content: true, priority: true },
+            where: { status: "ACTIVE" }, select: { key: true, title: true, version: true, content: true, priority: true, processes: true },
           })
         : await database.knowledgeDocument.findMany({
             where: { status: "ACTIVE", key: { not: "indicadores-generales" } },
@@ -3848,7 +3990,7 @@ URL adicional: ${body.url || "No indicada"}`,
         kind: body.kind, key: body.key, title: body.title, content: body.content,
         academicLevels: body.academicLevels, modalities: body.modalities,
         durations: body.durations, subjectTypes: body.subjectTypes,
-        priority: body.priority, ...(body.kind === "DOCUMENT" ? {
+        priority: body.priority, ...(body.kind === "SPECIFICATION" ? { processes: body.processes || [] } : {}), ...(body.kind === "DOCUMENT" ? {
           appliesToAll: Boolean(body.appliesToAll),
           resourceKind: body.resourceKind || "INSTITUTIONAL_DOCUMENT",
           appliesToPlan: Boolean(body.appliesToPlan),
@@ -4993,27 +5135,38 @@ URL adicional: ${body.url || "No indicada"}`,
         json(response, 409, { error: "Este proyecto no está configurado para adaptar documentos de 16 a 8 semanas." });
         return;
       }
-      if (project.totalWeeks !== 8) throw new Error("La oferta vigente debe tener 8 semanas lectivas para ejecutar esta adaptación.");
+      if (project.totalWeeks !== 8) throw Object.assign(new Error("La oferta vigente debe tener 8 semanas lectivas para ejecutar esta adaptación."), { statusCode: 409 });
       const sourceType = body.target === "PLAN" ? "PLAN_16_WEEKS" : "GUIDE_16_WEEKS";
       const sourceDocument = project.legacyDocuments.find((document) => document.type === sourceType);
       if (!sourceDocument) {
-        throw new Error(body.target === "PLAN"
+        throw Object.assign(new Error(body.target === "PLAN"
           ? "Suba primero el Plan Docente de 16 semanas."
-          : "Suba primero la Guía Didáctica de 16 semanas.");
+          : "Suba primero la Guía Didáctica de 16 semanas."), { statusCode: 409 });
       }
+      let confirmedPlanNeedsReopen = false;
       if (body.target === "PLAN") {
         if (!project.institutionalDataReviewedAt || !project.outcomeMappings || !project.teacherProfileSnapshot) {
-          throw new Error("Complete la revisión institucional, la matriz de contribución, el perfil docente y la bibliografía antes de analizar el plan anterior.");
+          throw Object.assign(new Error("Complete la revisión institucional, la matriz de contribución, el perfil docente y la bibliografía antes de analizar el plan anterior."), { statusCode: 409 });
         }
-        if (project.teachingPlan) {
-          throw new Error("El Plan Docente modular ya fue generado. Inicie una nueva versión académica para realizar otra adaptación.");
-        }
-      } else {
-        if (!project.teachingPlan) throw new Error("Genere primero el Plan Docente modular antes de analizar la guía anterior.");
-        if (!project.teachingPlan.teacherReviewedAt) throw new Error("Revise y confirme primero el Plan Docente modular antes de analizar la guía anterior.");
         const guideStarted = project.weeks.some((week) =>
           week.status !== "PENDING" || Boolean(week.draftContent) || Boolean(week.approvedContent));
-        if (guideStarted) throw new Error("La guía modular ya tiene contenido. Inicie una nueva versión académica para realizar otra adaptación.");
+        if (guideStarted) {
+          throw Object.assign(new Error("La Guía Didáctica modular ya tiene contenido. Para reestructurar nuevamente el Plan Docente debe iniciar una nueva versión académica."), { statusCode: 409 });
+        }
+        confirmedPlanNeedsReopen = Boolean(project.teachingPlan?.teacherReviewedAt);
+        if (confirmedPlanNeedsReopen && !body.reopenConfirmedPlan) {
+          json(response, 409, {
+            code: "CONFIRMED_PLAN_REOPEN_REQUIRED",
+            error: "El Plan Docente actual ya fue confirmado. Como la Guía Didáctica todavía no tiene contenido, puede reabrir el Plan para generar una nueva propuesta de adaptación; después deberá regenerarlo, revisarlo y confirmarlo nuevamente.",
+          });
+          return;
+        }
+      } else {
+        if (!project.teachingPlan) throw Object.assign(new Error("Genere primero el Plan Docente modular antes de analizar la guía anterior."), { statusCode: 409 });
+        if (!project.teachingPlan.teacherReviewedAt) throw Object.assign(new Error("Revise y confirme primero el Plan Docente modular antes de analizar la guía anterior."), { statusCode: 409 });
+        const guideStarted = project.weeks.some((week) =>
+          week.status !== "PENDING" || Boolean(week.draftContent) || Boolean(week.approvedContent));
+        if (guideStarted) throw Object.assign(new Error("La guía modular ya tiene contenido. Inicie una nueva versión académica para realizar otra adaptación."), { statusCode: 409 });
       }
 
       const sourceFile = await legacyDocumentInputFile(sourceDocument);
@@ -5021,6 +5174,7 @@ URL adicional: ${body.url || "No indicada"}`,
       let templateSnapshotId: string | null = null;
       let promptSnapshotId: string | null = null;
       let documentSnapshotIds: string[] = [];
+      let specificationSnapshotIds: string[] = [];
       let consistencyLearningOutcomes: string[];
       let consistencyUnitContents: string[];
 
@@ -5031,7 +5185,13 @@ URL adicional: ${body.url || "No indicada"}`,
           weeks: project.totalWeeks, subjectType: project.subjectType,
           subjectTypeLabel: project.academicOffering.subjectType.name,
         };
-        const planContext = await activePlanContext(context);
+        const [planContext, functionalSpecifications] = await Promise.all([
+          activePlanContext(context),
+          activeFunctionalSpecifications(context, "PLAN_ADAPTATION"),
+        ]);
+        if (!functionalSpecifications.length) {
+          throw Object.assign(new Error("No existe una Especificación funcional activa y aplicable para la adaptación del Plan Docente de 16 a 8 semanas. Revise Administración → Conocimiento e IA."), { statusCode: 409 });
+        }
         const analysisText = buildPlanAdaptationAnalysisInput({
           project: {
             subjectCode: project.subjectCode,
@@ -5050,7 +5210,11 @@ URL adicional: ${body.url || "No indicada"}`,
         });
         const apiResponse = await openai.responses.parse({
           model: openaiModel,
-          instructions: `Realice exclusivamente el análisis de adaptación solicitado. Use los archivos institucionales como autoridad normativa. No genere el documento final.\n\n${planContext.instructions}`,
+          instructions: `Realice exclusivamente el análisis de adaptación solicitado. Use los archivos institucionales como autoridad normativa. No genere el documento final.
+
+${functionalSpecificationContext(functionalSpecifications)}
+
+${planContext.instructions}`,
           input: [{ role: "user", content: [
             { type: "input_text", text: analysisText },
             sourceFile,
@@ -5058,11 +5222,12 @@ URL adicional: ${body.url || "No indicada"}`,
           ] }] as unknown as OpenAI.Responses.ResponseInput,
           text: { format: zodTextFormat(adaptationProposalOutputSchema, "adaptation_proposal") },
         });
-        if (!apiResponse.output_parsed) throw new Error("La IA no devolvió una propuesta de adaptación estructurada.");
+        if (!apiResponse.output_parsed) throw Object.assign(new Error("La IA no devolvió una propuesta de adaptación estructurada. Intente analizar nuevamente el documento."), { statusCode: 422 });
         generated = apiResponse.output_parsed;
         templateSnapshotId = planContext.template.id;
         promptSnapshotId = planContext.prompt.id;
         documentSnapshotIds = planContext.institutionalDocuments.map((item) => item.id);
+        specificationSnapshotIds = functionalSpecifications.map((item) => item.id);
         consistencyLearningOutcomes = project.academicOffering.learningOutcomes;
         consistencyUnitContents = project.academicOffering.unitContents;
       } else {
@@ -5072,9 +5237,10 @@ URL adicional: ${body.url || "No indicada"}`,
           weeks: project.totalWeeks, subjectType: project.subjectType,
           subjectTypeLabel: project.academicOffering.subjectType.name,
         };
-        const [guideContext, administrativeContext] = await Promise.all([
+        const [guideContext, administrativeContext, functionalSpecifications] = await Promise.all([
           activeGuideContext(context, project.id),
-          activeAdministrativeContext(context, project.id),
+          activeAdministrativeContext(context, undefined, "GUIDE_ADAPTATION"),
+          activeFunctionalSpecifications(context, "GUIDE_ADAPTATION"),
         ]);
         const analysisText = buildGuideAdaptationAnalysisInput({
           project: {
@@ -5098,19 +5264,28 @@ URL adicional: ${body.url || "No indicada"}`,
           ] }] as unknown as OpenAI.Responses.ResponseInput,
           text: { format: zodTextFormat(adaptationProposalOutputSchema, "adaptation_proposal") },
         });
-        if (!apiResponse.output_parsed) throw new Error("La IA no devolvió una propuesta de adaptación estructurada.");
+        if (!apiResponse.output_parsed) throw Object.assign(new Error("La IA no devolvió una propuesta de adaptación estructurada. Intente analizar nuevamente el documento."), { statusCode: 422 });
         generated = apiResponse.output_parsed;
         promptSnapshotId = guideContext.prompt.id;
         documentSnapshotIds = guideContext.institutionalDocuments.map((item) => item.id);
+        specificationSnapshotIds = functionalSpecifications.map((item) => item.id);
         consistencyLearningOutcomes = [...new Set(plan.sequences.map((sequence) => sequence.learningOutcome))];
         consistencyUnitContents = [...new Set(plan.sequences.flatMap((sequence) => sequence.weeks.flatMap((week) => week.unitContents)))];
       }
+
+      const normalizedWeekReferences = normalizeAdaptationProposalWeekReferences(generated, project.totalWeeks);
+      generated = {
+        ...normalizedWeekReferences.proposal,
+        weeklyStructure: [...normalizedWeekReferences.proposal.weeklyStructure]
+          .sort((left, right) => left.week - right.week),
+      };
 
       assertAdaptationProposalConsistency(generated, {
         sourceWeeks: 16,
         targetWeeks: project.totalWeeks,
         learningOutcomes: consistencyLearningOutcomes,
         unitContents: consistencyUnitContents,
+        allowInstitutionalContentOmissions: body.target === "PLAN",
       });
 
       const proposal = await database.$transaction(async (transaction) => {
@@ -5132,13 +5307,16 @@ URL adicional: ${body.url || "No indicada"}`,
             templateSnapshotId,
             promptSnapshotId,
             documentSnapshotIds,
+            specificationSnapshotIds,
             changes: { create: generated.changes.map((change, index) => ({
               sortOrder: index + 1,
               action: change.action,
               sourceWeeks: change.sourceWeeks,
               sourceContent: change.sourceContent,
+              sourceWeekBreakdown: change.sourceWeekBreakdown as unknown as Prisma.InputJsonValue,
               proposedWeeks: change.proposedWeeks,
               proposedContent: change.proposedContent,
+              proposedWeekBreakdown: change.proposedWeekBreakdown as unknown as Prisma.InputJsonValue,
               rationale: change.rationale,
               learningOutcomes: change.learningOutcomes,
               hoursImpact: change.hoursImpact,
@@ -5148,10 +5326,23 @@ URL adicional: ${body.url || "No indicada"}`,
           },
           include: adaptationProposalInclude,
         });
+        if (body.target === "PLAN" && confirmedPlanNeedsReopen && project.teachingPlan) {
+          await transaction.teachingPlan.update({
+            where: { id: project.teachingPlan.id },
+            data: { teacherReviewedAt: null, teacherReviewNotes: null },
+          });
+          await transaction.auditLog.create({ data: {
+            userId: user.id,
+            action: "TEACHING_PLAN_REOPENED_FOR_ADAPTATION",
+            entityType: "TeachingPlan",
+            entityId: project.teachingPlan.id,
+            details: { reason: "Nueva propuesta de adaptación 16 a 8", proposalId: created.id },
+          } });
+        }
         await transaction.project.update({
           where: { id: project.id },
           data: body.target === "PLAN"
-            ? { adaptationPlanApprovedAt: null }
+            ? { adaptationPlanApprovedAt: null, ...(confirmedPlanNeedsReopen ? { currentStep: 4 } : {}) }
             : { adaptationGuideApprovedAt: null },
         });
         await transaction.auditLog.create({ data: {
@@ -5164,11 +5355,17 @@ URL adicional: ${body.url || "No indicada"}`,
             sourceWeeks: 16,
             targetWeeks: project.totalWeeks,
             incorporatedTeacherFeedback: Boolean(body.teacherFeedback),
+            reopenedConfirmedPlan: body.target === "PLAN" && confirmedPlanNeedsReopen,
           },
         } });
         return created;
       });
-      json(response, 201, { ok: true, proposal: adaptationProposalPayload(proposal) });
+      json(response, 201, {
+        ok: true,
+        proposal: await adaptationProposalPayloadWithSpecifications(proposal),
+        planReopened: body.target === "PLAN" && confirmedPlanNeedsReopen,
+        currentStep: body.target === "PLAN" && confirmedPlanNeedsReopen ? 4 : project.currentStep,
+      });
       return;
     }
 
@@ -5185,12 +5382,32 @@ URL adicional: ${body.url || "No indicada"}`,
           proposal: {
             projectId: adaptationChangeMatch[1],
             project: { ownerId: user.id },
-            status: "READY_FOR_REVIEW",
           },
         },
+        include: { proposal: { select: { status: true, target: true } } },
       });
       if (!change) {
-        json(response, 404, { error: "El cambio no existe, no pertenece al usuario o la propuesta ya fue cerrada." });
+        json(response, 404, { error: "El cambio ya no existe o no pertenece a esta asignatura." });
+        return;
+      }
+      if (change.proposal.status !== "READY_FOR_REVIEW") {
+        const currentProposal = await database.adaptationProposal.findFirst({
+          where: {
+            projectId: adaptationChangeMatch[1],
+            target: change.proposal.target,
+            status: "READY_FOR_REVIEW",
+            project: { ownerId: user.id },
+          },
+          orderBy: { generatedAt: "desc" },
+          include: adaptationProposalInclude,
+        });
+        json(response, 409, {
+          code: "ADAPTATION_PROPOSAL_STALE",
+          error: currentProposal
+            ? "La propuesta mostrada fue reemplazada por una versión más reciente. La vista se actualizó; revise nuevamente el cambio antes de guardar su decisión."
+            : "La propuesta mostrada ya no está abierta para revisión. Genere una nueva propuesta de adaptación antes de continuar.",
+          proposal: currentProposal ? await adaptationProposalPayloadWithSpecifications(currentProposal) : null,
+        });
         return;
       }
       const saved = await database.adaptationChange.update({
@@ -5229,21 +5446,41 @@ URL adicional: ${body.url || "No indicada"}`,
           id: adaptationApproveMatch[2],
           projectId: adaptationApproveMatch[1],
           project: { ownerId: user.id },
-          status: "READY_FOR_REVIEW",
         },
         include: adaptationProposalInclude,
       });
       if (!proposal) {
-        json(response, 404, { error: "La propuesta no existe, no pertenece al usuario o ya fue cerrada." });
+        json(response, 404, { error: "La propuesta no existe o no pertenece a esta asignatura." });
         return;
       }
+      if (proposal.status !== "READY_FOR_REVIEW") {
+        const currentProposal = await database.adaptationProposal.findFirst({
+          where: {
+            projectId: adaptationApproveMatch[1],
+            target: proposal.target,
+            status: "READY_FOR_REVIEW",
+            project: { ownerId: user.id },
+          },
+          orderBy: { generatedAt: "desc" },
+          include: adaptationProposalInclude,
+        });
+        json(response, 409, {
+          code: "ADAPTATION_PROPOSAL_STALE",
+          error: currentProposal
+            ? "La propuesta mostrada fue reemplazada por una versión más reciente. La vista se actualizó; revise la versión vigente antes de aprobarla."
+            : "La propuesta mostrada ya no está abierta para revisión. Genere una nueva propuesta de adaptación antes de continuar.",
+          proposal: currentProposal ? await adaptationProposalPayloadWithSpecifications(currentProposal) : null,
+        });
+        return;
+      }
+      assertCurrentAdaptationWeeklyStructure(proposal.weeklyStructure);
       if (!adaptationProposalCanBeApproved(proposal.changes)) {
         const pending = proposal.changes.filter((change) => !["ACCEPTED", "EDITED"].includes(change.decision));
-        throw new Error(`No se puede aprobar: ${pending.length} cambio(s) siguen pendientes, rechazados o solicitados para regeneración.`);
+        throw Object.assign(new Error(`No se puede aprobar: ${pending.length} cambio(s) siguen pendientes, rechazados o solicitados para regeneración.`), { statusCode: 422 });
       }
       if (proposal.target === "GUIDE") {
         const teachingPlan = await database.teachingPlan.findUnique({ where: { projectId: proposal.projectId } });
-        if (!teachingPlan) throw new Error("El Plan Docente modular debe existir antes de aprobar la adaptación de la guía.");
+        if (!teachingPlan) throw Object.assign(new Error("El Plan Docente modular debe existir antes de aprobar la adaptación de la guía."), { statusCode: 409 });
       }
       const approvedAt = new Date();
       const approved = await database.$transaction(async (transaction) => {
@@ -5270,7 +5507,7 @@ URL adicional: ${body.url || "No indicada"}`,
         } });
         return saved;
       });
-      json(response, 200, { ok: true, proposal: adaptationProposalPayload(approved) });
+      json(response, 200, { ok: true, proposal: await adaptationProposalPayloadWithSpecifications(approved) });
       return;
     }
 
@@ -5334,14 +5571,14 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
       }
       assertProjectSetupMatchesOffering(body, project.academicOffering);
       const legacyBibliography = bibliographyLegacyStrings(body.bibliography.entries);
-      const normalizedIncomingEntries = body.bibliography.entries.map(({ id: _id, ...entry }) => entry);
-      const normalizedStoredEntries = project.bibliographyEntries.map(({ id: _id, projectId: _projectId, createdAt: _createdAt, updatedAt: _updatedAt, ...entry }) => entry);
+      const normalizedIncomingEntries = normalizeBibliographyEntriesForComparison(body.bibliography.entries);
+      const normalizedStoredEntries = normalizeBibliographyEntriesForComparison(project.bibliographyEntries);
       const unchanged = project.microcurricularPresentation === body.microcurricularPresentation &&
-        JSON.stringify(project.outcomeMappings) === JSON.stringify(body.outcomeMappings) &&
-        JSON.stringify(project.teacherProfileSnapshot) === JSON.stringify(body.teacherProfile) &&
+        sameJsonValue(project.outcomeMappings, body.outcomeMappings) &&
+        sameJsonValue(project.teacherProfileSnapshot, body.teacherProfile) &&
         project.guideReference === body.bibliography.guideReference &&
         project.guideReferenceImportance === body.bibliography.guideReferenceImportance &&
-        JSON.stringify(normalizedStoredEntries) === JSON.stringify(normalizedIncomingEntries);
+        sameJsonValue(normalizedStoredEntries, normalizedIncomingEntries);
       if (unchanged) {
         if (project.currentStep < 4) {
           await database.project.update({ where: { id: project.id }, data: { currentStep: 4 } });
@@ -5427,7 +5664,12 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
           },
         });
       });
-      json(response, 200, { ok: true, reviewedAt: new Date().toISOString() });
+      json(response, 200, {
+        ok: true,
+        reviewedAt: new Date().toISOString(),
+        planPreserved: false,
+        adaptationInvalidated: project.workflowMode === "ADAPTATION_16_TO_8",
+      });
       return;
     }
     const teachingPlanGenerateMatch = requestUrl.pathname.match(
@@ -5472,14 +5714,27 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         weeks: project.totalWeeks, subjectType: project.subjectType,
         subjectTypeLabel: offering.subjectType.name,
       };
-      const planContext = await activePlanContext(context);
+      const [planContext, planGenerationSpecifications] = await Promise.all([
+        activePlanContext(context),
+        activeFunctionalSpecifications(context, "PLAN_GENERATION"),
+      ]);
       const adaptationProposal = project.workflowMode === "ADAPTATION_16_TO_8"
         ? await latestApprovedAdaptationProposal(project.id, "PLAN")
         : null;
+      const adaptationSpecifications = adaptationProposal
+        ? await activeFunctionalSpecifications(context, "PLAN_ADAPTATION")
+        : [];
       if (project.workflowMode === "ADAPTATION_16_TO_8" && !adaptationProposal) {
-        throw new Error("Analice y apruebe primero la propuesta de adaptación del Plan Docente de 16 a 8 semanas.");
+        throw Object.assign(new Error("No existe una propuesta de adaptación del Plan Docente aprobada y vigente. Si modificó la ficha base después de aprobarla, analice y apruebe una nueva propuesta antes de generar el Plan Docente modular."), { statusCode: 409 });
       }
-      if (adaptationProposal) assertPlanAdaptationSourcesStillMatch(adaptationProposal, planContext);
+      if (adaptationProposal) {
+        assertPlanAdaptationSourcesStillMatch(
+          adaptationProposal,
+          planContext,
+          adaptationSpecifications.map((item) => item.id),
+        );
+        assertCurrentAdaptationWeeklyStructure(adaptationProposal.weeklyStructure);
+      }
       const generationText = buildTeachingPlanGenerationInput({
         project: {
           subjectCode: project.subjectCode, subjectName: project.subjectName,
@@ -5510,6 +5765,8 @@ ${approvedAdaptationContext(adaptationProposal)}`
         model: openaiModel,
         instructions: `Use los archivos institucionales adjuntos como fuentes normativas. ${adaptationProposal ? "Respete además la propuesta de adaptación aprobada por el profesor." : ""}
 
+${functionalSpecificationContext(planGenerationSpecifications)}
+
 ${planContext.instructions}`,
         input: [{
           role: "user",
@@ -5520,15 +5777,39 @@ ${planContext.instructions}`,
       const parsedPlan = apiResponse.output_parsed;
       if (!parsedPlan) throw new Error("La IA no devolvió un plan docente estructurado.");
       const curricularAdaptations = await curricularAdaptationsText();
-      const generated = normalizedTeachingPlanContent(canonicalizeTeachingPlanUnitContents({
+      const normalizedGenerated = normalizedTeachingPlanContent(canonicalizeTeachingPlanUnitContents({
         ...parsedPlan,
         presentation: project.microcurricularPresentation,
         curricularAdaptations,
       }, offering.unitContents));
+      const generated = adaptationProposal
+        ? {
+            ...normalizedGenerated,
+            sequences: [...normalizedGenerated.sequences]
+              .map((sequence) => ({
+                ...sequence,
+                weeks: [...sequence.weeks].sort((left, right) => left.week - right.week),
+              }))
+              .sort((left, right) =>
+                Math.min(...left.weeks.map((week) => week.week)) -
+                Math.min(...right.weeks.map((week) => week.week))),
+          }
+        : normalizedGenerated;
       const planConsistencyInput = projectPlanConsistencyInput(offering);
       assertTeachingPlanConsistency(generated, planConsistencyInput);
+      if (adaptationProposal) {
+        assertTeachingPlanRespectsApprovedAdaptation(
+          generated,
+          adaptationProposal,
+          offering.unitContents,
+        );
+      }
       const reviewChecks = teachingPlanReviewChecks(generated, planConsistencyInput);
       const rows = planMatrixRows(generated);
+      const teachingPlanSpecificationSnapshotIds = [...new Set([
+        ...planGenerationSpecifications.map((item) => item.id),
+        ...(adaptationProposal?.specificationSnapshotIds || []),
+      ])];
       const savedPlan = await database.$transaction(async (transaction) => {
         const previous = await transaction.teachingPlan.findUnique({ where: { projectId: project.id } });
         const plan = await transaction.teachingPlan.upsert({
@@ -5539,6 +5820,7 @@ ${planContext.instructions}`,
             templateSnapshotId: planContext.template.id,
             promptSnapshotId: planContext.prompt.id,
             documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
+            specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
             teacherReviewedAt: null,
             teacherReviewNotes: null,
           },
@@ -5547,6 +5829,7 @@ ${planContext.instructions}`,
             version: 1, status: "DRAFT", templateSnapshotId: planContext.template.id,
             promptSnapshotId: planContext.prompt.id,
             documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
+            specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
           },
         });
         await replaceTeachingPlanEvaActivities(transaction, plan.id, generated);
@@ -6219,6 +6502,12 @@ ${planContext.instructions}`,
       const currentTeachingPlanChecks = currentTeachingPlanContent
         ? teachingPlanReviewChecks(currentTeachingPlanContent, projectPlanConsistencyInput(project.academicOffering))
         : [];
+      const planAdaptationProposal = project.adaptationProposals.find((item) => item.target === "PLAN");
+      const guideAdaptationProposal = project.adaptationProposals.find((item) => item.target === "GUIDE");
+      const [planAdaptationProposalPayload, guideAdaptationProposalPayload] = await Promise.all([
+        planAdaptationProposal ? adaptationProposalPayloadWithSpecifications(planAdaptationProposal) : Promise.resolve(null),
+        guideAdaptationProposal ? adaptationProposalPayloadWithSpecifications(guideAdaptationProposal) : Promise.resolve(null),
+      ]);
       response.end(JSON.stringify({
         project: {
           projectId: project.id,
@@ -6229,14 +6518,8 @@ ${planContext.instructions}`,
             adaptationPlanApprovedAt: project.adaptationPlanApprovedAt?.toISOString() ?? null,
             adaptationGuideApprovedAt: project.adaptationGuideApprovedAt?.toISOString() ?? null,
             legacyDocuments: project.legacyDocuments.map(legacyDocumentPayload),
-            planProposal: (() => {
-              const proposal = project.adaptationProposals.find((item) => item.target === "PLAN");
-              return proposal ? adaptationProposalPayload(proposal) : null;
-            })(),
-            guideProposal: (() => {
-              const proposal = project.adaptationProposals.find((item) => item.target === "GUIDE");
-              return proposal ? adaptationProposalPayload(proposal) : null;
-            })(),
+            planProposal: planAdaptationProposalPayload,
+            guideProposal: guideAdaptationProposalPayload,
           },
           formData: {
             projectName: project.name,
@@ -6708,6 +6991,9 @@ ${planContext.instructions}`,
         json(response, 409, { error: "Analice y apruebe primero la propuesta de adaptación de la Guía Didáctica de 16 a 8 semanas." });
         return;
       }
+      if (guideAdaptationProposal) {
+        assertCurrentAdaptationWeeklyStructure(guideAdaptationProposal.weeklyStructure);
+      }
       const teachingPlan = teachingPlanContentSchema.parse(planSource.teachingPlan.content);
       const plannedWeek = teachingPlan.sequences.flatMap((sequence) => sequence.weeks)
         .find((week) => week.week === validation.data.week);
@@ -6765,7 +7051,20 @@ ${approvedAdaptationContext(guideAdaptationProposal)}`
         subjectType: validation.data.project.subjectType,
         subjectTypeLabel: validation.data.project.subjectTypeLabel,
       }, validation.data.projectId);
-      if (guideAdaptationProposal) assertGuideAdaptationSourcesStillMatch(guideAdaptationProposal, guideContext);
+      if (guideAdaptationProposal) {
+        const guideAdaptationSpecifications = await activeFunctionalSpecifications({
+          level: validation.data.project.level,
+          modality: validation.data.project.modality,
+          weeks: validation.data.project.weeks,
+          subjectType: validation.data.project.subjectType,
+          subjectTypeLabel: validation.data.project.subjectTypeLabel,
+        }, "GUIDE_ADAPTATION");
+        assertGuideAdaptationSourcesStillMatch(
+          guideAdaptationProposal,
+          guideContext,
+          guideAdaptationSpecifications.map((item) => item.id),
+        );
+      }
       inputContent.push(...guideContext.inputFiles);
       const apiResponse = await openai.responses.create({
         model: openaiModel,

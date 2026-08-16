@@ -709,6 +709,633 @@ function renderInstitutionalUnits(values = []) {
     </section>`).join("")}</div>`;
 }
 
+function adaptationNumberingIndex() {
+  const units = structuredInstitutionalUnits(institutionalDataState?.unitContents || []);
+  const unitByTitle = new Map();
+  const contentByUnitAndText = new Map();
+  const contentByText = new Map();
+  const subcontentByContentAndText = new Map();
+  const subcontentByText = new Map();
+
+  const key = (value) => normalizeStructuredText(value).toLocaleLowerCase("es");
+  const addCandidate = (map, candidateKey, number) => {
+    if (!candidateKey) return;
+    const current = map.get(candidateKey) || [];
+    if (!current.includes(number)) current.push(number);
+    map.set(candidateKey, current);
+  };
+
+  units.forEach((unit, unitIndex) => {
+    const unitNumber = String(unitIndex + 1);
+    unitByTitle.set(key(unit.title), unitNumber);
+    unit.contents.forEach((content, contentIndex) => {
+      const contentNumber = `${unitNumber}.${contentIndex + 1}`;
+      contentByUnitAndText.set(`${unitNumber}|${key(content.text)}`, contentNumber);
+      addCandidate(contentByText, key(content.text), contentNumber);
+      content.subcontents.forEach((subcontent, subcontentIndex) => {
+        const subcontentNumber = `${contentNumber}.${subcontentIndex + 1}`;
+        subcontentByContentAndText.set(`${contentNumber}|${key(subcontent)}`, subcontentNumber);
+        addCandidate(subcontentByText, key(subcontent), subcontentNumber);
+      });
+    });
+  });
+
+  return { key, unitByTitle, contentByUnitAndText, contentByText, subcontentByContentAndText, subcontentByText };
+}
+
+function adaptationStructuredTokens(value) {
+  const source = (Array.isArray(value) ? value.join("\n") : String(value || ""))
+    .replace(/\r/g, "")
+    .replace(/;\s*(?=(?:UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:)/gi, "\n")
+    .replace(/\s+(?=(?:UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:)/gi, "\n")
+    .trim();
+  if (!source) return [];
+  return source.split(/\n+/).map((rawLine) => {
+    const line = rawLine.trim().replace(/^;+|;+$/g, "").trim();
+    const match = line.match(/^(UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:\s*(.+)$/i);
+    if (!match) return { type: "TEXT", text: line };
+    return { type: match[1].toUpperCase(), text: match[2].trim().replace(/;+$/g, "").trim() };
+  }).filter((item) => item.text);
+}
+
+function numberedAdaptationContent(value) {
+  const tokens = adaptationStructuredTokens(value);
+  if (!tokens.length) return [];
+  const index = adaptationNumberingIndex();
+  let currentUnitNumber = "";
+  let currentContentNumber = "";
+  let fallbackUnit = 0;
+  let fallbackContent = 0;
+  let fallbackSubcontent = 0;
+
+  return tokens.map((token) => {
+    const normalized = index.key(token.text);
+    if (token.type === "UNIDAD") {
+      const known = index.unitByTitle.get(normalized);
+      currentUnitNumber = known || String(++fallbackUnit);
+      fallbackContent = 0;
+      fallbackSubcontent = 0;
+      currentContentNumber = "";
+      return { type: "UNIT", number: currentUnitNumber, text: token.text };
+    }
+    if (token.type === "CONTENIDO") {
+      let known = currentUnitNumber ? index.contentByUnitAndText.get(`${currentUnitNumber}|${normalized}`) : "";
+      if (!known) {
+        const candidates = index.contentByText.get(normalized) || [];
+        if (candidates.length === 1) known = candidates[0];
+      }
+      if (known) {
+        currentContentNumber = known;
+        currentUnitNumber = known.split(".")[0];
+        fallbackContent = Number(known.split(".")[1]) || fallbackContent;
+      } else {
+        if (!currentUnitNumber) currentUnitNumber = String(fallbackUnit || 1);
+        fallbackContent += 1;
+        currentContentNumber = `${currentUnitNumber}.${fallbackContent}`;
+      }
+      fallbackSubcontent = 0;
+      return { type: "CONTENT", number: currentContentNumber, text: token.text };
+    }
+    if (token.type === "SUBCONTENIDO") {
+      let known = currentContentNumber ? index.subcontentByContentAndText.get(`${currentContentNumber}|${normalized}`) : "";
+      if (!known) {
+        const candidates = index.subcontentByText.get(normalized) || [];
+        if (candidates.length === 1) known = candidates[0];
+      }
+      if (known) {
+        currentContentNumber = known.split(".").slice(0, 2).join(".");
+        currentUnitNumber = known.split(".")[0];
+        fallbackSubcontent = Number(known.split(".")[2]) || fallbackSubcontent;
+      } else {
+        if (!currentUnitNumber) currentUnitNumber = String(fallbackUnit || 1);
+        if (!currentContentNumber) currentContentNumber = `${currentUnitNumber}.${fallbackContent || 1}`;
+        fallbackSubcontent += 1;
+        known = `${currentContentNumber}.${fallbackSubcontent}`;
+      }
+      return { type: "SUBCONTENT", number: known, text: token.text };
+    }
+    return { type: "TEXT", number: "", text: token.text };
+  });
+}
+
+function renderNumberedAdaptationContent(value, fallback = "") {
+  const lines = numberedAdaptationContent(value);
+  if (!lines.length) return `<div class="adaptation-structured-content"><div class="adaptation-structured-line text">${escapeHtml(fallback)}</div></div>`;
+  return `<div class="adaptation-structured-content">${lines.map((line) => {
+    if (line.type === "UNIT") {
+      return `<div class="adaptation-structured-line unit"><span class="adaptation-structured-number">Unidad ${escapeHtml(line.number)}.</span><span>${escapeHtml(line.text)}</span></div>`;
+    }
+    if (line.type === "CONTENT") {
+      return `<div class="adaptation-structured-line content-item"><span class="adaptation-structured-number">${escapeHtml(line.number)}.</span><span>${escapeHtml(line.text)}</span></div>`;
+    }
+    if (line.type === "SUBCONTENT") {
+      return `<div class="adaptation-structured-line subcontent"><span class="adaptation-structured-number">${escapeHtml(line.number)}.</span><span>${escapeHtml(line.text)}</span></div>`;
+    }
+    return `<div class="adaptation-structured-line text"><span>${escapeHtml(line.text)}</span></div>`;
+  }).join("")}</div>`;
+}
+
+function adaptationContentForEditor(value) {
+  const lines = numberedAdaptationContent(value);
+  if (!lines.length) return String(value || "").trim();
+  return lines.map((line) => {
+    if (line.type === "UNIT") return `Unidad ${line.number}. ${line.text}`;
+    if (line.type === "CONTENT" || line.type === "SUBCONTENT") return `${line.number}. ${line.text}`;
+    return line.text;
+  }).join("\n");
+}
+
+function adaptationEditorCatalog() {
+  const entries = [];
+  let unit = 0;
+  let content = 0;
+  let subcontent = 0;
+  const key = (value) => normalizeStructuredText(value).toLocaleLowerCase("es");
+  for (const rawValue of institutionalDataState?.unitContents || []) {
+    const raw = String(rawValue || "").trim();
+    if (!raw) continue;
+    let number = "";
+    let type = "TEXT";
+    let displayText = raw;
+    const unitMatch = raw.match(/^UNIDAD\s*:\s*(.+)$/i);
+    const contentMatch = raw.match(/^CONTENIDO\s*:\s*(.+)$/i);
+    const subcontentMatch = raw.match(/^SUBCONTENIDO\s*:\s*(.+)$/i);
+    if (unitMatch) {
+      unit += 1;
+      content = 0;
+      subcontent = 0;
+      number = String(unit);
+      type = "UNIT";
+      displayText = unitMatch[1].trim();
+    } else if (contentMatch) {
+      if (!unit) unit = 1;
+      content += 1;
+      subcontent = 0;
+      number = `${unit}.${content}`;
+      type = "CONTENT";
+      displayText = contentMatch[1].trim();
+    } else if (subcontentMatch) {
+      if (!unit) unit = 1;
+      if (!content) content = 1;
+      subcontent += 1;
+      number = `${unit}.${content}.${subcontent}`;
+      type = "SUBCONTENT";
+      displayText = subcontentMatch[1].trim();
+    }
+    entries.push({ raw, number, type, text: displayText, key: key(displayText) });
+  }
+  return { entries, key };
+}
+
+function canonicalizeAdaptationEditorContent(value) {
+  const lines = String(value || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  const { entries, key } = adaptationEditorCatalog();
+  const canonical = [];
+  const errors = [];
+  for (const line of lines) {
+    const technical = line.match(/^(UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:\s*(.+)$/i);
+    if (technical) {
+      const type = technical[1].toUpperCase() === "UNIDAD" ? "UNIT" : technical[1].toUpperCase() === "CONTENIDO" ? "CONTENT" : "SUBCONTENT";
+      const match = entries.find((entry) => entry.type === type && entry.key === key(technical[2]));
+      if (match) canonical.push(match.raw);
+      else errors.push(line);
+      continue;
+    }
+    const unitMatch = line.match(/^Unidad\s+(\d+)\s*(?:[.:\-–—])?\s*(.+)$/i);
+    const numberedMatch = line.match(/^(\d+(?:\.\d+){1,2})\s*(?:[.:\-–—])?\s*(.+)$/u);
+    const number = unitMatch?.[1] || numberedMatch?.[1] || "";
+    const contentText = unitMatch?.[2] || numberedMatch?.[2] || line;
+    let candidates = entries.filter((entry) => entry.key === key(contentText));
+    if (number) candidates = candidates.filter((entry) => entry.number === number);
+    if (candidates.length === 1) canonical.push(candidates[0].raw);
+    else errors.push(line);
+  }
+  return { canonical: canonical.join("; "), errors };
+}
+
+function renderAdaptationWeekBreakdown(breakdown, aggregateValue = "", fallback = "—") {
+  const items = Array.isArray(breakdown)
+    ? breakdown
+        .filter((item) => item && Number.isInteger(Number(item.week)) && String(item.content || "").trim())
+        .map((item) => ({ week: Number(item.week), content: String(item.content || "").trim() }))
+        .sort((left, right) => left.week - right.week)
+    : [];
+  if (!items.length) {
+    const rendered = renderNumberedAdaptationContent(aggregateValue || "", fallback);
+    if (!String(aggregateValue || "").trim()) return rendered;
+    return `${rendered}<p class="adaptation-breakdown-note">Esta propuesta no incluye todavía el desglose por semana. Para visualizarlo con detalle, regenere la propuesta con la versión actual del análisis.</p>`;
+  }
+  return `<div class="adaptation-week-breakdown">${items.map((item) => `
+    <section class="adaptation-week-block">
+      <header>Semana ${escapeHtml(String(item.week))}</header>
+      ${renderNumberedAdaptationContent(item.content, fallback)}
+    </section>`).join("")}</div>`;
+}
+
+function renderAdaptationList(values, fallback = "—") {
+  const items = (Array.isArray(values) ? values : [values])
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  if (!items.length) return `<span class="adaptation-meta-empty">${escapeHtml(fallback)}</span>`;
+  return `<ul class="adaptation-meta-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function compactWeekRanges(values) {
+  const weeks = [...new Set((Array.isArray(values) ? values : [values])
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0))].sort((left, right) => left - right);
+  if (!weeks.length) return "—";
+  const ranges = [];
+  let start = weeks[0];
+  let previous = weeks[0];
+  for (let index = 1; index < weeks.length; index += 1) {
+    const current = weeks[index];
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+    ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
+    start = current;
+    previous = current;
+  }
+  ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
+  return ranges.join(", ");
+}
+
+function adaptationWeeksLabel(values, { modular = false } = {}) {
+  const formatted = compactWeekRanges(values);
+  if (formatted === "—") return modular ? "sin semana modular de destino" : "sin semana de origen";
+  const list = (Array.isArray(values) ? values : [values]).filter((value) => Number.isFinite(Number(value)));
+  const plural = list.length !== 1;
+  const noun = modular ? `semana${plural ? "s" : ""} modular${plural ? "es" : ""}` : `semana${plural ? "s" : ""}`;
+  return `${noun} ${formatted}`;
+}
+
+function adaptationOperationSummary(change) {
+  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
+  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
+  const sameContent = String(change.sourceContent || "").trim() === String(change.proposedContent || "").trim();
+  switch (change.action) {
+    case "KEEP":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: sameContent
+          ? `Se conserva el contenido institucional y su cobertura pedagógica. Revise principalmente el cambio de secuencia entre ${sourceLabel} y ${targetLabel}.`
+          : `Se conserva la cobertura institucional del bloque, con ajustes menores de organización o redacción entre ${sourceLabel} y ${targetLabel}.`,
+      };
+    case "GROUP":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se conservan los contenidos, pero se consolidan ${sourceLabel} del documento anterior en ${targetLabel}. El cambio principal es la concentración temporal del mismo bloque temático.`,
+      };
+    case "MERGE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se integran contenidos relacionados que antes estaban separados en ${sourceLabel}, para trabajarlos de forma articulada en ${targetLabel}. El cambio principal es la integración pedagógica del bloque.`,
+      };
+    case "SYNTHESIZE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se sintetiza el contenido de ${sourceLabel} para conservar los elementos esenciales en ${targetLabel}. El cambio principal es la focalización de ideas y actividades clave sin perder cobertura formativa.`,
+      };
+    case "MOVE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `El contenido se conserva, pero se traslada desde ${sourceLabel} hacia ${targetLabel} para alinearlo mejor con la progresión del resultado de aprendizaje. El cambio principal es la reubicación temporal del bloque.`,
+      };
+    case "REFORMULATE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se mantiene la intención formativa del bloque, pero se reorganiza o reformula pedagógicamente entre ${sourceLabel} y ${targetLabel}. El cambio principal es la manera de presentar o articular el contenido para mejorar su aprendizaje.`,
+      };
+    case "DELETE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel: change.proposedContent ? targetLabel : "sin cobertura conservada",
+        message: change.proposedContent
+          ? `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel}, conservando su cobertura en ${targetLabel}. La omisión solo se aplicará si el profesor la aprueba.`
+          : `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel} porque no forma parte de la oferta vigente. La omisión solo se aplicará si el profesor la aprueba.`,
+      };
+    case "SPLIT":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se conserva el bloque de contenidos del origen, pero se redistribuye pedagógicamente desde ${sourceLabel} hacia ${targetLabel}. El cambio principal es la secuencia temporal en varias semanas consecutivas.`,
+      };
+    case "UPDATE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se actualiza la formulación del contenido o su redacción pedagógica entre ${sourceLabel} y ${targetLabel}, manteniendo la cobertura institucional. El cambio principal es el ajuste de formulación para mayor claridad o coherencia.`,
+      };
+    default:
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `La propuesta reorganiza el contenido desde ${sourceLabel} hacia ${targetLabel}. Revise la justificación pedagógica para comprender el criterio de reorganización.`,
+      };
+  }
+}
+
+function adaptationColumnTitles(change) {
+  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
+  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
+  if (change.action === "DELETE") {
+    return {
+      sourceTitle: `Contenido propuesto para omitir · ${sourceLabel}`,
+      destinationTitle: change.proposedContent
+        ? `Cobertura que se conserva · ${targetLabel}`
+        : "Omisión propuesta",
+      destinationFallback: "Este material del documento anterior no forma parte de la oferta vigente y se propone retirarlo.",
+      destinationHelp: "Revise la justificación pedagógica y, si corresponde, la cobertura conservada indicada por la propuesta.",
+    };
+  }
+  if (change.action === "GROUP") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Distribución propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "Los contenidos se conservan; lo que cambia es que las semanas de origen se consolidan en una sola semana modular.",
+    };
+  }
+  if (change.action === "SPLIT") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Distribución propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "Los contenidos se conservan; lo que cambia es su distribución pedagógica entre varias semanas modulares consecutivas.",
+    };
+  }
+  if (change.action === "MOVE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Nueva ubicación propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "El contenido se conserva; lo que cambia es su ubicación temporal dentro de la secuencia modular.",
+    };
+  }
+  if (change.action === "KEEP") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Cobertura conservada · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La cobertura institucional se mantiene. Revise si la secuencia o la redacción presenta ajustes menores.",
+    };
+  }
+  if (change.action === "MERGE") {
+    return {
+      sourceTitle: `Bloques de origen · ${sourceLabel}`,
+      destinationTitle: `Integración propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta integra contenidos relacionados para trabajarlos como un bloque articulado en la semana modular indicada.",
+    };
+  }
+  if (change.action === "SYNTHESIZE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Síntesis propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta concentra los elementos esenciales del contenido para mantener la cobertura formativa con una versión más sintética.",
+    };
+  }
+  if (change.action === "REFORMULATE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Reformulación propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta conserva la intención formativa, pero reorganiza o reescribe pedagógicamente el bloque para mejorar su articulación.",
+    };
+  }
+  if (change.action === "UPDATE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Versión actualizada · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta ajusta la formulación o redacción del bloque sin alterar su cobertura institucional.",
+    };
+  }
+  return {
+    sourceTitle: `Contenido de origen · ${sourceLabel}`,
+    destinationTitle: `Propuesta para ${targetLabel}`,
+    destinationFallback: "—",
+    destinationHelp: "Compare el contenido de origen con la propuesta y revise la justificación pedagógica del cambio.",
+  };
+}
+
+function compactWeekRanges(values) {
+  const weeks = [...new Set((Array.isArray(values) ? values : [values])
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0))].sort((left, right) => left - right);
+  if (!weeks.length) return "—";
+  const ranges = [];
+  let start = weeks[0];
+  let previous = weeks[0];
+  for (let index = 1; index < weeks.length; index += 1) {
+    const current = weeks[index];
+    if (current === previous + 1) {
+      previous = current;
+      continue;
+    }
+    ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
+    start = current;
+    previous = current;
+  }
+  ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
+  return ranges.join(", ");
+}
+
+function adaptationWeeksLabel(values, { modular = false } = {}) {
+  const formatted = compactWeekRanges(values);
+  if (formatted === "—") return modular ? "sin semana modular de destino" : "sin semana de origen";
+  const list = (Array.isArray(values) ? values : [values]).filter((value) => Number.isFinite(Number(value)));
+  const plural = list.length !== 1;
+  const noun = modular ? `semana${plural ? "s" : ""} modular${plural ? "es" : ""}` : `semana${plural ? "s" : ""}`;
+  return `${noun} ${formatted}`;
+}
+
+function adaptationOperationSummary(change) {
+  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
+  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
+  const sameContent = String(change.sourceContent || "").trim() === String(change.proposedContent || "").trim();
+  switch (change.action) {
+    case "KEEP":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: sameContent
+          ? `Se conserva el contenido institucional y su cobertura pedagógica. Revise principalmente el cambio de secuencia entre ${sourceLabel} y ${targetLabel}.`
+          : `Se conserva la cobertura institucional del bloque, con ajustes menores de organización o redacción entre ${sourceLabel} y ${targetLabel}.`,
+      };
+    case "GROUP":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se conservan los contenidos, pero se consolidan ${sourceLabel} del documento anterior en ${targetLabel}. El cambio principal es la concentración temporal del mismo bloque temático.`,
+      };
+    case "MERGE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se integran contenidos relacionados que antes estaban separados en ${sourceLabel}, para trabajarlos de forma articulada en ${targetLabel}. El cambio principal es la integración pedagógica del bloque.`,
+      };
+    case "SYNTHESIZE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se sintetiza el contenido de ${sourceLabel} para conservar los elementos esenciales en ${targetLabel}. El cambio principal es la focalización de ideas y actividades clave sin perder cobertura formativa.`,
+      };
+    case "MOVE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `El contenido se conserva, pero se traslada desde ${sourceLabel} hacia ${targetLabel} para alinearlo mejor con la progresión del resultado de aprendizaje. El cambio principal es la reubicación temporal del bloque.`,
+      };
+    case "REFORMULATE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se mantiene la intención formativa del bloque, pero se reorganiza o reformula pedagógicamente entre ${sourceLabel} y ${targetLabel}. El cambio principal es la manera de presentar o articular el contenido para mejorar su aprendizaje.`,
+      };
+    case "DELETE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel: change.proposedContent ? targetLabel : "sin cobertura conservada",
+        message: change.proposedContent
+          ? `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel}, conservando su cobertura en ${targetLabel}. La omisión solo se aplicará si el profesor la aprueba.`
+          : `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel} porque no forma parte de la oferta vigente. La omisión solo se aplicará si el profesor la aprueba.`,
+      };
+    case "SPLIT":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se conserva el bloque de contenidos del origen, pero se redistribuye pedagógicamente desde ${sourceLabel} hacia ${targetLabel}. El cambio principal es la secuencia temporal en varias semanas consecutivas.`,
+      };
+    case "UPDATE":
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `Se actualiza la formulación del contenido o su redacción pedagógica entre ${sourceLabel} y ${targetLabel}, manteniendo la cobertura institucional. El cambio principal es el ajuste de formulación para mayor claridad o coherencia.`,
+      };
+    default:
+      return {
+        title: "Operación propuesta",
+        sourceLabel,
+        targetLabel,
+        message: `La propuesta reorganiza el contenido desde ${sourceLabel} hacia ${targetLabel}. Revise la justificación pedagógica para comprender el criterio de reorganización.`,
+      };
+  }
+}
+
+function adaptationColumnTitles(change) {
+  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
+  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
+  if (change.action === "DELETE") {
+    return {
+      sourceTitle: `Contenido propuesto para omitir · ${sourceLabel}`,
+      destinationTitle: change.proposedContent
+        ? `Cobertura que se conserva · ${targetLabel}`
+        : "Omisión propuesta",
+      destinationFallback: "Este material del documento anterior no forma parte de la oferta vigente y se propone retirarlo.",
+      destinationHelp: "Revise la justificación pedagógica y, si corresponde, la cobertura conservada indicada por la propuesta.",
+    };
+  }
+  if (change.action === "GROUP") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Distribución propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "Los contenidos se conservan; lo que cambia es que las semanas de origen se consolidan en una sola semana modular.",
+    };
+  }
+  if (change.action === "SPLIT") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Distribución propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "Los contenidos se conservan; lo que cambia es su distribución pedagógica entre varias semanas modulares consecutivas.",
+    };
+  }
+  if (change.action === "MOVE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Nueva ubicación propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "El contenido se conserva; lo que cambia es su ubicación temporal dentro de la secuencia modular.",
+    };
+  }
+  if (change.action === "KEEP") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Cobertura conservada · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La cobertura institucional se mantiene. Revise si la secuencia o la redacción presenta ajustes menores.",
+    };
+  }
+  if (change.action === "MERGE") {
+    return {
+      sourceTitle: `Bloques de origen · ${sourceLabel}`,
+      destinationTitle: `Integración propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta integra contenidos relacionados para trabajarlos como un bloque articulado en la semana modular indicada.",
+    };
+  }
+  if (change.action === "SYNTHESIZE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Síntesis propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta concentra los elementos esenciales del contenido para mantener la cobertura formativa con una versión más sintética.",
+    };
+  }
+  if (change.action === "REFORMULATE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Reformulación propuesta · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta conserva la intención formativa, pero reorganiza o reescribe pedagógicamente el bloque para mejorar su articulación.",
+    };
+  }
+  if (change.action === "UPDATE") {
+    return {
+      sourceTitle: `Bloque de origen · ${sourceLabel}`,
+      destinationTitle: `Versión actualizada · ${targetLabel}`,
+      destinationFallback: "—",
+      destinationHelp: "La propuesta ajusta la formulación o redacción del bloque sin alterar su cobertura institucional.",
+    };
+  }
+  return {
+    sourceTitle: `Contenido de origen · ${sourceLabel}`,
+    destinationTitle: `Propuesta para ${targetLabel}`,
+    destinationFallback: "—",
+    destinationHelp: "Compare el contenido de origen con la propuesta y revise la justificación pedagógica del cambio.",
+  };
+}
+
 function renderInstitutionalData() {
   const target = $("#institutional-data-details");
   if (!target || !institutionalDataState) return;
@@ -1072,13 +1699,20 @@ function draftProgressPayload() {
 }
 async function syncDraftProgress() {
   if (!projectId || step > 3) return;
+  const draft = draftProgressPayload();
   const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/progress`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(draftProgressPayload()),
+    body: JSON.stringify(draft),
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error || "No fue posible guardar el progreso.");
+  if (workflowModeState === "ADAPTATION_16_TO_8" && draft.currentStep < 4 &&
+      (planAdaptationProposalState || guideAdaptationProposalState)) {
+    planAdaptationProposalState = null;
+    guideAdaptationProposalState = null;
+    renderAdaptationWorkspaces();
+  }
 }
 function scheduleProgressSync() {
   if (!projectId || step > 3) return;
@@ -1608,15 +2242,15 @@ $("#contribution-validation-modal")?.addEventListener("click", (event) => {
 });
 
 const adaptationActionLabels = {
-  KEEP: "Conservar",
-  GROUP: "Agrupar",
-  MERGE: "Unificar",
-  SYNTHESIZE: "Sintetizar",
-  MOVE: "Trasladar",
+  KEEP: "Conservar con ajuste de secuencia",
+  GROUP: "Consolidar semanas",
+  MERGE: "Integrar contenidos",
+  SYNTHESIZE: "Sintetizar contenidos",
+  MOVE: "Trasladar a otras semanas",
   REFORMULATE: "Reformular pedagógicamente",
-  DELETE: "Eliminar",
-  SPLIT: "Dividir",
-  UPDATE: "Actualizar",
+  DELETE: "Proponer omisión",
+  SPLIT: "Dividir en semanas consecutivas",
+  UPDATE: "Actualizar formulación",
 };
 const adaptationDecisionLabels = {
   PENDING: "Pendiente de revisión",
@@ -1795,12 +2429,52 @@ function setAdaptationProposalState(target, proposal) {
 function adaptationProposalApproved(proposal) {
   return proposal?.status === "APPROVED";
 }
+
+function adaptationProposalUsesCurrentPedagogicalStructure(proposal) {
+  const weekly = proposal?.weeklyStructure;
+  return Array.isArray(weekly) && weekly.length > 0 && weekly.every((week) =>
+    Number.isInteger(Number(week?.week)) &&
+    typeof week?.primaryLearningOutcome === "string" &&
+    week.primaryLearningOutcome.trim().length > 0 &&
+    Array.isArray(week?.learningOutcomes) && week.learningOutcomes.length > 0 &&
+    typeof week?.integrative === "boolean");
+}
 function adaptationProposalReadyForApproval(proposal) {
   return Boolean(proposal?.changes?.length) && proposal.changes.every((change) =>
     change.decision === "ACCEPTED" ||
     (change.decision === "EDITED" &&
       String(change.teacherEditedContent || "").trim() &&
       String(change.teacherComment || "").trim().length >= 10));
+}
+
+function adaptationOutcomeNumber(outcome) {
+  const outcomes = institutionalDataState?.learningOutcomes || [];
+  const normalized = String(outcome || "").trim().toLocaleLowerCase("es");
+  const index = outcomes.findIndex((item) => String(item || "").trim().toLocaleLowerCase("es") === normalized);
+  return index >= 0 ? index + 1 : null;
+}
+
+function adaptationOutcomeBlocks(weekly) {
+  const ordered = [...weekly].sort((left, right) => Number(left.week || 0) - Number(right.week || 0));
+  const blocks = [];
+  for (const week of ordered) {
+    const outcome = week.primaryLearningOutcome || week.learningOutcomes?.[0] || "";
+    if (!outcome) continue;
+    const previous = blocks[blocks.length - 1];
+    if (previous && String(previous.outcome).trim() === String(outcome).trim() &&
+        Number(previous.endWeek) + 1 === Number(week.week)) {
+      previous.endWeek = Number(week.week);
+      previous.integrative = previous.integrative || Boolean(week.integrative);
+      continue;
+    }
+    blocks.push({
+      outcome,
+      startWeek: Number(week.week),
+      endWeek: Number(week.week),
+      integrative: Boolean(week.integrative),
+    });
+  }
+  return blocks;
 }
 
 function renderAdaptationProposal(target) {
@@ -1811,6 +2485,7 @@ function renderAdaptationProposal(target) {
   const analyzeButton = $(`#analyze-${target.toLowerCase()}-adaptation`);
   if (!container || !status || !actions) return;
   const label = target === "PLAN" ? "Plan Docente" : "Guía Didáctica";
+  const generationObject = target === "PLAN" ? "del Plan Docente" : "de la Guía Didáctica";
   analyzeButton?.classList.toggle("hidden", Boolean(proposal));
   if (!proposal) {
     container.innerHTML = "";
@@ -1819,43 +2494,110 @@ function renderAdaptationProposal(target) {
     status.textContent = `Pendiente: analice el ${label} anterior para obtener una propuesta justificable de 8 semanas.`;
     return;
   }
+  if (!adaptationProposalUsesCurrentPedagogicalStructure(proposal)) {
+    status.className = "adaptation-status review";
+    status.textContent = "La propuesta vigente fue creada con una lógica anterior y debe regenerarse antes de continuar.";
+    container.innerHTML = `<div class="adaptation-version-warning"><strong>Se requiere una nueva propuesta pedagógica</strong><span>La adaptación ahora usa una estructura pedagógica versionada por resultados, semanas y decisiones de contenido. Genere una nueva propuesta para aplicar las Especificaciones funcionales vigentes.</span></div>`;
+    actions.classList.remove("hidden");
+    const approveButton = $(`#approve-${target.toLowerCase()}-adaptation`);
+    if (approveButton) approveButton.disabled = true;
+    return;
+  }
   const approved = adaptationProposalApproved(proposal);
-  const weekly = Array.isArray(proposal.weeklyStructure) ? proposal.weeklyStructure : [];
+  const weekly = (Array.isArray(proposal.weeklyStructure) ? [...proposal.weeklyStructure] : [])
+    .sort((left, right) => Number(left.week || 0) - Number(right.week || 0));
   const changes = Array.isArray(proposal.changes) ? proposal.changes : [];
+  const specificationSnapshots = Array.isArray(proposal.specificationSnapshots) ? proposal.specificationSnapshots : [];
   const reviewed = changes.filter((change) => ["ACCEPTED", "EDITED"].includes(change.decision)).length;
+  const readyForApproval = adaptationProposalReadyForApproval(proposal);
   status.className = `adaptation-status ${approved ? "approved" : "review"}`;
   status.textContent = approved
     ? `Propuesta aprobada por el profesor · ${changes.length} cambios trazables.`
-    : `Revisión pendiente: ${reviewed} de ${changes.length} cambios aceptados o editados.`;
+    : readyForApproval
+      ? `Todos los cambios están revisados. Falta aprobar la propuesta de adaptación para habilitar la generación ${generationObject}.`
+      : `Revisión pendiente: ${reviewed} de ${changes.length} cambios aceptados o editados.`;
   container.innerHTML = `
     <section class="adaptation-proposal-summary">
-      <h5>${escapeHtml(proposal.title || `Propuesta de adaptación del ${label}`)}</h5>
-      <p>${escapeHtml(proposal.overview || "")}</p>
-      <div class="adaptation-week-grid">${weekly.map((week) => `
-        <article class="adaptation-week-card">
-          <strong>Semana ${week.week}</strong>
-          <p><b>Origen:</b> semanas ${(week.sourceWeeks || []).join(", ") || "—"}</p>
-          <p><b>Resultados:</b> ${(week.learningOutcomes || []).map(escapeHtml).join(" · ")}</p>
-          <p><b>Contenidos:</b> ${(week.contents || []).map(escapeHtml).join(" · ")}</p>
-          <p>${escapeHtml(week.pedagogicalPurpose || "")}</p>
-        </article>`).join("")}</div>
+      <div class="adaptation-section-heading">
+        <span class="adaptation-section-number">1</span>
+        <div><h5>Vista global de la propuesta</h5><p>Resumen de la estructura pedagógica resultante. Esta sección es informativa; las decisiones del profesor se registran en la sección 2.</p></div>
+        <span class="adaptation-readonly-badge">Solo lectura</span>
+      </div>
+      <div class="adaptation-proposal-identity">
+        <strong>${escapeHtml(proposal.title || `Propuesta de adaptación del ${label}`)}</strong>
+        <p>${escapeHtml(proposal.overview || "")}</p>
+      </div>
+      ${specificationSnapshots.length ? `<div class="adaptation-specification-snapshots">
+        <strong>Criterios funcionales utilizados</strong>
+        <div>${specificationSnapshots.map((item) => `<span>${escapeHtml(item.title)} · v${Number(item.version) || 1}</span>`).join("")}</div>
+      </div>` : ""}
+      ${target === "PLAN" ? `<section class="adaptation-progression-summary">
+        <div class="adaptation-progression-heading"><strong>Progresión por resultados de aprendizaje</strong><span>Secuencia propuesta para revisión docente.</span></div>
+        <div class="adaptation-progression-list">${adaptationOutcomeBlocks(weekly).map((block) => {
+          const number = adaptationOutcomeNumber(block.outcome);
+          const weeksLabel = block.startWeek === block.endWeek
+            ? `Semana ${block.startWeek}`
+            : `Semanas ${block.startWeek}–${block.endWeek}`;
+          return `<div class="adaptation-progression-item">
+            <span class="adaptation-progression-code">${number ? `RA ${number}` : "RA"}</span>
+            <div><strong>${weeksLabel}</strong><small>${escapeHtml(block.outcome)}</small></div>
+            ${block.integrative ? '<span class="adaptation-integrative-badge">Integración</span>' : ""}
+          </div>`;
+        }).join("")}</div>
+      </section>` : ""}
+      <details class="adaptation-weekly-overview">
+        <summary>Ver distribución semanal completa (${weekly.length} semanas)</summary>
+        <div class="adaptation-week-grid">${weekly.map((week) => {
+          const primaryOutcome = week.primaryLearningOutcome || week.learningOutcomes?.[0] || "";
+          const relatedOutcomes = (week.learningOutcomes || []).filter((outcome) =>
+            String(outcome || "").trim() && String(outcome || "").trim() !== String(primaryOutcome || "").trim());
+          return `
+          <article class="adaptation-week-card ${week.integrative ? "integrative" : ""}">
+            <div class="adaptation-week-heading">
+              <strong>Semana ${week.week}</strong>
+              ${week.integrative ? '<span class="adaptation-integrative-badge">Integración</span>' : ""}
+            </div>
+            <p><b>Origen:</b> semanas ${(week.sourceWeeks || []).join(", ") || "—"}</p>
+            <div class="adaptation-week-field"><b>Resultado principal:</b>${renderAdaptationList(primaryOutcome ? [primaryOutcome] : [], "—")}</div>
+            ${week.integrative && relatedOutcomes.length
+              ? `<div class="adaptation-week-field"><b>Resultados integrados:</b>${renderAdaptationList(relatedOutcomes, "—")}</div>`
+              : ""}
+            <div class="adaptation-week-contents"><b>Contenidos:</b>${renderNumberedAdaptationContent(week.contents || [], "—")}</div>
+            <div class="adaptation-week-purpose"><b>Propósito pedagógico:</b><span>${escapeHtml(week.pedagogicalPurpose || "—")}</span></div>
+          </article>`;
+        }).join("")}</div>
+      </details>
     </section>
-    <div class="adaptation-change-list">${changes.map((change, index) => {
+    <section class="adaptation-review-section">
+      <div class="adaptation-section-heading">
+        <span class="adaptation-section-number">2</span>
+        <div><h5>Revisión y decisión del profesor</h5><p>Revise cada transformación comparando origen y destino. Aquí puede aceptar, editar, rechazar o solicitar una nueva propuesta.</p></div>
+      </div>
+      <div class="adaptation-change-list">${changes.map((change, index) => {
       const editable = change.decision === "EDITED";
       const needsComment = ["REJECTED", "REGENERATE"].includes(change.decision);
       const disabled = approved ? "disabled" : "";
-      return `<article class="adaptation-change-card" data-adaptation-change="${escapeHtml(change.id)}" data-target="${target}">
-        <div class="adaptation-change-header"><h5>Cambio ${index + 1} · semanas ${(change.sourceWeeks || []).join(", ")}</h5><span class="adaptation-action-badge">${escapeHtml(adaptationActionLabels[change.action] || change.action)}</span></div>
-        <div class="adaptation-change-comparison">
-          <div class="adaptation-change-column"><strong>Contenido de origen</strong><p>${escapeHtml(change.sourceContent || "")}</p></div>
-          <div class="adaptation-change-column"><strong>Propuesta para semanas ${(change.proposedWeeks || []).join(", ") || "sin destino"}</strong><p>${escapeHtml(change.proposedContent || "Se propone eliminar este contenido.")}</p></div>
+      const deletion = change.action === "DELETE";
+      const operation = adaptationOperationSummary(change);
+      const columnTitles = adaptationColumnTitles(change);
+      return `<article class="adaptation-change-card ${deletion ? "deletion" : ""}" data-adaptation-change="${escapeHtml(change.id)}" data-target="${target}">
+        <div class="adaptation-change-header"><h5>Cambio ${index + 1} · ${escapeHtml(adaptationWeeksLabel(change.sourceWeeks || []))}</h5><span class="adaptation-action-badge">${escapeHtml(adaptationActionLabels[change.action] || change.action)}</span></div>
+        <div class="adaptation-operation-summary">
+          <strong>${escapeHtml(operation.title)}</strong>
+          <div class="adaptation-operation-flow"><span><b>Origen:</b> ${escapeHtml(operation.sourceLabel)}</span><span><b>Destino:</b> ${escapeHtml(operation.targetLabel)}</span></div>
+          <p>${escapeHtml(operation.message)}</p>
         </div>
+        <div class="adaptation-change-comparison">
+          <div class="adaptation-change-column"><strong>${escapeHtml(columnTitles.sourceTitle)}</strong>${renderNumberedAdaptationContent(change.sourceContent || "", "—")}</div>
+          <div class="adaptation-change-column"><strong>${escapeHtml(columnTitles.destinationTitle)}</strong>${renderNumberedAdaptationContent(change.proposedContent || "", columnTitles.destinationFallback)}<p class="adaptation-change-help">${escapeHtml(columnTitles.destinationHelp)}</p></div>
+        </div>
+        ${deletion ? `<div class="adaptation-deletion-notice"><strong>Decisión curricular del profesor</strong><span>La omisión no se aplicará mientras usted no la acepte. Si considera que el contenido debe conservarse, rechace el cambio o solicite una nueva propuesta.</span></div>` : ""}
         <div class="adaptation-change-rationale"><strong>Justificación pedagógica</strong><span>${escapeHtml(change.rationale || "")}</span></div>
         <div class="adaptation-change-meta">
-          <p><strong>Resultados relacionados:</strong> ${(change.learningOutcomes || []).map(escapeHtml).join(" · ") || "—"}</p>
-          <p><strong>Fuentes institucionales:</strong> ${(change.institutionalSources || []).map(escapeHtml).join(" · ") || "—"}</p>
-          <p><strong>Impacto en horas:</strong> ${escapeHtml(change.hoursImpact || "")}</p>
-          <p><strong>Impacto en evaluación:</strong> ${escapeHtml(change.evaluationImpact || "")}</p>
+          <div class="adaptation-meta-block"><strong>Resultados relacionados</strong>${renderAdaptationList(change.learningOutcomes || [], "—")}</div>
+          <div class="adaptation-meta-block"><strong>Fuentes institucionales</strong>${renderAdaptationList(change.institutionalSources || [], "—")}</div>
+          <div class="adaptation-meta-block"><strong>Impacto en horas</strong><p>${escapeHtml(change.hoursImpact || "—")}</p></div>
+          <div class="adaptation-meta-block"><strong>Impacto en evaluación</strong><p>${escapeHtml(change.evaluationImpact || "—")}</p></div>
         </div>
         <div class="adaptation-review-controls">
           <label>Decisión del profesor
@@ -1863,8 +2605,9 @@ function renderAdaptationProposal(target) {
               ${Object.entries(adaptationDecisionLabels).map(([value, text]) => `<option value="${value}" ${change.decision === value ? "selected" : ""}>${escapeHtml(text)}</option>`).join("")}
             </select>
           </label>
-          <label class="adaptation-edit-content ${editable ? "" : "hidden"}">Contenido final editado por el profesor
-            <textarea data-adaptation-edited ${disabled}>${escapeHtml(change.teacherEditedContent || change.proposedContent || "")}</textarea>
+          <label class="adaptation-edit-content ${editable ? "" : "hidden"}">${deletion ? "Cobertura conservada editada por el profesor" : "Contenido final editado por el profesor"}
+            <textarea data-adaptation-edited ${disabled}>${escapeHtml(adaptationContentForEditor(change.teacherEditedContent || change.proposedContent || ""))}</textarea>
+            <small class="adaptation-editor-help">Edite utilizando la numeración visible de la oferta (por ejemplo: Unidad 1., 1.1., 1.1.1.). Los identificadores técnicos UNIDAD:, CONTENIDO: y SUBCONTENIDO: se mantienen internamente y no es necesario escribirlos.</small>
           </label>
           <label class="adaptation-comment ${needsComment ? "" : ""}">Comentario o fundamento de la decisión
             <textarea data-adaptation-comment ${disabled} placeholder="Obligatorio si rechaza o solicita otra propuesta; opcional en los demás casos.">${escapeHtml(change.teacherComment || "")}</textarea>
@@ -1872,7 +2615,8 @@ function renderAdaptationProposal(target) {
           ${approved ? `<span class="adaptation-review-saved">Decisión incorporada en la propuesta aprobada.</span>` : `<button class="button secondary" type="button" data-save-adaptation-change>Guardar decisión</button>`}
         </div>
       </article>`;
-    }).join("")}</div>`;
+    }).join("")}</div>
+    </section>`;
   actions.classList.toggle("hidden", approved);
   const approveButton = $(`#approve-${target.toLowerCase()}-adaptation`);
   if (approveButton) approveButton.disabled = !adaptationProposalReadyForApproval(proposal);
@@ -1892,26 +2636,53 @@ function renderAdaptationWorkspaces() {
     if (hasLegacyGuide) renderAdaptationProposal("GUIDE");
   }
   if (generatePlan) {
-    const approved = !adaptationMode || adaptationProposalApproved(planAdaptationProposalState);
+    const approved = !adaptationMode || (
+      adaptationProposalApproved(planAdaptationProposalState) &&
+      adaptationProposalUsesCurrentPedagogicalStructure(planAdaptationProposalState)
+    );
     generatePlan.disabled = !approved;
     generatePlan.textContent = teachingPlanState
       ? (adaptationMode ? "Regenerar Plan Docente adaptado" : "Regenerar plan docente con IA")
       : (adaptationMode ? "Generar Plan Docente adaptado" : "Generar plan docente con IA");
   }
   if (generateWeek) {
-    const guideBlocked = adaptationMode && hasLegacyGuide && !adaptationProposalApproved(guideAdaptationProposalState);
+    const guideBlocked = adaptationMode && hasLegacyGuide && !(
+      adaptationProposalApproved(guideAdaptationProposalState) &&
+      adaptationProposalUsesCurrentPedagogicalStructure(guideAdaptationProposalState)
+    );
     generateWeek.disabled = guideBlocked;
     if (guideBlocked) generateWeek.title = "Apruebe primero la propuesta de adaptación de la Guía Didáctica.";
     else generateWeek.removeAttribute("title");
   }
 }
 
+const adaptationAnalysisInFlight = { PLAN: false, GUIDE: false };
+
 async function analyzeAdaptation(target) {
-  const button = $(`#analyze-${target.toLowerCase()}-adaptation`);
-  if (button) {
+  if (adaptationAnalysisInFlight[target]) return;
+  const reopenConfirmedPlan = target === "PLAN" && Boolean(teachingPlanState?.reviewedAt);
+  if (reopenConfirmedPlan) {
+    if (modularGuideHasContent()) {
+      return showValidationModal(
+        "La Guía Didáctica ya tiene contenido. No es seguro reabrir y reemplazar el Plan Docente dentro de esta misma versión académica.",
+        "#analyze-plan-adaptation",
+      );
+    }
+    const confirmed = confirm(
+      "El Plan Docente actual ya fue confirmado. Al continuar se reabrirá para generar una nueva propuesta de adaptación. " +
+      "El contenido actual se conservará hasta que genere el nuevo Plan, pero deberá revisarlo y confirmarlo nuevamente antes de continuar con la Guía Didáctica. ¿Desea continuar?",
+    );
+    if (!confirmed) return;
+  }
+  adaptationAnalysisInFlight[target] = true;
+  const analyzeButton = $(`#analyze-${target.toLowerCase()}-adaptation`);
+  const regenerateButton = $(`#regenerate-${target.toLowerCase()}-adaptation`);
+  const buttons = [analyzeButton, regenerateButton].filter(Boolean);
+  const originalLabels = new Map(buttons.map((button) => [button, button.textContent]));
+  buttons.forEach((button) => {
     button.disabled = true;
     button.textContent = "Analizando documento…";
-  }
+  });
   try {
     const previousProposal = adaptationProposalState(target);
     const teacherFeedback = (previousProposal?.changes || [])
@@ -1921,20 +2692,28 @@ async function analyzeAdaptation(target) {
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/adaptation/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target, teacherFeedback }),
+      body: JSON.stringify({ target, teacherFeedback, reopenConfirmedPlan }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "No fue posible analizar el documento anterior.");
     setAdaptationProposalState(target, payload.proposal);
-    renderAdaptationWorkspaces();
+    if (payload.planReopened && teachingPlanState) {
+      teachingPlanState = { ...teachingPlanState, reviewedAt: null, reviewNotes: "" };
+      step = 4;
+      renderTeachingPlan();
+      renderStep();
+    } else {
+      renderAdaptationWorkspaces();
+    }
     persistProject();
   } catch (error) {
     showValidationModal(error.message, target === "PLAN" ? "#analyze-plan-adaptation" : "#analyze-guide-adaptation");
   } finally {
-    if (button) {
+    adaptationAnalysisInFlight[target] = false;
+    buttons.forEach((button) => {
       button.disabled = false;
-      button.textContent = target === "PLAN" ? "Analizar Plan anterior" : "Analizar Guía anterior";
-    }
+      button.textContent = originalLabels.get(button) || (target === "PLAN" ? "Analizar Plan anterior" : "Analizar Guía anterior");
+    });
   }
 }
 
@@ -1944,10 +2723,21 @@ async function saveAdaptationChange(target, card) {
   const change = proposal?.changes?.find((item) => item.id === changeId);
   if (!proposal || !change) return;
   const decision = card.querySelector("[data-adaptation-decision]").value;
-  const teacherEditedContent = card.querySelector("[data-adaptation-edited]")?.value.trim() || "";
+  const teacherEditedDisplay = card.querySelector("[data-adaptation-edited]")?.value.trim() || "";
   const teacherComment = card.querySelector("[data-adaptation-comment]")?.value.trim() || "";
   if (decision === "PENDING") return showValidationModal("Seleccione una decisión para este cambio.", `[data-adaptation-change="${changeId}"] [data-adaptation-decision]`);
-  if (decision === "EDITED" && !teacherEditedContent) return showValidationModal("Ingrese el contenido final editado por el profesor.", `[data-adaptation-change="${changeId}"] [data-adaptation-edited]`);
+  if (decision === "EDITED" && !teacherEditedDisplay) return showValidationModal("Ingrese el contenido final editado por el profesor.", `[data-adaptation-change="${changeId}"] [data-adaptation-edited]`);
+  let teacherEditedContent = teacherEditedDisplay;
+  if (decision === "EDITED") {
+    const normalizedEdit = canonicalizeAdaptationEditorContent(teacherEditedDisplay);
+    if (normalizedEdit.errors.length) {
+      return showValidationModal(
+        `No se reconocen como contenidos vigentes de la oferta: ${normalizedEdit.errors.join(" | ")}. Use los nombres y numerales institucionales mostrados en la propuesta.`,
+        `[data-adaptation-change="${changeId}"] [data-adaptation-edited]`,
+      );
+    }
+    teacherEditedContent = normalizedEdit.canonical;
+  }
   if (["EDITED", "REJECTED", "REGENERATE"].includes(decision) && teacherComment.length < 10) {
     const detail = decision === "EDITED"
       ? "Explique brevemente por qué modificó el contenido propuesto."
@@ -1963,7 +2753,14 @@ async function saveAdaptationChange(target, card) {
       body: JSON.stringify({ decision, teacherEditedContent, teacherComment }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "No fue posible guardar la decisión.");
+    if (!response.ok) {
+      if (payload.code === "ADAPTATION_PROPOSAL_STALE") {
+        setAdaptationProposalState(target, payload.proposal || null);
+        renderAdaptationWorkspaces();
+        throw new Error(payload.error || "La propuesta cambió y se actualizó la vista. Revise la versión vigente antes de continuar.");
+      }
+      throw new Error(payload.error || "No fue posible guardar la decisión.");
+    }
     Object.assign(change, payload.change);
     renderAdaptationWorkspaces();
     persistProject();
@@ -1985,7 +2782,14 @@ async function approveAdaptation(target) {
   try {
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/adaptation/proposals/${encodeURIComponent(proposal.id)}/approve`, { method: "POST" });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "No fue posible aprobar la propuesta.");
+    if (!response.ok) {
+      if (payload.code === "ADAPTATION_PROPOSAL_STALE") {
+        setAdaptationProposalState(target, payload.proposal || null);
+        renderAdaptationWorkspaces();
+        throw new Error(payload.error || "La propuesta cambió y se actualizó la vista. Revise la versión vigente antes de aprobarla.");
+      }
+      throw new Error(payload.error || "No fue posible aprobar la propuesta.");
+    }
     setAdaptationProposalState(target, payload.proposal);
     renderAdaptationWorkspaces();
     persistProject();
@@ -2509,7 +3313,10 @@ async function saveProjectSetup() {
     matrixRows = [];
     matrixFileName = "";
     weekStates = {};
+    planAdaptationProposalState = null;
+    guideAdaptationProposalState = null;
     renderTeachingPlan();
+    renderAdaptationWorkspaces();
   }
   return payload;
 }
@@ -3305,7 +4112,10 @@ $("#generate-teaching-plan").onclick = async () => {
   button.innerHTML = '<span class="inline-spinner" aria-hidden="true"></span><span>Generando el plan docente…</span>';
   showMessage();
   try {
-    await saveProjectSetup();
+    const setupResult = await saveProjectSetup();
+    if (workflowModeState === "ADAPTATION_16_TO_8" && setupResult.planPreserved === false) {
+      throw new Error("La ficha base del Plan Docente cambió después de aprobar la adaptación. La propuesta anterior quedó invalidada; analice y apruebe una nueva propuesta antes de generar el Plan Docente modular.");
+    }
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/generate`, { method: "POST" });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "No fue posible generar el plan docente.");
@@ -3325,13 +4135,16 @@ $("#generate-teaching-plan").onclick = async () => {
   } catch (error) {
     const focusTarget = /Conocimiento e IA|formato de plan docente|prompt de plan docente|documento institucional/i.test(error.message)
       ? "#projects-list"
-      : /Importancia para el estudiante/i.test(error.message)
-        ? "#guide-reference-importance-edit"
-        : /La IA propuso|semana .*conten|secuencia única|distribución de horas|actividades calificadas/i.test(error.message)
-          ? "#generate-teaching-plan"
-          : 'textarea[name="guideReference"]';
+      : /propuesta.*adaptación|adaptación.*propuesta|ficha base.*cambió/i.test(error.message)
+        ? "#plan-adaptation-workspace"
+        : /Importancia para el estudiante/i.test(error.message)
+          ? "#guide-reference-importance-edit"
+          : /La IA propuso|semana .*conten|secuencia única|distribución de horas|actividades calificadas/i.test(error.message)
+            ? "#generate-teaching-plan"
+            : 'textarea[name="guideReference"]';
     showValidationModal(error.message, focusTarget);
   } finally {
+    button.classList.remove("is-loading");
     renderAdaptationWorkspaces();
     if (workflowModeState !== "ADAPTATION_16_TO_8") {
       button.disabled = false;
@@ -4394,6 +5207,26 @@ const knowledgeStatusLabels = {
   INACTIVE: "Inactivo",
   ARCHIVED: "Dado de baja",
 };
+const knowledgeInstructionProcessLabels = {
+  PLAN_GENERATION: "Generación del Plan Docente",
+  PLAN_ADAPTATION: "Adaptación del Plan Docente 16 → 8",
+  GUIDE_GENERATION: "Generación de la Guía Didáctica",
+  GUIDE_ADAPTATION: "Adaptación de la Guía Didáctica 16 → 8",
+};
+
+function selectedInstructionProcesses(form = $("#knowledge-config-form")) {
+  if (!form) return [];
+  return [...form.querySelectorAll('[name="instructionProcess"]:checked')].map((input) => input.value);
+}
+
+function setInstructionProcesses(form, processes) {
+  const selected = new Set(Array.isArray(processes) && processes.length
+    ? processes
+    : ["GUIDE_GENERATION", "GUIDE_ADAPTATION"]);
+  form.querySelectorAll('[name="instructionProcess"]').forEach((input) => {
+    input.checked = selected.has(input.value);
+  });
+}
 
 function knowledgeItems(kind = currentKnowledgeKind()) {
   if (!adminData) return [];
@@ -4510,6 +5343,7 @@ function configureKnowledgeForm(kind, { reset = false } = {}) {
   if (!form) return;
   const isDocument = kind === "DOCUMENT";
   $$('[data-document-only]', form).forEach((node) => node.classList.toggle("hidden", !isDocument));
+  $$('[data-specification-only]', form).forEach((node) => node.classList.toggle("hidden", isDocument));
   $$('[data-config-copy]', form).forEach((node) => node.classList.toggle("hidden", node.dataset.configCopy !== kind));
   $$('[data-scope-help]', form).forEach((node) => node.classList.toggle("hidden", node.dataset.scopeHelp !== kind));
   $("#knowledge-content-label").textContent = isDocument ? "Texto extraído o síntesis controlada" : "Contenido de la especificación";
@@ -4523,6 +5357,8 @@ function configureKnowledgeForm(kind, { reset = false } = {}) {
     if (isDocument) {
       form.elements.appliesToGuide.checked = true;
       form.elements.appliesToAll.checked = true;
+    } else {
+      setInstructionProcesses(form, ["GUIDE_GENERATION", "GUIDE_ADAPTATION"]);
     }
     form.elements.activate.checked = true;
     form.elements.priority.value = 100;
@@ -4554,6 +5390,7 @@ async function loadKnowledgeRecord(kind, id, { scroll = false } = {}) {
     form.elements.title.value = item.title;
     form.elements.content.value = item.content;
     form.elements.activate.checked = item.status === "ACTIVE";
+    setInstructionProcesses(form, item.processes);
     setScopeValues(form, item);
   } else {
     const data = await authRequest(`/api/admin/knowledge/${encodeURIComponent(id)}`);
@@ -4589,7 +5426,9 @@ function knowledgeResourceCard(kind, group) {
     : "Especificación funcional";
   const applies = kind === "DOCUMENT"
     ? [head.appliesToPlan ? "Plan Docente" : "", head.appliesToGuide ? "Guía Didáctica" : ""].filter(Boolean).join(" y ") || "Sin destino configurado"
-    : "Regla operativa";
+    : (Array.isArray(head.processes) && head.processes.length
+        ? head.processes.map((process) => knowledgeInstructionProcessLabels[process] || process).join(" · ")
+        : "Generación y adaptación de la Guía Didáctica");
   const history = group.versions.map((item) => {
     const retired = item.status === "ARCHIVED" && item.retirementReason
       ? `<small>Motivo de baja: ${escapeHtml(item.retirementReason)}</small>`
@@ -5114,6 +5953,9 @@ $("#knowledge-impact-button").onclick = async () => {
       );
     }
   }
+  if (kind === "SPECIFICATION" && !selectedInstructionProcesses(form).length) {
+    return showValidationModal("Seleccione al menos un proceso donde aplicará la especificación.", '[data-specification-only]');
+  }
   if (content.trim().length < 20) {
     return showValidationModal(
       kind === "DOCUMENT"
@@ -5128,6 +5970,7 @@ $("#knowledge-impact-button").onclick = async () => {
     title: form.elements.title.value,
     content,
     ...scopeValues(form),
+    ...(kind === "SPECIFICATION" ? { processes: selectedInstructionProcesses(form) } : {}),
     ...(kind === "DOCUMENT" ? {
       appliesToAll: form.elements.appliesToAll.checked,
       resourceKind: form.elements.resourceKind.value,
@@ -5346,6 +6189,7 @@ $("#knowledge-config-form").onsubmit = async (event) => {
     priority: Number(submittedForm.elements.priority.value),
     activate,
     ...scopeValues(submittedForm),
+    ...(kind === "SPECIFICATION" ? { processes: selectedInstructionProcesses(submittedForm) } : {}),
     impactChecksum: state.impactChecksum,
     conflictResolution: submittedForm.querySelector("[data-impact-resolution]")?.value || "",
     conflictDecision,

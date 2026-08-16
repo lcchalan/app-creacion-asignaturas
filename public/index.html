@@ -293,6 +293,17 @@
             <label class="confirm"><input name="appliesToAll" type="checkbox" checked> <span>Aplicar a todos los contenidos</span></label>
           </div>
 
+          <fieldset class="knowledge-processes hidden" data-specification-only>
+            <legend>Procesos donde aplica</legend>
+            <p class="field-help">Seleccione uno o varios procesos. Así una regla pedagógica puede modificarse sin afectar otras generaciones.</p>
+            <div class="knowledge-options">
+              <label class="confirm"><input name="instructionProcess" type="checkbox" value="PLAN_GENERATION"> <span>Generación del Plan Docente</span></label>
+              <label class="confirm"><input name="instructionProcess" type="checkbox" value="PLAN_ADAPTATION"> <span>Adaptación del Plan Docente 16 → 8</span></label>
+              <label class="confirm"><input name="instructionProcess" type="checkbox" value="GUIDE_GENERATION"> <span>Generación de la Guía Didáctica</span></label>
+              <label class="confirm"><input name="instructionProcess" type="checkbox" value="GUIDE_ADAPTATION"> <span>Adaptación de la Guía Didáctica 16 → 8</span></label>
+            </div>
+          </fieldset>
+
           <div data-shared-scope>
             <h3>Ámbito de aplicación</h3>
             <p class="field-help" data-scope-help="DOCUMENT">Si «Aplicar a todos los contenidos» está marcado, estos filtros no son necesarios.</p>
@@ -447,7 +458,7 @@
           </button>
           <button class="workflow-mode-card" type="button" data-workflow-mode="ADAPTATION_16_TO_8">
             <strong>Adaptar Plan y Guía existentes de 16 a 8 semanas</strong>
-            <span>Suba los documentos anteriores. La IA propondrá agrupaciones, síntesis, traslados o eliminaciones justificadas para revisión del profesor.</span>
+            <span>Suba los documentos anteriores. La IA propondrá reestructuraciones, agrupaciones, síntesis, traslados u omisiones justificadas conforme a las Especificaciones funcionales activas, siempre para revisión del profesor.</span>
           </button>
         </div>
       </section>
@@ -597,7 +608,7 @@
           <div class="panel-title"><b>04</b><div><h3>Generación del plan docente</h3><p>La IA prepara el plan con el formato y las reglas institucionales activas.</p></div></div>
           <section class="adaptation-workspace hidden" id="plan-adaptation-workspace">
             <div class="adaptation-workspace-header">
-              <div><p class="eyebrow">Adaptación pedagógica</p><h4>Propuesta del Plan Docente · 16 → 8 semanas</h4><p>La IA no modificará el documento silenciosamente. Revise y decida cada cambio antes de generar el Plan Docente modular.</p></div>
+              <div><p class="eyebrow">Adaptación pedagógica</p><h4>Propuesta del Plan Docente · 16 → 8 semanas</h4><p>La propuesta aplica las Especificaciones funcionales vigentes para reorganizar contenidos por resultados de aprendizaje y, cuando corresponda, sugerir omisiones justificadas. Ninguna omisión se aplicará sin la decisión explícita del profesor.</p></div>
               <button class="button" id="analyze-plan-adaptation" type="button">Analizar Plan anterior</button>
             </div>
             <div id="plan-adaptation-status" class="adaptation-status"></div>

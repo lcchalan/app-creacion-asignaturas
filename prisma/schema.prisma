@@ -297,6 +297,7 @@ model AdaptationProposal {
   templateSnapshotId  String?                    @db.Uuid
   promptSnapshotId    String?                    @db.Uuid
   documentSnapshotIds String[]                   @default([])
+  specificationSnapshotIds String[]              @default([])
   generatedAt         DateTime                   @default(now())
   approvedAt          DateTime?
   createdAt           DateTime                   @default(now())
@@ -316,8 +317,10 @@ model AdaptationChange {
   action                AdaptationAction
   sourceWeeks           Int[]                @default([])
   sourceContent         String
+  sourceWeekBreakdown   Json?
   proposedWeeks         Int[]                @default([])
   proposedContent       String
+  proposedWeekBreakdown Json?
   rationale             String
   learningOutcomes      String[]             @default([])
   hoursImpact           String
@@ -730,6 +733,7 @@ model GenerationInstruction {
   modalities       String[]       @default([])
   durations        Int[]          @default([])
   subjectTypes     String[]       @default([])
+  processes        String[]       @default(["GUIDE_GENERATION", "GUIDE_ADAPTATION"])
   priority         Int            @default(100)
   impactAnalysis   Json?
   impactChecksum   String?
@@ -798,6 +802,7 @@ model TeachingPlan {
   templateSnapshotId  String?  @db.Uuid
   promptSnapshotId    String?  @db.Uuid
   documentSnapshotIds String[] @default([])
+  specificationSnapshotIds String[] @default([])
   teacherReviewedAt   DateTime?
   teacherReviewNotes  String?
   generatedAt         DateTime @default(now())

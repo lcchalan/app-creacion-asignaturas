@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { appliesToKnowledgeContext, knowledgeScopeMismatches } from "../src/academic/knowledge-scope.js";
+import { appliesToKnowledgeContext, appliesToKnowledgeProcess, knowledgeScopeMismatches } from "../src/academic/knowledge-scope.js";
 
 const baseScope = {
   academicLevels: ["Grado"],
@@ -40,4 +40,19 @@ test("los mensajes muestran el nombre legible del tipo", () => {
     knowledgeScopeMismatches({ ...baseScope, subjectTypes: ["Tipo B - Activa"] }, baseContext),
     ["tipo de asignatura «Tipo A - Conceptual»"],
   );
+});
+
+
+test("una especificación solo se aplica a los procesos configurados", () => {
+  const scope = { processes: ["PLAN_ADAPTATION"] };
+  assert.equal(appliesToKnowledgeProcess(scope, "PLAN_ADAPTATION"), true);
+  assert.equal(appliesToKnowledgeProcess(scope, "PLAN_GENERATION"), false);
+  assert.equal(appliesToKnowledgeProcess(scope, "GUIDE_ADAPTATION"), false);
+});
+
+test("las especificaciones históricas sin procesos conservan compatibilidad con la guía", () => {
+  const scope = { processes: [] };
+  assert.equal(appliesToKnowledgeProcess(scope, "GUIDE_GENERATION"), true);
+  assert.equal(appliesToKnowledgeProcess(scope, "GUIDE_ADAPTATION"), true);
+  assert.equal(appliesToKnowledgeProcess(scope, "PLAN_ADAPTATION"), false);
 });

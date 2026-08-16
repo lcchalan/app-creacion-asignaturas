@@ -287,8 +287,27 @@ input[readonly]{background:#f1f4f7;color:#405269;cursor:not-allowed}.academic-pr
 .adaptation-proposal{display:grid;gap:16px}
 .adaptation-proposal-summary{display:grid;gap:12px;padding:16px;border:1px solid #dbe5ed;border-radius:12px;background:#fff}
 .adaptation-proposal-summary h5{margin:0;color:var(--navy);font-size:1.05rem}.adaptation-proposal-summary p{margin:0;color:#43566c;line-height:1.55}
+.adaptation-section-heading{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:start;padding:12px 14px;border:1px solid #dbe5ed;border-radius:10px;background:#f8fafc}.adaptation-section-heading h5{margin:0;color:var(--navy);font-size:1rem}.adaptation-section-heading p{margin:3px 0 0;color:#607387;font-size:.82rem;line-height:1.45}.adaptation-section-number{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:999px;background:#173b60;color:#fff;font-size:.78rem;font-weight:850}.adaptation-readonly-badge{display:inline-flex;padding:4px 8px;border-radius:999px;background:#eef3f7;color:#52667a;font-size:.7rem;font-weight:800}.adaptation-proposal-identity{display:grid;gap:4px}.adaptation-proposal-identity>strong{color:var(--navy);font-size:.93rem}.adaptation-proposal-identity p{margin:0;color:#53677b;line-height:1.5}.adaptation-weekly-overview{border:1px solid #dbe5ed;border-radius:10px;background:#fff;overflow:hidden}.adaptation-weekly-overview>summary{cursor:pointer;padding:11px 13px;color:var(--navy);font-size:.84rem;font-weight:800;background:#f8fafc;list-style-position:inside}.adaptation-weekly-overview[open]>summary{border-bottom:1px solid #dbe5ed}.adaptation-weekly-overview .adaptation-week-grid{padding:10px}.adaptation-review-section{display:grid;gap:13px}.adaptation-editor-help{display:block;color:#62778b;font-weight:500;line-height:1.45}.adaptation-edit-content textarea{font-family:inherit;line-height:1.5}.adaptation-edit-content textarea::placeholder{color:#8191a1}
+.adaptation-specification-snapshots{display:grid;gap:6px;padding:9px 11px;border-left:3px solid #9fb3c8;background:#f8fafc;border-radius:7px;color:#52667a;font-size:.8rem}
+.adaptation-specification-snapshots strong{color:var(--navy)}
+.adaptation-specification-snapshots>div{display:flex;gap:6px;flex-wrap:wrap}
+.adaptation-specification-snapshots span{display:inline-flex;padding:3px 7px;border:1px solid #dbe5ed;border-radius:999px;background:#fff}
+.adaptation-progression-summary{display:grid;gap:8px;padding:11px 12px;border:1px solid #dbe5ed;border-radius:10px;background:#f8fafc}
+.adaptation-progression-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.adaptation-progression-heading strong{color:var(--navy);font-size:.9rem}
+.adaptation-progression-heading span{color:#66788b;font-size:.78rem}
+.adaptation-progression-list{display:grid;gap:6px}
+.adaptation-progression-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:start;padding:7px 8px;border-radius:8px;background:#fff}
+.adaptation-progression-code{display:inline-flex;align-items:center;justify-content:center;min-width:42px;padding:3px 7px;border-radius:999px;background:#eaf1f8;color:#173b60;font-size:.72rem;font-weight:800}
+.adaptation-progression-item div{display:grid;gap:2px}
+.adaptation-progression-item div strong{color:#243b53;font-size:.82rem}
+.adaptation-progression-item small{display:block;color:#53677b;line-height:1.38}
 .adaptation-week-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .adaptation-week-card{padding:12px;border:1px solid #dbe5ed;border-radius:10px;background:#fbfcfd}
+.adaptation-week-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.adaptation-week-heading>strong{margin-bottom:0}
+.adaptation-integrative-badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:#eef4fb;color:#24496f;font-size:.72rem;font-weight:800;white-space:nowrap}
+.adaptation-week-card.integrative{border-color:#bfd2e5;background:#f9fbfe}
 .adaptation-week-card strong{display:block;margin-bottom:5px;color:var(--navy)}.adaptation-week-card p{margin:4px 0;color:#43566c;font-size:.88rem;line-height:1.45}
 .adaptation-change-list{display:grid;gap:13px}
 .adaptation-change-card{display:grid;gap:13px;padding:16px;border:1px solid #d5e0e9;border-radius:13px;background:#fff}
@@ -296,14 +315,19 @@ input[readonly]{background:#f1f4f7;color:#405269;cursor:not-allowed}.academic-pr
 .adaptation-change-header h5{margin:0;color:var(--navy);font-size:1rem}.adaptation-action-badge{padding:5px 9px;border-radius:999px;background:#eaf3fb;color:#0b5aa7;font-size:.76rem;font-weight:850}
 .adaptation-change-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .adaptation-change-column{padding:12px;border:1px solid #e0e7ed;border-radius:10px;background:#fbfcfd}.adaptation-change-column strong{display:block;margin-bottom:6px;color:var(--navy);font-size:.82rem}.adaptation-change-column p{margin:0;white-space:pre-wrap;line-height:1.48;color:#43566c}
+.adaptation-operation-summary{display:grid;gap:7px;padding:12px 14px;border:1px solid #d8e5f0;border-radius:10px;background:#f8fbfe}.adaptation-operation-summary strong{color:var(--navy);font-size:.84rem}.adaptation-operation-flow{display:flex;gap:14px;flex-wrap:wrap;color:#50657a;font-size:.83rem}.adaptation-operation-flow span{display:inline-flex;gap:4px;align-items:baseline}.adaptation-operation-summary p{margin:0;color:#43566c;line-height:1.55}.adaptation-change-help{margin-top:10px !important;font-size:.8rem;color:#61768a !important}
 .adaptation-change-rationale{display:grid;gap:7px;padding:12px 14px;border-left:4px solid #d4a62a;background:#fffaf0;border-radius:0 9px 9px 0;color:#4f4a3e;line-height:1.5}
-.adaptation-change-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;color:var(--muted);font-size:.86rem}.adaptation-change-meta p{margin:0}
+.adaptation-deletion-notice{display:grid;gap:4px;padding:10px 12px;border:1px solid #ead8a2;border-radius:9px;background:#fffdf5;color:#5b5137;line-height:1.45}
+.adaptation-deletion-notice strong{color:#7a5c14;font-size:.82rem}
+.adaptation-deletion-notice span{font-size:.85rem}
+.adaptation-change-card.deletion .adaptation-action-badge{background:#fff4d6;color:#76570b;border-color:#ead08b}
+.adaptation-change-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;color:var(--muted);font-size:.86rem}.adaptation-meta-block{min-width:0;padding:11px 12px;border:1px solid #e0e7ed;border-radius:10px;background:#fbfcfd}.adaptation-meta-block>strong{display:block;margin-bottom:5px;color:var(--navy);font-size:.82rem}.adaptation-meta-block p{margin:0;color:#43566c;line-height:1.5}
 .adaptation-review-controls{display:grid;grid-template-columns:minmax(220px,.7fr) minmax(0,1.3fr);gap:12px;align-items:start;padding-top:4px;border-top:1px solid #e4ebf1}
 .adaptation-review-controls label{display:grid;gap:7px;color:var(--navy);font-size:.82rem;font-weight:800}.adaptation-review-controls textarea{min-height:90px}
 .adaptation-edit-content{grid-column:1/-1}.adaptation-comment{grid-column:1/-1}
 .adaptation-review-saved{color:#2f6f4d;font-size:.82rem;font-weight:750}
 .adaptation-approval-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
-@media(max-width:900px){.workflow-selection-summary{align-items:stretch;display:grid}.workflow-selection-summary .button{width:100%}.workflow-mode-options,.adaptation-source-grid,.adaptation-week-grid,.adaptation-change-comparison,.adaptation-change-meta,.adaptation-review-controls{grid-template-columns:1fr}.adaptation-source-banner,.adaptation-workspace-header,.adaptation-source-actions{align-items:stretch;display:grid}.adaptation-source-banner{margin-inline:16px}.adaptation-source-actions .button,.adaptation-workspace-header .button{width:100%}}
+@media(max-width:900px){.adaptation-section-heading{grid-template-columns:auto minmax(0,1fr)}.adaptation-readonly-badge{grid-column:2;justify-self:start}.workflow-selection-summary{align-items:stretch;display:grid}.workflow-selection-summary .button{width:100%}.workflow-mode-options,.adaptation-source-grid,.adaptation-week-grid,.adaptation-change-comparison,.adaptation-change-meta,.adaptation-review-controls{grid-template-columns:1fr}.adaptation-source-banner,.adaptation-workspace-header,.adaptation-source-actions{align-items:stretch;display:grid}.adaptation-source-banner{margin-inline:16px}.adaptation-source-actions .button,.adaptation-workspace-header .button{width:100%}}
 .workflow-badge{display:inline-flex;align-items:center;padding:4px 8px;border-radius:999px;background:#eef3f7;color:#4c6074;font-size:.7rem;font-weight:850;letter-spacing:.03em;text-transform:uppercase}
 .workflow-badge.adaptation{background:#fff3d8;color:#725009}
 .saved-project-title{flex-wrap:wrap}.saved-project-title h3{flex-basis:100%}
@@ -422,3 +446,28 @@ input[readonly]{background:#f1f4f7;color:#405269;cursor:not-allowed}.academic-pr
 .week-review-download{display:inline-flex;align-items:center;justify-content:center;gap:7px}
 .week-review-download-label{font-weight:600}
 @media(max-width:760px){.week-review-downloads{width:100%}.week-review-download{flex:1 1 100%;width:100%}}
+
+/* v31.3: presentación compacta y jerárquica de propuestas de adaptación */
+.adaptation-week-field,.adaptation-week-contents,.adaptation-week-purpose{margin:5px 0;color:#43566c;font-size:.88rem;line-height:1.45}
+.adaptation-week-field>b,.adaptation-week-contents>b,.adaptation-week-purpose>b{display:block;margin-bottom:4px;color:#43566c}.adaptation-week-purpose{padding-top:5px;border-top:1px solid #e4ebf1}.adaptation-week-purpose span{display:block}
+.adaptation-structured-content{display:grid;gap:3px;min-width:0}
+.adaptation-structured-line{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;align-items:start;color:#43566c;line-height:1.4;overflow-wrap:anywhere}
+.adaptation-structured-line.unit{margin-top:1px;color:var(--navy);font-weight:750}
+.adaptation-structured-line.content-item{padding-left:8px}
+.adaptation-structured-line.subcontent{padding-left:24px}
+.adaptation-structured-line.text{display:block;white-space:pre-wrap}
+.adaptation-structured-number{font-weight:850;color:var(--navy);white-space:nowrap}
+.adaptation-change-column>.adaptation-structured-content{margin-top:2px}
+@media(max-width:600px){.adaptation-structured-line.content-item{padding-left:4px}.adaptation-structured-line.subcontent{padding-left:14px}}
+
+.adaptation-meta-list{margin:5px 0 0;padding-left:19px;display:grid;gap:4px;color:#43566c}
+.adaptation-meta-list li{padding-left:1px;line-height:1.42}
+.adaptation-meta-empty{display:block;margin-top:4px;color:var(--muted)}
+.adaptation-week-field .adaptation-meta-list{margin-top:3px}
+
+@media(max-width:700px){.adaptation-progression-item{grid-template-columns:auto minmax(0,1fr)}.adaptation-progression-item>.adaptation-integrative-badge{grid-column:2}}
+
+/* v31.4: aviso para propuestas creadas antes de la reestructuración pedagógica por RA */
+.adaptation-version-warning{display:grid;gap:6px;padding:14px 16px;border:1px solid #e4c46a;border-left:4px solid #c99516;border-radius:10px;background:#fffaf0;color:#43566c;line-height:1.5}
+.adaptation-version-warning strong{color:var(--navy);font-size:.95rem}
+.adaptation-version-warning span{display:block}

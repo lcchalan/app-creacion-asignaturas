@@ -184,6 +184,32 @@ async function main() {
       });
     }
   }
+
+  const planAdaptationSpecificationKey = "adaptacion-plan-16-a-8";
+  const existingPlanAdaptationSpecification = await database.generationInstruction.findFirst({
+    where: { key: planAdaptationSpecificationKey },
+    orderBy: { version: "desc" },
+  });
+  if (!existingPlanAdaptationSpecification) {
+    const content = await readFile(
+      new URL("../knowledge/especificacion-adaptacion-plan-16-a-8-v1.txt", import.meta.url),
+      "utf8",
+    );
+    await database.generationInstruction.create({
+      data: {
+        key: planAdaptationSpecificationKey,
+        title: "Reestructuración pedagógica del Plan Docente 16 → 8 semanas",
+        content,
+        version: 1,
+        status: "ACTIVE",
+        durations: [8],
+        processes: ["PLAN_ADAPTATION"],
+        priority: 5,
+        activatedAt: new Date(),
+        createdById: admin.id,
+      },
+    });
+  }
   const indicatorCatalog = [
     ["PA-01", "Correspondencia curricular", "Verifica que contenidos, actividades, recursos y evaluaciones respondan a los resultados de aprendizaje y a la planificación microcurricular.", "PEER", 4],
     ["PA-02", "Rigor disciplinar", "Comprueba que los contenidos sean correctos, suficientes y conceptualmente sólidos.", "PEER", 4],
