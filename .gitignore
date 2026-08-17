@@ -43,3 +43,14 @@ index.html.antes-de-separar
 
 # Respaldos locales del proyecto
 app-creacion-asignaturas-v31-*.zip
+
+# Documentos académicos cargados durante la ejecución
+legacy/
+
+# Residuos generados por patch
+*.orig
+*.rej
+
+# Respaldos temporales de actualizaciones
+.backup-*/
+backup-v*/
