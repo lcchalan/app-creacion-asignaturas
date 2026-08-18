@@ -64,3 +64,28 @@ export function previouslyApprovedTeachingPlanStages<T extends { sortOrder: numb
     .filter((item) => item.sortOrder < currentSortOrder && item.status === "APPROVED")
     .sort((left, right) => left.sortOrder - right.sortOrder);
 }
+
+export const teachingPlanCorrectionResults = ["COMPLIES_PARTIALLY", "DOES_NOT_COMPLY"] as const;
+export type TeachingPlanCorrectionResult = typeof teachingPlanCorrectionResults[number];
+
+export function teachingPlanReviewItemNeedsCorrection(result: string) {
+  return teachingPlanCorrectionResults.includes(result as TeachingPlanCorrectionResult);
+}
+
+export type TeachingPlanPreviewSection = "cover" | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
+
+export function teachingPlanIndicatorPreviewSection(code: string): TeachingPlanPreviewSection {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (/^A\d+/u.test(normalized)) return "a";
+  if (/^B\d+/u.test(normalized)) return "b";
+  if (/^C\d+/u.test(normalized)) return "c";
+  if (/^D\d+/u.test(normalized)) return "d";
+  if (/^E\d+/u.test(normalized)) return "e";
+  if (/^F\d+/u.test(normalized)) return "f";
+  if (/^G\d+/u.test(normalized)) return "g";
+  if (normalized === "DI01") return "d";
+  if (normalized === "DI02") return "e";
+  if (normalized === "DIR01") return "c";
+  if (normalized === "DIR02") return "h";
+  return "cover";
+}

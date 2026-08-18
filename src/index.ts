@@ -115,6 +115,8 @@ import {
   nextTeachingPlanStage,
   orderedEnabledTeachingPlanStages,
   previouslyApprovedTeachingPlanStages,
+  teachingPlanIndicatorPreviewSection,
+  teachingPlanReviewItemNeedsCorrection,
   teachingPlanReviewStageLabel,
   teachingPlanReviewStageRole,
   teachingPlanReviewStages,
@@ -711,6 +713,96 @@ function teachingPlanWorkflowApiView(workflow: {
       sortOrder: stage.sortOrder, status: stage.status, approvedAt: stage.approvedAt?.toISOString() || null, reviewer: stage.reviewer,
     })),
   };
+}
+
+function teachingPlanCorrectionItemApiView(item: {
+  id: string;
+  result: string;
+  observation: string | null;
+  teacherResponse: string | null;
+  teacherResponseUpdatedAt: Date | null;
+  teacherAddressed: boolean;
+  teacherAddressedAt: Date | null;
+  indicator: { id: string; code: string; name: string; description: string; required: boolean; sortOrder: number };
+}) {
+  return {
+    id: item.id,
+    result: item.result,
+    observation: item.observation || "",
+    teacherResponse: item.teacherResponse || "",
+    teacherResponseUpdatedAt: item.teacherResponseUpdatedAt?.toISOString() || null,
+    teacherAddressed: item.teacherAddressed,
+    teacherAddressedAt: item.teacherAddressedAt?.toISOString() || null,
+    section: teachingPlanIndicatorPreviewSection(item.indicator.code),
+    indicator: {
+      id: item.indicator.id, code: item.indicator.code, name: item.indicator.name,
+      description: item.indicator.description, required: item.indicator.required, sortOrder: item.indicator.sortOrder,
+    },
+  };
+}
+
+async function teachingPlanTeacherCorrections(workflowId: string) {
+  const workflow = await database.teachingPlanReviewWorkflow.findUnique({
+    where: { id: workflowId },
+    include: {
+      stages: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          reviewer: { select: { id: true, displayName: true, email: true } },
+          reviews: {
+            where: { decision: "CHANGES_REQUESTED" },
+            orderBy: { attempt: "desc" },
+            include: {
+              reviewedBy: { select: { id: true, displayName: true } },
+              items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!workflow) return { pending: null, history: [] };
+
+  const reviewView = (
+    stage: (typeof workflow.stages)[number],
+    review: (typeof workflow.stages)[number]["reviews"][number],
+  ) => {
+    const items = review.items
+      .filter((item) => teachingPlanReviewItemNeedsCorrection(item.result))
+      .map(teachingPlanCorrectionItemApiView);
+    return {
+      reviewId: review.id,
+      attempt: review.attempt,
+      teachingPlanVersion: review.teachingPlanVersion,
+      stage: stage.stage,
+      stageLabel: teachingPlanReviewStageLabel[stage.stage as TeachingPlanReviewStage],
+      reviewer: stage.reviewer,
+      reviewedBy: review.reviewedBy,
+      reviewedAt: review.reviewedAt?.toISOString() || null,
+      generalObservation: review.generalObservation || "",
+      teacherGeneralResponse: review.teacherGeneralResponse || "",
+      teacherRespondedAt: review.teacherRespondedAt?.toISOString() || null,
+      addressedCount: items.filter((item) => item.teacherAddressed).length,
+      totalCount: items.length,
+      items,
+    };
+  };
+
+  const currentStage = workflow.status === "CHANGES_REQUESTED"
+    ? workflow.stages.find((stage) => stage.status === "CHANGES_REQUESTED") || null
+    : null;
+  const currentReview = currentStage?.reviews[0] || null;
+  const pending = currentStage && currentReview ? reviewView(currentStage, currentReview) : null;
+  const history = workflow.stages
+    .flatMap((stage) => stage.reviews.map((review) => ({ stage, review })))
+    .filter(({ review }) => review.id !== currentReview?.id)
+    .sort((left, right) => {
+      const leftTime = left.review.reviewedAt?.getTime() || left.review.createdAt.getTime();
+      const rightTime = right.review.reviewedAt?.getTime() || right.review.createdAt.getTime();
+      return rightTime - leftTime;
+    })
+    .map(({ stage, review }) => reviewView(stage, review));
+  return { pending, history };
 }
 
 function categoryFor(percentage: number) {
@@ -6607,6 +6699,112 @@ ${planContext.instructions}`,
       return;
     }
 
+    const teachingPlanCorrectionsMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/corrections$/i,
+    );
+    if ((request.method === "GET" || request.method === "PATCH") && teachingPlanCorrectionsMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: { id: teachingPlanCorrectionsMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
+        include: {
+          teachingPlan: { include: { reviewWorkflow: { include: { stages: { orderBy: { sortOrder: "asc" } } } } } },
+        },
+      });
+      if (!project?.teachingPlan) {
+        json(response, 404, { error: "El Plan Docente no existe." });
+        return;
+      }
+      const workflow = project.teachingPlan.reviewWorkflow;
+      if (!workflow) {
+        json(response, 200, { pending: null, history: [] });
+        return;
+      }
+      if (request.method === "GET") {
+        json(response, 200, await teachingPlanTeacherCorrections(workflow.id));
+        return;
+      }
+
+      if (workflow.status !== "CHANGES_REQUESTED") {
+        throw Object.assign(new Error("El Plan Docente no tiene correcciones pendientes de atención."), { statusCode: 409 });
+      }
+      const correctionStage = workflow.stages.find((stage) => stage.status === "CHANGES_REQUESTED");
+      if (!correctionStage) {
+        throw Object.assign(new Error("No fue posible identificar la etapa que solicitó las correcciones."), { statusCode: 409 });
+      }
+      const review = await database.teachingPlanReview.findFirst({
+        where: { workflowStageId: correctionStage.id, decision: "CHANGES_REQUESTED" },
+        orderBy: { attempt: "desc" },
+        include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } } },
+      });
+      if (!review) {
+        throw Object.assign(new Error("No existe una revisión cerrada con las correcciones solicitadas."), { statusCode: 409 });
+      }
+      const correctionItems = review.items.filter((item) => teachingPlanReviewItemNeedsCorrection(item.result));
+      if (!correctionItems.length) {
+        throw Object.assign(new Error("La revisión no contiene criterios marcados como Cumple parcialmente o No cumple. Registre una respuesta general al reenviar el Plan."), { statusCode: 409 });
+      }
+      const body = z.object({
+        generalResponse: z.string().trim().max(3000).optional().default(""),
+        items: z.array(z.object({
+          id: z.string().uuid(),
+          teacherResponse: z.string().trim().max(5000).optional().default(""),
+          addressed: z.boolean(),
+        })).min(1).max(50),
+      }).parse(await readJsonBody(request));
+      const expectedIds = new Set(correctionItems.map((item) => item.id));
+      const submittedIds = new Set(body.items.map((item) => item.id));
+      if (body.items.length !== correctionItems.length || submittedIds.size !== body.items.length
+        || body.items.some((item) => !expectedIds.has(item.id))) {
+        throw new Error("Las respuestas no corresponden a la lista vigente de correcciones del Plan Docente.");
+      }
+      for (const item of body.items) {
+        if (item.addressed && !item.teacherResponse) {
+          const indicator = correctionItems.find((entry) => entry.id === item.id)?.indicator;
+          throw new Error(`Describa brevemente cómo atendió la corrección ${indicator?.code || "seleccionada"} antes de marcarla como atendida.`);
+        }
+      }
+      const now = new Date();
+      const generalResponseChanged = (review.teacherGeneralResponse || "") !== body.generalResponse;
+      await database.$transaction(async (transaction) => {
+        await transaction.teachingPlanReview.update({
+          where: { id: review.id },
+          data: { teacherGeneralResponse: body.generalResponse || null },
+        });
+        if (generalResponseChanged) {
+          await transaction.auditLog.create({ data: {
+            userId: user.id, action: "TEACHING_PLAN_CORRECTION_GENERAL_RESPONSE_UPDATED",
+            entityType: "TeachingPlanReview", entityId: review.id,
+            details: { stage: correctionStage.stage, teachingPlanVersion: project.teachingPlan!.version },
+          } });
+        }
+        for (const item of body.items) {
+          const current = correctionItems.find((entry) => entry.id === item.id)!;
+          const responseChanged = (current.teacherResponse || "") !== item.teacherResponse;
+          const addressedChanged = current.teacherAddressed !== item.addressed;
+          await transaction.teachingPlanReviewItem.update({
+            where: { id: item.id },
+            data: {
+              teacherResponse: item.teacherResponse || null,
+              teacherResponseUpdatedAt: responseChanged ? now : current.teacherResponseUpdatedAt,
+              teacherAddressed: item.addressed,
+              teacherAddressedAt: item.addressed
+                ? (current.teacherAddressedAt || now)
+                : null,
+            },
+          });
+          if (responseChanged || addressedChanged) {
+            await transaction.auditLog.create({ data: {
+              userId: user.id, action: "TEACHING_PLAN_CORRECTION_ITEM_UPDATED",
+              entityType: "TeachingPlanReviewItem", entityId: item.id,
+              details: { reviewId: review.id, indicatorCode: current.indicator.code, addressed: item.addressed, teachingPlanVersion: project.teachingPlan!.version },
+            } });
+          }
+        }
+      });
+      json(response, 200, { ok: true, corrections: await teachingPlanTeacherCorrections(workflow.id) });
+      return;
+    }
+
     const teachingPlanReviewMatch = requestUrl.pathname.match(
       /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/review$/i,
     );
@@ -6664,6 +6862,27 @@ ${planContext.instructions}`,
       if (existingWorkflow?.status === "CHANGES_REQUESTED" && !correctionStage?.reviewer) {
         throw Object.assign(new Error("No fue posible identificar al responsable que solicitó las correcciones."), { statusCode: 409 });
       }
+      const correctionReview = correctionStage
+        ? await database.teachingPlanReview.findFirst({
+            where: { workflowStageId: correctionStage.id, decision: "CHANGES_REQUESTED" },
+            orderBy: { attempt: "desc" },
+            include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } } },
+          })
+        : null;
+      const correctionItems = correctionReview?.items.filter((item) => teachingPlanReviewItemNeedsCorrection(item.result)) || [];
+      if (existingWorkflow?.status === "CHANGES_REQUESTED" && correctionReview && correctionItems.length) {
+        const pendingCorrections = correctionItems.filter((item) => !item.teacherAddressed || !String(item.teacherResponse || "").trim());
+        if (pendingCorrections.length) {
+          throw Object.assign(new Error(`Atienda y responda las ${pendingCorrections.length} correcciones pendientes antes de reenviar el Plan Docente.`), { statusCode: 409 });
+        }
+      }
+      if (existingWorkflow?.status === "CHANGES_REQUESTED" && correctionReview && !correctionItems.length && !body.notes) {
+        throw Object.assign(new Error("La revisión anterior contiene una observación general sin criterios de corrección estructurados. Registre una respuesta general antes de reenviar el Plan Docente."), { statusCode: 409 });
+      }
+      const correctionResponseText = correctionItems
+        .map((item) => `${item.indicator.code}: ${String(item.teacherResponse || "").trim()}`)
+        .filter(Boolean)
+        .join("\n");
       const reviewedAt = new Date();
       const notificationIds: string[] = [];
       await database.$transaction(async (transaction) => {
@@ -6694,6 +6913,12 @@ ${planContext.instructions}`,
             entityId: workflow.id, details: { version: body.version, firstStage: firstStage.stage },
           } });
         } else if (existingWorkflow && correctionStage?.reviewer) {
+          if (correctionReview) {
+            await transaction.teachingPlanReview.update({
+              where: { id: correctionReview.id },
+              data: { teacherGeneralResponse: body.notes || null, teacherRespondedAt: reviewedAt },
+            });
+          }
           await transaction.teachingPlanWorkflowStage.update({
             where: { id: correctionStage.id }, data: { status: "PENDING_REVIEW" },
           });
@@ -6703,6 +6928,7 @@ ${planContext.instructions}`,
           const notification = await createTeachingPlanNotification(transaction, {
             workflowId: existingWorkflow.id, event: "RESUBMITTED", stage: correctionStage.stage as TeachingPlanReviewStage,
             recipient: correctionStage.reviewer, project, includeReviewLink: true,
+            observations: [body.notes, correctionResponseText].filter(Boolean).join("\n") || undefined,
           });
           notificationIds.push(notification.id);
           for (const previous of previouslyApprovedTeachingPlanStages(existingWorkflow.stages, correctionStage.sortOrder)) {
@@ -6710,13 +6936,13 @@ ${planContext.instructions}`,
             const informational = await createTeachingPlanNotification(transaction, {
               workflowId: existingWorkflow.id, event: "INFORMATIONAL_RESUBMISSION",
               stage: correctionStage.stage as TeachingPlanReviewStage, recipient: previous.reviewer, project,
-              actorName: user.displayName, observations: body.notes || undefined,
+              actorName: user.displayName, observations: [body.notes, correctionResponseText].filter(Boolean).join("\n") || undefined,
             });
             notificationIds.push(informational.id);
           }
           await transaction.auditLog.create({ data: {
             userId: user.id, action: "TEACHING_PLAN_CORRECTIONS_RESUBMITTED", entityType: "TeachingPlanReviewWorkflow",
-            entityId: existingWorkflow.id, details: { version: body.version, stage: correctionStage.stage },
+            entityId: existingWorkflow.id, details: { version: body.version, stage: correctionStage.stage, correctionReviewId: correctionReview?.id || null, correctionItemCount: correctionItems.length },
           } });
         }
         await transaction.auditLog.create({ data: {
@@ -6977,8 +7203,15 @@ ${planContext.instructions}`,
         throw new Error("No se puede aprobar mientras exista un criterio obligatorio marcado como No cumple.");
       }
       if (body.decision === "CHANGES_REQUESTED") {
-        const hasObservation = Boolean(body.generalObservation) || body.items.some((item) => item.observation);
-        if (!hasObservation) throw new Error("Registre las correcciones solicitadas antes de devolver el Plan Docente al profesor.");
+        const correctionEntries = body.items.filter((item) => teachingPlanReviewItemNeedsCorrection(item.result));
+        if (!correctionEntries.length) {
+          throw new Error("Para solicitar correcciones marque al menos un criterio como Cumple parcialmente o No cumple.");
+        }
+        const missingObservation = correctionEntries.find((item) => !item.observation);
+        if (missingObservation) {
+          const indicator = review.items.find((reviewItem) => reviewItem.id === missingObservation.id)?.indicator;
+          throw new Error(`Describa la corrección requerida en ${indicator?.code || "cada criterio observado"}.`);
+        }
       }
       const project = workflowStage.workflow.teachingPlan.project;
       const teacher = project.owner;
@@ -7044,7 +7277,7 @@ ${planContext.instructions}`,
           });
           const correctionsText = [
             body.generalObservation,
-            ...body.items.filter((item) => item.observation).map((item) => {
+            ...body.items.filter((item) => teachingPlanReviewItemNeedsCorrection(item.result) && item.observation).map((item) => {
               const indicator = review.items.find((reviewItem) => reviewItem.id === item.id)?.indicator;
               return `${indicator?.code || "Criterio"}: ${item.observation}`;
             }),
@@ -7403,6 +7636,9 @@ ${planContext.instructions}`,
         ? teachingPlanReviewChecks(currentTeachingPlanContent, projectPlanConsistencyInput(project.academicOffering))
         : [];
       const teachingPlanReviewProcess = project.teachingPlan ? await ensureTeachingPlanReviewProcessConfig() : null;
+      const teachingPlanCorrections = project.teachingPlan?.reviewWorkflow
+        ? await teachingPlanTeacherCorrections(project.teachingPlan.reviewWorkflow.id)
+        : { pending: null, history: [] };
       const planAdaptationProposal = project.adaptationProposals.find((item) => item.target === "PLAN");
       const guideAdaptationProposal = project.adaptationProposals.find((item) => item.target === "GUIDE");
       const [planAdaptationProposalPayload, guideAdaptationProposalPayload] = await Promise.all([
@@ -7491,6 +7727,7 @@ ${planContext.instructions}`,
               rea: project.reaBib ?? "",
             },
           },
+          teachingPlanCorrections,
           teachingPlan: project.teachingPlan && currentTeachingPlanContent ? {
             content: currentTeachingPlanContent,
             version: project.teachingPlan.version,

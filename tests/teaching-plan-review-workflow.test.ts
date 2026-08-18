@@ -4,6 +4,8 @@ import {
   nextTeachingPlanStage,
   orderedEnabledTeachingPlanStages,
   previouslyApprovedTeachingPlanStages,
+  teachingPlanIndicatorPreviewSection,
+  teachingPlanReviewItemNeedsCorrection,
   teachingPlanReviewStageRole,
   userCanActOnTeachingPlanStage,
 } from "../src/academic/teaching-plan-review-workflow.js";
@@ -56,4 +58,24 @@ test("una corrección posterior no reactiva las etapas ya aprobadas", () => {
   ];
   assert.deepEqual(previouslyApprovedTeachingPlanStages(stages, 2).map((item) => item.stage), ["PEER"]);
   assert.equal(nextTeachingPlanStage(stages, 2)?.stage, "DIITEP");
+});
+
+
+test("identifica los resultados de lista de cotejo que requieren corrección docente", () => {
+  assert.equal(teachingPlanReviewItemNeedsCorrection("DOES_NOT_COMPLY"), true);
+  assert.equal(teachingPlanReviewItemNeedsCorrection("COMPLIES_PARTIALLY"), true);
+  assert.equal(teachingPlanReviewItemNeedsCorrection("COMPLIES"), false);
+  assert.equal(teachingPlanReviewItemNeedsCorrection("NOT_APPLICABLE"), false);
+});
+
+test("relaciona los criterios de la lista de cotejo con la sección visible del Plan Docente", () => {
+  assert.equal(teachingPlanIndicatorPreviewSection("A01"), "a");
+  assert.equal(teachingPlanIndicatorPreviewSection("D04"), "d");
+  assert.equal(teachingPlanIndicatorPreviewSection("E02"), "e");
+  assert.equal(teachingPlanIndicatorPreviewSection("G02"), "g");
+  assert.equal(teachingPlanIndicatorPreviewSection("DI01"), "d");
+  assert.equal(teachingPlanIndicatorPreviewSection("DI02"), "e");
+  assert.equal(teachingPlanIndicatorPreviewSection("DIR01"), "c");
+  assert.equal(teachingPlanIndicatorPreviewSection("DIR02"), "h");
+  assert.equal(teachingPlanIndicatorPreviewSection("Q01"), "cover");
 });

@@ -47,7 +47,7 @@ export function buildTeachingPlanWorkflowMail(input: {
   if (input.event === "RESUBMITTED") {
     return {
       subject: `Plan Docente corregido para nueva revisión - ${input.subjectName}`,
-      body: [greeting, "", `El profesor ha remitido nuevamente el Plan Docente con correcciones para la etapa ${stageLabel}.`, "", ...context, ...reviewLink, "", "Sistema de Gestión Guía didáctica"].join("\n"),
+      body: [greeting, "", `El profesor ha remitido nuevamente el Plan Docente con correcciones para la etapa ${stageLabel}.`, "", ...context, ...observations, ...reviewLink, "", "Sistema de Gestión Guía didáctica"].join("\n"),
     };
   }
   if (input.event === "CHANGES_REQUESTED") {

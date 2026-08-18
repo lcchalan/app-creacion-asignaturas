@@ -722,6 +722,33 @@
                   <p class="plan-template-applied" id="teaching-plan-template-applied"></p>
                 </div>
               </div>
+              <section class="teaching-plan-corrections hidden" id="teaching-plan-corrections" aria-labelledby="teaching-plan-corrections-title">
+                <div class="teaching-plan-corrections-heading">
+                  <div><p class="eyebrow">Revisión institucional</p><h4 id="teaching-plan-corrections-title">Correcciones pendientes</h4><p id="teaching-plan-corrections-meta"></p></div>
+                  <span class="status-badge status-draft" id="teaching-plan-corrections-count">0 pendientes</span>
+                </div>
+                <div class="teaching-plan-corrections-general hidden" id="teaching-plan-corrections-general"></div>
+                <div class="teaching-plan-correction-items" id="teaching-plan-correction-items"></div>
+                <div class="teaching-plan-corrections-progress">
+                  <div><strong id="teaching-plan-corrections-progress-text">0/0 correcciones atendidas</strong><span>Describa brevemente qué cambió y marque cada observación como atendida.</span></div>
+                  <progress id="teaching-plan-corrections-progress" value="0" max="1"></progress>
+                </div>
+                <label class="wide">Respuesta general al revisor <span class="field-help">(opcional)</span>
+                  <textarea id="teacher-corrections-general-response" maxlength="3000" placeholder="Puede resumir los ajustes realizados antes de reenviar el Plan Docente."></textarea>
+                </label>
+                <label class="teaching-plan-review-confirm">
+                  <input id="teacher-corrections-confirm" type="checkbox">
+                  <span>Confirmo que revisé las observaciones, realicé los ajustes correspondientes y verifiqué nuevamente el Plan Docente.</span>
+                </label>
+                <div class="teaching-plan-corrections-actions">
+                  <button class="button secondary" id="save-teaching-plan-corrections" type="button">Guardar respuestas</button>
+                  <button class="button approve" id="submit-teaching-plan-corrections" type="button" disabled>Enviar correcciones</button>
+                </div>
+                <details class="teaching-plan-corrections-history hidden" id="teaching-plan-corrections-history-wrap">
+                  <summary>Ver historial de correcciones anteriores</summary>
+                  <div id="teaching-plan-corrections-history"></div>
+                </details>
+              </section>
               <section class="plan-methodologies-section plan-methodologies-section-top" id="plan-methodologies-section">
                 <div class="plan-methodologies-heading">
                   <div><h4>Metodologías activas y TAC</h4><p>Revise y edite estos campos aquí antes de validar el Plan Docente.</p></div>
@@ -760,7 +787,7 @@
                   <button class="button secondary hidden" id="download-teaching-plan" type="button" disabled>Descargar Word</button>
                   <button class="button secondary hidden" id="download-teaching-plan-json" type="button" disabled>Descargar JSON</button>
                 </div>
-                <p class="notice compact">El Plan Docente se descarga para su revisión, firma y aprobación fuera del sistema. En esta versión no existe flujo interno de aprobación.</p>
+                <p class="notice compact">La descarga se conserva como respaldo documental. Cuando el proceso institucional está habilitado, la revisión, las correcciones y la aprobación del Plan Docente se registran dentro del sistema.</p>
               </section>
             </section>
           </div>

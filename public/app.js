@@ -415,6 +415,7 @@ let teacherProfileState = null;
 let bibliographyEntriesState = [];
 let guideReferenceImportanceState = "";
 let teachingPlanState = null;
+let teachingPlanCorrectionsState = { pending: null, history: [] };
 let workflowModeState = null;
 let legacyDocumentsState = [];
 let planAdaptationProposalState = null;
@@ -1441,6 +1442,7 @@ function persistProject() {
       bibliography: { guideReference: form.elements.guideReference?.value || "", guideReferenceImportance: guideReferenceImportanceState, entries: bibliographyEntriesState },
     },
     teachingPlan: teachingPlanState,
+    teachingPlanCorrections: teachingPlanCorrectionsState,
     workflow: {
       mode: workflowModeState,
       legacyDocuments: legacyDocumentsState,
@@ -1460,6 +1462,7 @@ function applySavedProject(saved) {
   bibliographyEntriesState = Array.isArray(saved.setup?.bibliography?.entries) ? saved.setup.bibliography.entries : [];
   guideReferenceImportanceState = saved.setup?.bibliography?.guideReferenceImportance || saved.formData?.guideReferenceImportance || "";
   teachingPlanState = saved.teachingPlan || null;
+  teachingPlanCorrectionsState = saved.teachingPlanCorrections || { pending: null, history: [] };
   workflowModeState = saved.workflow?.mode || null;
   legacyDocumentsState = Array.isArray(saved.workflow?.legacyDocuments) ? saved.workflow.legacyDocuments : [];
   planAdaptationProposalState = saved.workflow?.planProposal || null;
@@ -1811,7 +1814,16 @@ function reviewTeachingPlanContentHtml(detail) {
 
 function reviewHistoryHtml(history = []) {
   if (!history.length) return '<p class="field-help">Todavía no existen decisiones cerradas en esta etapa.</p>';
-  return history.map((item) => `<article class="review-history-item"><div><strong>Intento ${escapeHtml(String(item.attempt || "—"))}</strong><span>${escapeHtml(item.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas")}</span></div><p>${escapeHtml(item.generalObservation || "Sin observación general.")}</p><small>Plan v${escapeHtml(String(item.teachingPlanVersion || "—"))}${item.reviewedBy?.displayName ? ` · ${escapeHtml(item.reviewedBy.displayName)}` : ""}${item.reviewedAt ? ` · ${new Date(item.reviewedAt).toLocaleString("es-EC")}` : ""}</small></article>`).join("");
+  return history.map((item) => {
+    const relevantItems = (item.items || []).filter((reviewItem) => reviewItem.observation || reviewItem.teacherResponse || ["COMPLIES_PARTIALLY", "DOES_NOT_COMPLY"].includes(reviewItem.result));
+    return `<article class="review-history-item">
+      <div><strong>Intento ${escapeHtml(String(item.attempt || "—"))}</strong><span>${escapeHtml(item.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas")}</span></div>
+      <p>${escapeHtml(item.generalObservation || "Sin observación general.")}</p>
+      ${item.teacherGeneralResponse ? `<p class="review-history-teacher-response"><strong>Respuesta general del docente:</strong> ${escapeHtml(item.teacherGeneralResponse)}</p>` : ""}
+      ${relevantItems.length ? `<div class="review-history-criteria">${relevantItems.map((reviewItem) => `<div class="review-history-criterion"><span class="review-indicator-code">${escapeHtml(reviewItem.indicator?.code || "Criterio")}</span><div><strong>${escapeHtml(reviewItem.indicator?.name || "Criterio")}</strong><small>${escapeHtml(reviewResultLabels[reviewItem.result] || reviewItem.result || "—")}</small>${reviewItem.observation ? `<p><strong>Observación:</strong> ${escapeHtml(reviewItem.observation)}</p>` : ""}${reviewItem.teacherResponse ? `<p class="review-history-teacher-response"><strong>Respuesta del docente:</strong> ${escapeHtml(reviewItem.teacherResponse)}</p>` : ""}</div></div>`).join("")}</div>` : ""}
+      <small>Plan v${escapeHtml(String(item.teachingPlanVersion || "—"))}${item.reviewedBy?.displayName ? ` · ${escapeHtml(item.reviewedBy.displayName)}` : ""}${item.reviewedAt ? ` · ${new Date(item.reviewedAt).toLocaleString("es-EC")}` : ""}</small>
+    </article>`;
+  }).join("");
 }
 
 function renderReviewChecklist(detail) {
@@ -1828,7 +1840,7 @@ function renderReviewChecklist(detail) {
   general.disabled = !editable;
   [$("#save-review-draft"), $("#request-review-changes"), $("#approve-review-stage")].forEach((button) => { if (button) button.disabled = !editable; });
   $("#review-checklist-help").textContent = editable
-    ? "Complete todos los criterios antes de aprobar o solicitar correcciones. Puede guardar un borrador y continuar después."
+    ? "Complete todos los criterios antes de aprobar o solicitar correcciones. Si marca Cumple parcialmente o No cumple, describa la corrección requerida. Puede guardar un borrador y continuar después."
     : detail.stage.status === "WAITING" ? "Esta etapa se habilitará cuando finalice la etapa anterior." : detail.stage.status === "APPROVED" ? "Esta etapa ya fue aprobada y permanece disponible solo para consulta." : "La etapa no está disponible para edición en este momento.";
   $("#review-decision-status").textContent = review?.decision && review.decision !== "DRAFT" ? `Decisión registrada: ${review.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas"}.` : "";
 }
@@ -2865,6 +2877,7 @@ function startNewProject() {
   bibliographyEntriesState = [];
   guideReferenceImportanceState = "";
   teachingPlanState = null;
+  teachingPlanCorrectionsState = { pending: null, history: [] };
   workflowModeState = null;
   legacyDocumentsState = [];
   planAdaptationProposalState = null;
@@ -3352,6 +3365,7 @@ async function saveProjectSetup() {
   if (!response.ok) throw new Error(payload.error || "No fue posible guardar la ficha del plan docente.");
   if (!payload.planPreserved) {
     teachingPlanState = null;
+    teachingPlanCorrectionsState = { pending: null, history: [] };
     matrixRows = [];
     matrixFileName = "";
     weekStates = {};
@@ -3449,6 +3463,180 @@ function teachingPlanReviewDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("es-EC", { dateStyle: "long", timeStyle: "short" }).format(date);
+}
+
+const teachingPlanCorrectionSectionLabels = {
+  cover: "Inicio del Plan", a: "Sección A", b: "Sección B", c: "Sección C", d: "Sección D",
+  e: "Sección E", f: "Sección F", g: "Sección G", h: "Sección H",
+};
+
+function teachingPlanCorrectionHistoryHtml(history = []) {
+  if (!history.length) return "";
+  return history.map((review) => `<article class="teacher-correction-history-item">
+    <div class="teacher-correction-history-heading"><div><strong>${escapeHtml(review.stageLabel || review.stage || "Revisión")}</strong><span>Intento ${escapeHtml(String(review.attempt || "—"))} · Plan v${escapeHtml(String(review.teachingPlanVersion || "—"))}</span></div><small>${review.reviewedAt ? escapeHtml(teachingPlanReviewDate(review.reviewedAt)) : "—"}</small></div>
+    ${review.generalObservation ? `<p><strong>Observación general:</strong> ${escapeHtml(review.generalObservation)}</p>` : ""}
+    ${review.teacherGeneralResponse ? `<p class="teacher-correction-history-general-response"><strong>Respuesta general del docente:</strong> ${escapeHtml(review.teacherGeneralResponse)}</p>` : ""}
+    <div class="teacher-correction-history-items">${(review.items || []).map((item) => `<div><span class="review-indicator-code">${escapeHtml(item.indicator?.code || "Criterio")}</span><p><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong><br>${escapeHtml(item.observation || "Sin observación específica.")}</p><p class="teacher-correction-history-response"><strong>Respuesta docente:</strong> ${escapeHtml(item.teacherResponse || "Sin respuesta registrada.")}</p></div>`).join("")}</div>
+  </article>`).join("");
+}
+
+function teacherCorrectionFormState() {
+  const cards = $$("[data-teacher-correction-item]", $("#teaching-plan-correction-items"));
+  const items = cards.map((card) => ({
+    id: card.dataset.teacherCorrectionItem,
+    teacherResponse: card.querySelector("[data-teacher-correction-response]")?.value.trim() || "",
+    addressed: Boolean(card.querySelector("[data-teacher-correction-addressed]")?.checked),
+  }));
+  return { items, attended: items.filter((item) => item.addressed && item.teacherResponse).length, total: items.length };
+}
+
+function updateTeacherCorrectionActionsFromForm() {
+  const panel = $("#teaching-plan-corrections");
+  if (!panel || panel.classList.contains("hidden")) return;
+  const pending = teachingPlanCorrectionsState?.pending;
+  const state = teacherCorrectionFormState();
+  const total = state.total || Number(pending?.totalCount || 0);
+  const attended = state.attended;
+  const progress = $("#teaching-plan-corrections-progress");
+  if (progress) { progress.max = Math.max(total, 1); progress.value = attended; }
+  const text = $("#teaching-plan-corrections-progress-text");
+  if (text) text.textContent = `${attended}/${total} correcciones atendidas`;
+  const count = $("#teaching-plan-corrections-count");
+  if (count) count.textContent = `${Math.max(total - attended, 0)} pendientes`;
+  const checks = teachingPlanReviewChecksState();
+  const automaticChecksOk = checks.length > 0 && checks.every((check) => check.ok);
+  const legacyGeneralOnly = total === 0 && Boolean(pending?.generalObservation);
+  const generalResponse = $("#teacher-corrections-general-response")?.value.trim() || "";
+  const allCorrectionsReady = total > 0 ? attended === total : (legacyGeneralOnly ? Boolean(generalResponse) : true);
+  const confirmed = Boolean($("#teacher-corrections-confirm")?.checked);
+  const submit = $("#submit-teaching-plan-corrections");
+  if (submit) {
+    submit.disabled = !allCorrectionsReady || !automaticChecksOk || !confirmed;
+    submit.title = !automaticChecksOk
+      ? "Corrija primero las validaciones automáticas pendientes del Plan Docente."
+      : !allCorrectionsReady ? "Atienda y responda todas las correcciones antes de reenviar el Plan."
+        : !confirmed ? "Confirme la atención de las observaciones antes de reenviar." : "";
+  }
+}
+
+function renderTeachingPlanCorrections() {
+  const panel = $("#teaching-plan-corrections");
+  if (!panel) return;
+  const pending = teachingPlanCorrectionsState?.pending || null;
+  const history = teachingPlanCorrectionsState?.history || [];
+  const workflow = teachingPlanState?.reviewWorkflow || null;
+  const sameDraftReview = Boolean(pending?.reviewId && panel.dataset.correctionReviewId === pending.reviewId);
+  if (sameDraftReview) {
+    const draft = teacherCorrectionFormState();
+    if (draft.items.length) {
+      const draftById = new Map(draft.items.map((item) => [item.id, item]));
+      pending.items = (pending.items || []).map((item) => {
+        const savedDraft = draftById.get(item.id);
+        return savedDraft ? { ...item, teacherResponse: savedDraft.teacherResponse, teacherAddressed: savedDraft.addressed } : item;
+      });
+    }
+    const generalDraft = $("#teacher-corrections-general-response")?.value ?? "";
+    pending.teacherGeneralResponse = generalDraft;
+  }
+  const hasPending = workflow?.status === "CHANGES_REQUESTED" && Boolean(pending);
+  const visible = hasPending || history.length > 0;
+  panel.classList.toggle("hidden", !visible);
+  if (!visible) {
+    delete panel.dataset.correctionReviewId;
+    $("#teaching-plan-correction-items").innerHTML = "";
+    return;
+  }
+  $("#teaching-plan-corrections-title").textContent = hasPending ? "Correcciones pendientes" : "Historial de correcciones";
+  const currentControls = [
+    $("#teaching-plan-corrections-general"),
+    $("#teaching-plan-correction-items"),
+    $("#teaching-plan-corrections-progress")?.closest(".teaching-plan-corrections-progress"),
+    $("#teacher-corrections-general-response")?.closest("label"),
+    $("#teacher-corrections-confirm")?.closest("label"),
+    $("#save-teaching-plan-corrections")?.closest(".teaching-plan-corrections-actions"),
+  ];
+  currentControls.forEach((element) => element?.classList.toggle("hidden", !hasPending));
+  const count = $("#teaching-plan-corrections-count");
+  if (!hasPending) {
+    delete panel.dataset.correctionReviewId;
+    $("#teaching-plan-corrections-meta").textContent = "No existen correcciones pendientes. Consulte aquí las observaciones y respuestas registradas durante la revisión institucional.";
+    if (count) { count.textContent = "Sin pendientes"; count.className = "status-badge status-completed"; }
+    $("#teaching-plan-corrections-general").innerHTML = "";
+    $("#teaching-plan-correction-items").innerHTML = "";
+    const historyWrap = $("#teaching-plan-corrections-history-wrap");
+    historyWrap?.classList.toggle("hidden", !history.length);
+    if (historyWrap && history.length) historyWrap.open = true;
+    const historyContainer = $("#teaching-plan-corrections-history");
+    if (historyContainer) historyContainer.innerHTML = teachingPlanCorrectionHistoryHtml(history);
+    return;
+  }
+  panel.dataset.correctionReviewId = pending.reviewId || "";
+  if (count) count.className = "status-badge status-draft";
+  const reviewerName = pending.reviewedBy?.displayName || pending.reviewer?.displayName || "responsable de revisión";
+  $("#teaching-plan-corrections-meta").textContent = `${pending.stageLabel || reviewStageLabels[pending.stage] || "Revisión"} · ${reviewerName}${pending.reviewedAt ? ` · ${teachingPlanReviewDate(pending.reviewedAt)}` : ""} · observaciones sobre Plan v${pending.teachingPlanVersion || "—"}`;
+  const general = $("#teaching-plan-corrections-general");
+  general.classList.toggle("hidden", !pending.generalObservation);
+  general.innerHTML = pending.generalObservation ? `<strong>Observación general del revisor</strong><p>${escapeHtml(pending.generalObservation)}</p>` : "";
+  const items = pending.items || [];
+  $("#teaching-plan-correction-items").innerHTML = items.length ? items.map((item) => {
+    const section = item.section || "cover";
+    const result = reviewResultLabels[item.result] || item.result;
+    const goLabel = section === "cover" ? "Ir al inicio del Plan" : `Ir a ${teachingPlanCorrectionSectionLabels[section] || "la sección"}`;
+    return `<article class="teacher-correction-item ${item.teacherAddressed ? "addressed" : ""}" data-teacher-correction-item="${escapeHtml(item.id)}">
+      <div class="teacher-correction-item-heading"><div><span class="review-indicator-code">${escapeHtml(item.indicator?.code || "Criterio")}</span><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong></div><span class="teacher-correction-result">${escapeHtml(result)}</span></div>
+      <p class="teacher-correction-observation"><strong>Qué debe corregir:</strong> ${escapeHtml(item.observation || "El revisor no registró un detalle específico.")}</p>
+      <button class="button secondary teacher-correction-go" type="button" data-teacher-correction-target="${escapeHtml(section)}">${escapeHtml(goLabel)}</button>
+      <label>Respuesta al revisor<textarea data-teacher-correction-response maxlength="5000" placeholder="Describa brevemente qué ajustó en el Plan Docente.">${escapeHtml(item.teacherResponse || "")}</textarea></label>
+      <label class="teacher-correction-addressed"><input type="checkbox" data-teacher-correction-addressed ${item.teacherAddressed ? "checked" : ""}> <span>Marcar esta corrección como atendida</span></label>
+    </article>`;
+  }).join("") : `<div class="projects-empty"><strong>Observación general pendiente</strong><span>Esta revisión se creó antes de la gestión estructurada de correcciones. Responda en el campo general y reenvíe el Plan.</span></div>`;
+  const generalResponse = $("#teacher-corrections-general-response");
+  if (generalResponse) generalResponse.value = pending.teacherGeneralResponse || "";
+  const saveButton = $("#save-teaching-plan-corrections");
+  if (saveButton) saveButton.classList.toggle("hidden", !items.length);
+  const historyWrap = $("#teaching-plan-corrections-history-wrap");
+  historyWrap?.classList.toggle("hidden", !history.length);
+  const historyContainer = $("#teaching-plan-corrections-history");
+  if (historyContainer) historyContainer.innerHTML = teachingPlanCorrectionHistoryHtml(history);
+  updateTeacherCorrectionActionsFromForm();
+}
+
+async function saveTeachingPlanCorrections({ silent = false } = {}) {
+  if (!projectId || !teachingPlanCorrectionsState?.pending) return teachingPlanCorrectionsState;
+  const state = teacherCorrectionFormState();
+  if (!state.items.length) return teachingPlanCorrectionsState;
+  const invalid = state.items.find((item) => item.addressed && !item.teacherResponse);
+  if (invalid) {
+    const card = $$("[data-teacher-correction-item]", $("#teaching-plan-correction-items")).find((entry) => entry.dataset.teacherCorrectionItem === invalid.id);
+    throw Object.assign(new Error("Describa brevemente qué corrigió antes de marcar la observación como atendida."), { focusTarget: card?.querySelector("textarea") || card });
+  }
+  const button = $("#save-teaching-plan-corrections");
+  const original = button?.textContent || "Guardar respuestas";
+  if (button) { button.disabled = true; button.textContent = "Guardando…"; }
+  try {
+    const payload = await authRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/corrections`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        generalResponse: $("#teacher-corrections-general-response")?.value.trim() || "",
+        items: state.items,
+      }),
+    });
+    teachingPlanCorrectionsState = payload.corrections || teachingPlanCorrectionsState;
+    renderTeachingPlanCorrections();
+    persistProject();
+    if (!silent) showMessage("Respuestas a las correcciones guardadas.");
+    return teachingPlanCorrectionsState;
+  } finally {
+    if (button) { button.disabled = false; button.textContent = original; }
+  }
+}
+
+function focusTeachingPlanCorrectionSection(section) {
+  const target = document.getElementById(`plan-preview-${section || "cover"}`) || document.getElementById("plan-preview-cover");
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  target.classList.add("teacher-correction-target-highlight");
+  window.setTimeout(() => target.classList.remove("teacher-correction-target-highlight"), 1800);
 }
 function bibliographyPreviewEntries(type, entries = bibliographyEntriesState) {
   return (Array.isArray(entries) ? entries : [])
@@ -3824,8 +4012,12 @@ function renderTeachingPlanReview() {
   const reviewed = Boolean(teachingPlanState?.reviewedAt);
   const workflow = teachingPlanState?.reviewWorkflow || null;
   const workflowLocked = workflow && ["IN_REVIEW", "APPROVED"].includes(workflow.status);
+  const correctionMode = workflow?.status === "CHANGES_REQUESTED";
   const correctionStage = workflow?.stages?.find((stage) => stage.status === "CHANGES_REQUESTED");
   const pendingStage = workflow?.stages?.find((stage) => stage.status === "PENDING_REVIEW");
+  notes.closest("label")?.classList.toggle("hidden", correctionMode);
+  confirm.closest("label")?.classList.toggle("hidden", correctionMode);
+  button.classList.toggle("hidden", correctionMode);
   notes.value = teachingPlanState?.reviewNotes || "";
   notes.disabled = Boolean(workflowLocked);
   confirm.checked = reviewed;
@@ -3844,7 +4036,7 @@ function renderTeachingPlanReview() {
   status.className = `teaching-plan-review-status ${workflow?.status === "APPROVED" || reviewed ? "reviewed" : "pending"}`;
   if (workflow?.status === "APPROVED") status.textContent = `Aprobación institucional completada el ${teachingPlanReviewDate(workflow.completedAt)}. Ya puede continuar con la Guía Didáctica.`;
   else if (workflow?.status === "IN_REVIEW") status.textContent = `Plan enviado a revisión institucional. Etapa actual: ${pendingStage?.label || "revisión"}. El Plan permanecerá bloqueado hasta una aprobación o una solicitud de correcciones.`;
-  else if (workflow?.status === "CHANGES_REQUESTED") status.textContent = `Correcciones solicitadas por ${correctionStage?.label || "la etapa revisora"}. Realice los ajustes, confirme nuevamente la revisión docente y reenvíe el Plan; las aprobaciones anteriores se conservan.`;
+  else if (workflow?.status === "CHANGES_REQUESTED") status.textContent = `Correcciones solicitadas por ${correctionStage?.label || "la etapa revisora"}. Revise el panel Correcciones pendientes, use “Ir a sección”, responda cada observación y reenvíe el Plan; las aprobaciones anteriores se conservan.`;
   else if (reviewed && teachingPlanState?.reviewProcessEnabled) status.textContent = `Revisión docente confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. El Plan debe enviarse al proceso institucional antes de generar la Guía Didáctica.`;
   else if (reviewed) status.textContent = `Revisión confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. Si modifica el Plan Docente, deberá revisarlo nuevamente.`;
   else status.textContent = teachingPlanState?.reviewProcessEnabled
@@ -3861,6 +4053,7 @@ function renderTeachingPlan() {
     $("#plan-methodologies").innerHTML = "";
     const preview = $("#teaching-plan-preview");
     if (preview) preview.innerHTML = "";
+    $("#teaching-plan-corrections")?.classList.add("hidden");
     renderAdaptationWorkspaces();
     return;
   }
@@ -3876,6 +4069,7 @@ function renderTeachingPlan() {
   if (saveMethodologies) { saveMethodologies.disabled = Boolean(institutionalLock); saveMethodologies.title = institutionalLock ? "El Plan Docente está bloqueado mientras se encuentra en revisión institucional o aprobado." : ""; }
   const generatePlanButton = $("#generate-teaching-plan");
   if (generatePlanButton && institutionalLock) generatePlanButton.disabled = true;
+  renderTeachingPlanCorrections();
   renderTeachingPlanReview();
   summarize();
   renderAdaptationWorkspaces();
@@ -4168,36 +4362,45 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
   }
 });
 
-$("#teacher-plan-review-confirm")?.addEventListener("change", () => {
-  const checks = teachingPlanReviewChecksState();
-  const button = $("#confirm-teaching-plan-review");
-  if (button) button.disabled = !$("#teacher-plan-review-confirm").checked || !checks.length || checks.some((check) => !check.ok);
-});
-$("#confirm-teaching-plan-review")?.addEventListener("click", async () => {
+async function submitTeacherPlanReview({ correctionMode = false } = {}) {
   if (!teachingPlanState || !projectId) return;
   const checks = teachingPlanReviewChecksState();
   const failed = checks.filter((check) => !check.ok);
   if (failed.length) {
-    return showValidationModal(`Corrija las validaciones pendientes: ${failed.map((check) => check.label).join("; ")}.`, "#teaching-plan-review-checks");
+    return showValidationModal(`Corrija las validaciones pendientes: ${failed.map((check) => check.label).join("; ")}.`, correctionMode ? "#teaching-plan-corrections" : "#teaching-plan-review-checks");
   }
-  if (!$("#teacher-plan-review-confirm")?.checked) {
+  if (correctionMode) {
+    const state = teacherCorrectionFormState();
+    const invalid = state.items.find((item) => item.addressed && !item.teacherResponse);
+    if (invalid) return showValidationModal("Describa brevemente qué corrigió antes de marcar la observación como atendida.", "#teaching-plan-corrections");
+    if (state.items.length && state.attended !== state.total) {
+      return showValidationModal("Atienda y responda todas las correcciones pendientes antes de reenviar el Plan Docente.", "#teaching-plan-corrections");
+    }
+    if (!state.items.length && teachingPlanCorrectionsState?.pending?.generalObservation && !$("#teacher-corrections-general-response")?.value.trim()) {
+      return showValidationModal("Registre una respuesta general a la observación recibida antes de reenviar el Plan Docente.", "#teacher-corrections-general-response");
+    }
+    if (!$("#teacher-corrections-confirm")?.checked) {
+      return showValidationModal("Confirme que atendió las observaciones antes de reenviar el Plan Docente.", "#teacher-corrections-confirm");
+    }
+  } else if (!$("#teacher-plan-review-confirm")?.checked) {
     return showValidationModal("Confirme que revisó todas las secciones del Plan Docente.", "#teacher-plan-review-confirm");
   }
-  const button = $("#confirm-teaching-plan-review");
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = "Guardando revisión…";
+
+  const button = correctionMode ? $("#submit-teaching-plan-corrections") : $("#confirm-teaching-plan-review");
+  const originalText = button?.textContent || "Enviar";
+  if (button) { button.disabled = true; button.textContent = correctionMode ? "Enviando correcciones…" : "Guardando revisión…"; }
   try {
+    const notes = correctionMode
+      ? ($("#teacher-corrections-general-response")?.value.trim() || "")
+      : ($("#teacher-plan-review-notes")?.value.trim() || "");
+    if (correctionMode && teacherCorrectionFormState().items.length) await saveTeachingPlanCorrections({ silent: true });
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/review`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        version: teachingPlanState.version,
-        notes: $("#teacher-plan-review-notes")?.value.trim() || "",
-      }),
+      body: JSON.stringify({ version: teachingPlanState.version, notes }),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "No fue posible confirmar la revisión del Plan Docente.");
+    if (!response.ok) throw new Error(payload.error || (correctionMode ? "No fue posible reenviar las correcciones." : "No fue posible confirmar la revisión del Plan Docente."));
     teachingPlanState = {
       ...payload.teachingPlan,
       templateProfile: payload.teachingPlan?.templateProfile || teachingPlanState?.templateProfile || null,
@@ -4208,19 +4411,52 @@ $("#confirm-teaching-plan-review")?.addEventListener("click", async () => {
       reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
       downloadFormats: payload.teachingPlan?.downloadFormats || teachingPlanState?.downloadFormats || ["PDF"],
     };
+    if (correctionMode) {
+      teachingPlanCorrectionsState = await authRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/corrections`);
+      const confirmation = $("#teacher-corrections-confirm");
+      if (confirmation) confirmation.checked = false;
+    }
     renderTeachingPlan();
     persistProject();
     const workflow = teachingPlanState.reviewWorkflow;
     const activeStage = workflow?.stages?.find((stage) => stage.status === "PENDING_REVIEW");
-    showMessage(workflow
-      ? `Plan Docente enviado a ${activeStage?.label || "revisión institucional"}. La Guía Didáctica se habilitará cuando finalice la última etapa activa.`
-      : "Revisión del Plan Docente confirmada. Ya puede descargar el documento y continuar con la Guía Didáctica.");
+    showMessage(correctionMode
+      ? `Correcciones reenviadas a ${activeStage?.label || "la etapa revisora"}. Las aprobaciones anteriores se conservan.`
+      : workflow
+        ? `Plan Docente enviado a ${activeStage?.label || "revisión institucional"}. La Guía Didáctica se habilitará cuando finalice la última etapa activa.`
+        : "Revisión del Plan Docente confirmada. Ya puede descargar el documento y continuar con la Guía Didáctica.");
   } catch (error) {
-    showValidationModal(error.message, "#teaching-plan-review-checks");
-    button.disabled = false;
-    button.textContent = originalText;
+    showValidationModal(error.message, correctionMode ? "#teaching-plan-corrections" : "#teaching-plan-review-checks");
+  } finally {
+    if (button) { button.textContent = originalText; }
+    if (correctionMode) updateTeacherCorrectionActionsFromForm();
+    else if (button) {
+      const checksNow = teachingPlanReviewChecksState();
+      button.disabled = !$("#teacher-plan-review-confirm")?.checked || !checksNow.length || checksNow.some((check) => !check.ok);
+    }
   }
+}
+
+$("#teacher-plan-review-confirm")?.addEventListener("change", () => {
+  const checks = teachingPlanReviewChecksState();
+  const button = $("#confirm-teaching-plan-review");
+  if (button) button.disabled = !$("#teacher-plan-review-confirm").checked || !checks.length || checks.some((check) => !check.ok);
 });
+$("#confirm-teaching-plan-review")?.addEventListener("click", () => submitTeacherPlanReview().catch(() => {}));
+$("#teaching-plan-correction-items")?.addEventListener("input", (event) => {
+  const card = event.target.closest("[data-teacher-correction-item]");
+  if (card) card.classList.toggle("addressed", Boolean(card.querySelector("[data-teacher-correction-addressed]")?.checked));
+  updateTeacherCorrectionActionsFromForm();
+});
+$("#teaching-plan-correction-items")?.addEventListener("change", updateTeacherCorrectionActionsFromForm);
+$("#teaching-plan-correction-items")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-teacher-correction-target]");
+  if (button) focusTeachingPlanCorrectionSection(button.dataset.teacherCorrectionTarget);
+});
+$("#teacher-corrections-general-response")?.addEventListener("input", updateTeacherCorrectionActionsFromForm);
+$("#teacher-corrections-confirm")?.addEventListener("change", updateTeacherCorrectionActionsFromForm);
+$("#save-teaching-plan-corrections")?.addEventListener("click", () => saveTeachingPlanCorrections().catch((error) => showValidationModal(error.message, "#teaching-plan-corrections")));
+$("#submit-teaching-plan-corrections")?.addEventListener("click", () => submitTeacherPlanReview({ correctionMode: true }).catch(() => {}));
 
 $("#generate-teaching-plan").onclick = async () => {
   const button = $("#generate-teaching-plan");

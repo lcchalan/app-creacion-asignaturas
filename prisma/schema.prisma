@@ -978,35 +978,41 @@ model TeachingPlanWorkflowStage {
 }
 
 model TeachingPlanReview {
-  id                 String                    @id @default(uuid()) @db.Uuid
-  workflowStageId    String                    @db.Uuid
-  indicatorVersionId String                    @db.Uuid
-  attempt            Int
-  teachingPlanVersion Int
-  decision           ReviewDecision            @default(DRAFT)
-  generalObservation String?
-  reviewedById       String?                   @db.Uuid
-  reviewedAt         DateTime?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  workflowStage      TeachingPlanWorkflowStage @relation(fields: [workflowStageId], references: [id], onDelete: Cascade)
-  indicatorVersion   TeachingPlanIndicatorVersion @relation(fields: [indicatorVersionId], references: [id], onDelete: Restrict)
-  reviewedBy         User?                     @relation("TeachingPlanReviewerUser", fields: [reviewedById], references: [id], onDelete: SetNull)
-  items              TeachingPlanReviewItem[]
-  notifications      TeachingPlanNotification[]
+  id                     String                       @id @default(uuid()) @db.Uuid
+  workflowStageId        String                       @db.Uuid
+  indicatorVersionId     String                       @db.Uuid
+  attempt                Int
+  teachingPlanVersion    Int
+  decision               ReviewDecision               @default(DRAFT)
+  generalObservation     String?
+  teacherGeneralResponse String?
+  teacherRespondedAt     DateTime?
+  reviewedById           String?                      @db.Uuid
+  reviewedAt             DateTime?
+  createdAt              DateTime                     @default(now())
+  updatedAt              DateTime                     @updatedAt
+  workflowStage          TeachingPlanWorkflowStage    @relation(fields: [workflowStageId], references: [id], onDelete: Cascade)
+  indicatorVersion       TeachingPlanIndicatorVersion @relation(fields: [indicatorVersionId], references: [id], onDelete: Restrict)
+  reviewedBy             User?                        @relation("TeachingPlanReviewerUser", fields: [reviewedById], references: [id], onDelete: SetNull)
+  items                  TeachingPlanReviewItem[]
+  notifications          TeachingPlanNotification[]
 
   @@unique([workflowStageId, attempt])
   @@index([decision, reviewedAt])
 }
 
 model TeachingPlanReviewItem {
-  id          String                @id @default(uuid()) @db.Uuid
-  reviewId    String                @db.Uuid
-  indicatorId String                @db.Uuid
-  result      ChecklistResult       @default(PENDING)
-  observation String?
-  review      TeachingPlanReview    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
-  indicator   TeachingPlanIndicator @relation(fields: [indicatorId], references: [id], onDelete: Restrict)
+  id                       String                @id @default(uuid()) @db.Uuid
+  reviewId                 String                @db.Uuid
+  indicatorId              String                @db.Uuid
+  result                   ChecklistResult       @default(PENDING)
+  observation              String?
+  teacherResponse          String?
+  teacherResponseUpdatedAt DateTime?
+  teacherAddressed         Boolean               @default(false)
+  teacherAddressedAt       DateTime?
+  review                   TeachingPlanReview    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  indicator                TeachingPlanIndicator @relation(fields: [indicatorId], references: [id], onDelete: Restrict)
 
   @@unique([reviewId, indicatorId])
 }
