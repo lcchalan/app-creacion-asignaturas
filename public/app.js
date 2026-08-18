@@ -1792,6 +1792,13 @@ async function loadReviewInbox(stage = workViewMeta[currentWorkView]?.stage) {
   list.innerHTML = '<p class="projects-empty">Cargando revisiones…</p>';
   try {
     const payload = await authRequest(`/api/teaching-plan/review-inbox?stage=${encodeURIComponent(stage)}`);
+    if (payload.enabled === false) {
+      const suspendedText = Number(payload.suspendedCount || 0) > 0
+        ? ` ${payload.suspendedCount} ${Number(payload.suspendedCount) === 1 ? "proceso asignado permanece suspendido" : "procesos asignados permanecen suspendidos"} y reaparecerán cuando Administración reactive la revisión.`
+        : " Las asignaciones se conservan y volverán a mostrarse cuando Administración reactive la revisión.";
+      list.innerHTML = `<div class="projects-empty"><strong>Proceso de revisión no disponible.</strong><span>El proceso institucional de revisión y aprobación está desactivado actualmente.${escapeHtml(suspendedText)}</span></div>`;
+      return;
+    }
     list.innerHTML = payload.items.length
       ? payload.items.map(reviewInboxCard).join("")
       : `<div class="projects-empty"><strong>No tiene Planes Docentes asignados en esta etapa.</strong><span>La bandeja se actualizará cuando Administración asigne un Plan y el proceso alcance esta etapa.</span></div>`;
@@ -3510,12 +3517,15 @@ function updateTeacherCorrectionActionsFromForm() {
   const allCorrectionsReady = total > 0 ? attended === total : (legacyGeneralOnly ? Boolean(generalResponse) : true);
   const confirmed = Boolean($("#teacher-corrections-confirm")?.checked);
   const submit = $("#submit-teaching-plan-corrections");
+  const processSuspended = teachingPlanState?.reviewProcessEnabled === false;
   if (submit) {
-    submit.disabled = !allCorrectionsReady || !automaticChecksOk || !confirmed;
-    submit.title = !automaticChecksOk
-      ? "Corrija primero las validaciones automáticas pendientes del Plan Docente."
-      : !allCorrectionsReady ? "Atienda y responda todas las correcciones antes de reenviar el Plan."
-        : !confirmed ? "Confirme la atención de las observaciones antes de reenviar." : "";
+    submit.disabled = processSuspended || !allCorrectionsReady || !automaticChecksOk || !confirmed;
+    submit.title = processSuspended
+      ? "El proceso institucional está desactivado. Puede guardar sus respuestas, pero no reenviar correcciones hasta que Administración lo reactive."
+      : !automaticChecksOk
+        ? "Corrija primero las validaciones automáticas pendientes del Plan Docente."
+        : !allCorrectionsReady ? "Atienda y responda todas las correcciones antes de reenviar el Plan."
+          : !confirmed ? "Confirme la atención de las observaciones antes de reenviar." : "";
   }
 }
 
@@ -3539,6 +3549,8 @@ function renderTeachingPlanCorrections() {
     pending.teacherGeneralResponse = generalDraft;
   }
   const hasPending = workflow?.status === "CHANGES_REQUESTED" && Boolean(pending);
+  const processSuspended = hasPending && teachingPlanState?.reviewProcessEnabled === false;
+  $("#teaching-plan-corrections-suspended")?.classList.toggle("hidden", !processSuspended);
   const visible = hasPending || history.length > 0;
   panel.classList.toggle("hidden", !visible);
   if (!visible) {
@@ -3836,7 +3848,12 @@ function teachingPlanApprovalSectionHtml(planState = teachingPlanState, professo
     return `<p class="plan-preview-paragraph">${escapeHtml(note)}</p><div class="plan-preview-table-wrap"><table><thead><tr><th>Actividad</th><th>Nombre</th><th>Función</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>${teacherRow}</tbody></table></div>`;
   }
   const rows = (workflow.stages || []).map((stage) => `<tr><td>${escapeHtml(stage.label || reviewStageLabels[stage.stage] || stage.stage)}</td><td>${escapeHtml(stage.reviewer?.displayName || "Responsable no registrado")}</td><td>${escapeHtml(reviewStageLabels[stage.stage] || stage.stage)}</td><td>${escapeHtml(reviewStageStatusLabels[stage.status] || stage.status)}</td><td>${stage.approvedAt ? escapeHtml(teachingPlanReviewDate(stage.approvedAt)) : "—"}</td></tr>`).join("");
-  const statusText = workflow.status === "APPROVED" ? "Proceso institucional completado." : workflow.status === "CHANGES_REQUESTED" ? "El Plan tiene correcciones pendientes de atención por el docente." : "El Plan se encuentra en revisión institucional.";
+  const processSuspended = planState?.reviewProcessEnabled === false && ["IN_REVIEW", "CHANGES_REQUESTED"].includes(workflow.status);
+  const statusText = workflow.status === "APPROVED"
+    ? "Proceso institucional completado."
+    : processSuspended
+      ? "El proceso institucional está suspendido por configuración administrativa. Se conservan la etapa, las observaciones y las aprobaciones ya registradas."
+      : workflow.status === "CHANGES_REQUESTED" ? "El Plan tiene correcciones pendientes de atención por el docente." : "El Plan se encuentra en revisión institucional.";
   return `<p class="plan-preview-paragraph">${escapeHtml(statusText)}</p><div class="plan-preview-table-wrap"><table><thead><tr><th>Actividad</th><th>Nombre</th><th>Función</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>${teacherRow}${rows}</tbody></table></div>`;
 }
 
@@ -4012,6 +4029,7 @@ function renderTeachingPlanReview() {
   const reviewed = Boolean(teachingPlanState?.reviewedAt);
   const workflow = teachingPlanState?.reviewWorkflow || null;
   const workflowLocked = workflow && ["IN_REVIEW", "APPROVED"].includes(workflow.status);
+  const processSuspended = Boolean(workflow && teachingPlanState?.reviewProcessEnabled === false && ["IN_REVIEW", "CHANGES_REQUESTED"].includes(workflow.status));
   const correctionMode = workflow?.status === "CHANGES_REQUESTED";
   const correctionStage = workflow?.stages?.find((stage) => stage.status === "CHANGES_REQUESTED");
   const pendingStage = workflow?.stages?.find((stage) => stage.status === "PENDING_REVIEW");
@@ -4029,13 +4047,16 @@ function renderTeachingPlanReview() {
     : `${checks.filter((check) => check.ok).length}/${checks.length} validaciones correctas · revise los pendientes`;
   button.disabled = Boolean(workflowLocked) || !allOk || !confirm.checked;
   if (workflow?.status === "APPROVED") button.textContent = "Plan aprobado institucionalmente";
+  else if (processSuspended && workflow?.status === "IN_REVIEW") button.textContent = "Proceso de revisión suspendido";
   else if (workflow?.status === "IN_REVIEW") button.textContent = `En revisión · ${pendingStage?.label || "etapa institucional"}`;
   else if (workflow?.status === "CHANGES_REQUESTED") button.textContent = `Reenviar correcciones a ${correctionStage?.label || "revisión"}`;
   else if (teachingPlanState?.reviewProcessEnabled) button.textContent = reviewed ? "Enviar a revisión institucional" : "Confirmar y enviar a revisión";
   else button.textContent = reviewed ? "Actualizar confirmación de revisión" : "Confirmar revisión del plan";
   status.className = `teaching-plan-review-status ${workflow?.status === "APPROVED" || reviewed ? "reviewed" : "pending"}`;
   if (workflow?.status === "APPROVED") status.textContent = `Aprobación institucional completada el ${teachingPlanReviewDate(workflow.completedAt)}. Ya puede continuar con la Guía Didáctica.`;
+  else if (processSuspended && workflow?.status === "IN_REVIEW") status.textContent = `Proceso institucional suspendido por Administración. La revisión queda conservada en ${pendingStage?.label || "la etapa actual"}; el revisor no podrá emitir decisiones hasta que el proceso sea reactivado. Como el proceso global está desactivado, la aprobación institucional no bloquea el avance a la Guía Didáctica.`;
   else if (workflow?.status === "IN_REVIEW") status.textContent = `Plan enviado a revisión institucional. Etapa actual: ${pendingStage?.label || "revisión"}. El Plan permanecerá bloqueado hasta una aprobación o una solicitud de correcciones.`;
+  else if (processSuspended && workflow?.status === "CHANGES_REQUESTED") status.textContent = `Correcciones solicitadas por ${correctionStage?.label || "la etapa revisora"}. El proceso institucional está suspendido: puede editar el Plan y guardar sus respuestas, pero no reenviarlas hasta que Administración reactive el proceso. Las aprobaciones anteriores se conservan.`;
   else if (workflow?.status === "CHANGES_REQUESTED") status.textContent = `Correcciones solicitadas por ${correctionStage?.label || "la etapa revisora"}. Revise el panel Correcciones pendientes, use “Ir a sección”, responda cada observación y reenvíe el Plan; las aprobaciones anteriores se conservan.`;
   else if (reviewed && teachingPlanState?.reviewProcessEnabled) status.textContent = `Revisión docente confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. El Plan debe enviarse al proceso institucional antes de generar la Guía Didáctica.`;
   else if (reviewed) status.textContent = `Revisión confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. Si modifica el Plan Docente, deberá revisarlo nuevamente.`;
@@ -4364,6 +4385,9 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
 
 async function submitTeacherPlanReview({ correctionMode = false } = {}) {
   if (!teachingPlanState || !projectId) return;
+  if (correctionMode && teachingPlanState?.reviewProcessEnabled === false) {
+    return showValidationModal("El proceso institucional de revisión está desactivado. Puede guardar sus respuestas, pero no reenviar las correcciones hasta que Administración reactive el proceso.", "#teaching-plan-corrections");
+  }
   const checks = teachingPlanReviewChecksState();
   const failed = checks.filter((check) => !check.ok);
   if (failed.length) {
@@ -6046,12 +6070,31 @@ $("#plan-review-config-form")?.addEventListener("submit", async (event) => {
     enabled: $("[data-stage-enabled]", row).checked,
     sortOrder: Number($("[data-stage-order]", row).value),
   }));
+  const enabled = Boolean($("#plan-review-process-enabled").checked);
+  const wasEnabled = Boolean(adminData?.teachingPlanReviewProcess?.enabled);
+  const disabling = wasEnabled && !enabled;
+  const enabling = !wasEnabled && enabled;
+  if (disabling) {
+    const activeWorkflows = (adminData?.projects || []).map((project) => project.teachingPlan?.reviewWorkflow?.status).filter((status) => ["IN_REVIEW", "CHANGES_REQUESTED"].includes(status));
+    const inReview = activeWorkflows.filter((status) => status === "IN_REVIEW").length;
+    const changesRequested = activeWorkflows.filter((status) => status === "CHANGES_REQUESTED").length;
+    const detail = activeWorkflows.length
+      ? ` Hay ${activeWorkflows.length} ${activeWorkflows.length === 1 ? "Plan" : "Planes"} con revisión activa: ${inReview} en revisión y ${changesRequested} con correcciones solicitadas.`
+      : " No existen Planes con revisión activa actualmente.";
+    const confirmed = window.confirm(`Desactivar el proceso institucional suspenderá temporalmente las revisiones en curso.${detail} No se borrarán asignaciones, observaciones ni aprobaciones previas. Los revisores no podrán emitir decisiones y el docente no podrá reenviar correcciones hasta que el proceso sea reactivado. ¿Desea continuar?`);
+    if (!confirmed) return;
+  }
   try {
-    await authRequest("/api/admin/teaching-plan-review/config", {
+    const result = await authRequest("/api/admin/teaching-plan-review/config", {
       method: "PATCH",
-      body: JSON.stringify({ enabled: $("#plan-review-process-enabled").checked, stages }),
+      body: JSON.stringify({ enabled, stages }),
     });
-    showAdminMessage("Configuración del proceso de revisión guardada.");
+    const affected = result.processStateChange?.affectedActiveWorkflows?.total || 0;
+    showAdminMessage(disabling && affected
+      ? `Proceso de revisión desactivado. ${affected} ${affected === 1 ? "proceso quedó suspendido" : "procesos quedaron suspendidos"} sin perder su estado.`
+      : enabling && affected
+        ? `Proceso de revisión reactivado. ${affected} ${affected === 1 ? "proceso retoma" : "procesos retoman"} el estado y la etapa en que quedaron.`
+        : "Configuración del proceso de revisión guardada.");
     await loadAdminDashboard();
   } catch (error) { showAdminMessage(error.message, true); }
 });

@@ -117,6 +117,7 @@ import {
   previouslyApprovedTeachingPlanStages,
   teachingPlanIndicatorPreviewSection,
   teachingPlanReviewItemNeedsCorrection,
+  teachingPlanReviewWorkflowIsSuspended,
   teachingPlanReviewStageLabel,
   teachingPlanReviewStageRole,
   teachingPlanReviewStages,
@@ -543,6 +544,25 @@ async function ensureTeachingPlanReviewProcessConfig() {
   });
 }
 
+async function teachingPlanReviewSuspensionSummary() {
+  const [inReview, changesRequested] = await Promise.all([
+    database.teachingPlanReviewWorkflow.count({ where: { status: "IN_REVIEW" } }),
+    database.teachingPlanReviewWorkflow.count({ where: { status: "CHANGES_REQUESTED" } }),
+  ]);
+  return {
+    total: inReview + changesRequested,
+    inReview,
+    changesRequested,
+  };
+}
+
+function teachingPlanReviewSuspendedError(workflowStatus?: string | null) {
+  const suffix = workflowStatus === "CHANGES_REQUESTED"
+    ? " Puede editar el Plan y guardar sus respuestas, pero no reenviar las correcciones hasta que Administración reactive el proceso."
+    : " Las tareas y decisiones de revisión permanecerán bloqueadas hasta que Administración reactive el proceso.";
+  return Object.assign(new Error(`El proceso institucional de revisión y aprobación está desactivado.${suffix}`), { statusCode: 409 });
+}
+
 function teachingPlanReviewLink(projectId: string, stage: TeachingPlanReviewStage) {
   const url = new URL(applicationBaseUrl());
   url.searchParams.set("review_project", projectId);
@@ -625,6 +645,8 @@ async function assertTeachingPlanTeacherCanEdit(teachingPlanId: string) {
 }
 
 async function assertTeachingPlanInstitutionallyApproved(teachingPlanId: string) {
+  const config = await ensureTeachingPlanReviewProcessConfig();
+  if (!config.enabled) return;
   const workflow = await database.teachingPlanReviewWorkflow.findUnique({ where: { teachingPlanId } });
   if (workflow) {
     if (workflow.status !== "APPROVED") {
@@ -632,10 +654,7 @@ async function assertTeachingPlanInstitutionallyApproved(teachingPlanId: string)
     }
     return;
   }
-  const config = await ensureTeachingPlanReviewProcessConfig();
-  if (config.enabled) {
-    throw Object.assign(new Error("El Plan Docente debe enviarse al proceso institucional de revisión y aprobación antes de continuar con la Guía Didáctica."), { statusCode: 409 });
-  }
+  throw Object.assign(new Error("El Plan Docente debe enviarse al proceso institucional de revisión y aprobación antes de continuar con la Guía Didáctica."), { statusCode: 409 });
 }
 
 async function createTeachingPlanNotification(
@@ -3914,7 +3933,10 @@ URL adicional: ${body.url || "No indicada"}`,
             totalWeeks: true, updatedAt: true, ownerId: true,
             weeks: { select: { status: true } },
             academicOffering: { select: { programId: true, program: { select: { id: true, name: true } } } },
-            teachingPlan: { select: { id: true, version: true, teacherReviewedAt: true } },
+            teachingPlan: { select: {
+              id: true, version: true, teacherReviewedAt: true,
+              reviewWorkflow: { select: { status: true } },
+            } },
           },
         }),
         database.generationInstruction.findMany({ orderBy: [{ key: "asc" }, { version: "desc" }] }),
@@ -4146,7 +4168,10 @@ URL adicional: ${body.url || "No indicada"}`,
           }
         }
       }
-      await ensureTeachingPlanReviewProcessConfig();
+      const previousConfig = await ensureTeachingPlanReviewProcessConfig();
+      const suspensionSummary = previousConfig.enabled !== body.enabled
+        ? await teachingPlanReviewSuspensionSummary()
+        : { total: 0, inReview: 0, changesRequested: 0 };
       const config = await database.$transaction(async (transaction) => {
         await transaction.teachingPlanReviewProcessConfig.update({
           where: { id: teachingPlanReviewProcessId }, data: { enabled: body.enabled, updatedById: admin.id },
@@ -4160,13 +4185,21 @@ URL adicional: ${body.url || "No indicada"}`,
         }
         await transaction.auditLog.create({ data: {
           userId: admin.id, action: "TEACHING_PLAN_REVIEW_PROCESS_CONFIGURED", entityType: "TeachingPlanReviewProcessConfig",
-          entityId: teachingPlanReviewProcessId, details: { enabled: body.enabled, stages: body.stages },
+          entityId: teachingPlanReviewProcessId, details: {
+            enabled: body.enabled, stages: body.stages, previousEnabled: previousConfig.enabled,
+            affectedActiveWorkflows: suspensionSummary,
+          },
         } });
         return transaction.teachingPlanReviewProcessConfig.findUniqueOrThrow({
           where: { id: teachingPlanReviewProcessId }, include: { stages: { orderBy: { sortOrder: "asc" } } },
         });
       });
-      json(response, 200, { ok: true, config });
+      json(response, 200, {
+        ok: true, config,
+        processStateChange: previousConfig.enabled === body.enabled ? null : {
+          previousEnabled: previousConfig.enabled, enabled: body.enabled, affectedActiveWorkflows: suspensionSummary,
+        },
+      });
       return;
     }
 
@@ -4308,6 +4341,8 @@ URL adicional: ${body.url || "No indicada"}`,
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
       const notificationId = z.string().uuid().parse(notificationRetryMatch[1]);
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      if (!config.enabled) throw teachingPlanReviewSuspendedError();
       const notification = await database.teachingPlanNotification.findUnique({ where: { id: notificationId } });
       if (!notification) { json(response, 404, { error: "La notificación no existe." }); return; }
       if (notification.status === "SENT") { json(response, 200, { ok: true, status: "SENT" }); return; }
@@ -6849,8 +6884,12 @@ ${planContext.instructions}`,
           stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
         },
       });
+      const reviewProcessConfig = await ensureTeachingPlanReviewProcessConfig();
       if (existingWorkflow?.status === "APPROVED") {
         throw Object.assign(new Error("El Plan Docente ya cuenta con aprobación institucional."), { statusCode: 409 });
+      }
+      if (existingWorkflow && teachingPlanReviewWorkflowIsSuspended(reviewProcessConfig.enabled, existingWorkflow.status)) {
+        throw teachingPlanReviewSuspendedError(existingWorkflow.status);
       }
       if (existingWorkflow?.status === "IN_REVIEW") {
         throw Object.assign(new Error("El Plan Docente ya se encuentra en revisión institucional."), { statusCode: 409 });
@@ -7003,6 +7042,19 @@ ${planContext.instructions}`,
       if (!userCanActOnTeachingPlanStage(user.roles.map((entry) => entry.role.code), stage)) {
         json(response, 403, { error: `No tiene permisos para la vista ${teachingPlanReviewStageLabel[stage]}.` }); return;
       }
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      if (!config.enabled) {
+        const suspendedCount = await database.teachingPlanWorkflowStage.count({
+          where: {
+            stage, reviewerId: user.id,
+            workflow: { status: { in: ["IN_REVIEW", "CHANGES_REQUESTED"] } },
+          },
+        });
+        json(response, 200, {
+          enabled: false, stage, label: teachingPlanReviewStageLabel[stage], suspendedCount, items: [],
+        });
+        return;
+      }
       const items = await database.teachingPlanWorkflowStage.findMany({
         where: {
           stage,
@@ -7019,7 +7071,7 @@ ${planContext.instructions}`,
         },
       });
       json(response, 200, {
-        stage, label: teachingPlanReviewStageLabel[stage],
+        enabled: true, stage, label: teachingPlanReviewStageLabel[stage],
         items: items.map((item) => {
           const plan = item.workflow.teachingPlan;
           const project = plan.project;
@@ -7039,6 +7091,8 @@ ${planContext.instructions}`,
     if (request.method === "GET" && teachingPlanReviewStageMatch) {
       const user = await requireUser(request);
       const stageId = z.string().uuid().parse(teachingPlanReviewStageMatch[1]);
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      if (!config.enabled) throw teachingPlanReviewSuspendedError();
       let workflowStage = await database.teachingPlanWorkflowStage.findUnique({
         where: { id: stageId },
         include: {
@@ -7155,6 +7209,8 @@ ${planContext.instructions}`,
     const teachingPlanReviewerDecisionMatch = requestUrl.pathname.match(/^\/api\/teaching-plan\/reviews\/([0-9a-f-]+)$/i);
     if (request.method === "PATCH" && teachingPlanReviewerDecisionMatch) {
       const reviewer = await requireUser(request);
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      if (!config.enabled) throw teachingPlanReviewSuspendedError();
       const reviewId = z.string().uuid().parse(teachingPlanReviewerDecisionMatch[1]);
       const body = z.object({
         decision: z.enum(["DRAFT", "APPROVED", "CHANGES_REQUESTED"]),

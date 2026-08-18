@@ -6,6 +6,7 @@ import {
   previouslyApprovedTeachingPlanStages,
   teachingPlanIndicatorPreviewSection,
   teachingPlanReviewItemNeedsCorrection,
+  teachingPlanReviewWorkflowIsSuspended,
   teachingPlanReviewStageRole,
   userCanActOnTeachingPlanStage,
 } from "../src/academic/teaching-plan-review-workflow.js";
@@ -78,4 +79,11 @@ test("relaciona los criterios de la lista de cotejo con la sección visible del 
   assert.equal(teachingPlanIndicatorPreviewSection("DIR01"), "c");
   assert.equal(teachingPlanIndicatorPreviewSection("DIR02"), "h");
   assert.equal(teachingPlanIndicatorPreviewSection("Q01"), "cover");
+});
+
+test("suspende los flujos activos cuando el proceso global está desactivado", () => {
+  assert.equal(teachingPlanReviewWorkflowIsSuspended(false, "IN_REVIEW"), true);
+  assert.equal(teachingPlanReviewWorkflowIsSuspended(false, "CHANGES_REQUESTED"), true);
+  assert.equal(teachingPlanReviewWorkflowIsSuspended(false, "APPROVED"), false);
+  assert.equal(teachingPlanReviewWorkflowIsSuspended(true, "IN_REVIEW"), false);
 });

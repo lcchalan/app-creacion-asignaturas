@@ -47,6 +47,10 @@ export function userCanActOnTeachingPlanStage(roleCodes: Iterable<string>, stage
   return roles.has(teachingPlanReviewStageRole[stage]);
 }
 
+export function teachingPlanReviewWorkflowIsSuspended(processEnabled: boolean, workflowStatus: string | null | undefined) {
+  return !processEnabled && ["IN_REVIEW", "CHANGES_REQUESTED"].includes(String(workflowStatus || ""));
+}
+
 export function nextTeachingPlanStage<T extends { sortOrder: number; status: string }>(
   stages: T[],
   currentSortOrder: number,
