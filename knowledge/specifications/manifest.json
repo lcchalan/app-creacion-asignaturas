@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "environmentPolicy": "LATEST_ACTIVE_ONLY",
+  "description": "Especificaciones funcionales vigentes administradas desde Conocimiento e IA. Incluye las reglas de generación activas y la configuración activa de indicadores de la Guía Didáctica.",
+  "specifications": [
+    {
+      "sourceType": "GENERATION_INSTRUCTION",
+      "key": "adaptacion-plan-16-a-8",
+      "title": "Reestructuración pedagógica del Plan Docente 16 → 8 semanas",
+      "version": 1,
+      "status": "ACTIVE",
+      "gitPath": "knowledge/specifications/adaptacion-plan-16-a-8.txt",
+      "checksum": "a46759c73536a5a6ab4088ab4235ffaabaaab512fdfa6f334266a1d27b2fd054",
+      "priority": 5,
+      "academicLevels": [],
+      "modalities": [],
+      "durations": [
+        8
+      ],
+      "subjectTypes": [],
+      "processes": [
+        "PLAN_ADAPTATION"
+      ]
+    },
+    {
+      "sourceType": "GENERATION_INSTRUCTION",
+      "key": "especificacion-funcional",
+      "title": "Especificación funcional",
+      "version": 1,
+      "status": "ACTIVE",
+      "gitPath": "knowledge/specifications/especificacion-funcional.txt",
+      "checksum": "bf3162b0089c25d185afcafb976b0cfbdbf8f6e7b8246b729cd327e25dfb0691",
+      "priority": 10,
+      "academicLevels": [],
+      "modalities": [],
+      "durations": [],
+      "subjectTypes": [],
+      "processes": [
+        "GUIDE_ADAPTATION",
+        "GUIDE_GENERATION"
+      ]
+    },
+    {
+      "sourceType": "GUIDE_INDICATOR_VERSION",
+      "key": "indicadores-generales",
+      "title": "Indicadores para la evaluación de guías en línea e IA",
+      "version": 1,
+      "status": "ACTIVE",
+      "gitPath": "knowledge/specifications/indicadores-generales.txt",
+      "checksum": "d3784fee6811ac88d2c4a164b96cf66a57b800addc742170c128ba5bf92fd2b3",
+      "priority": null,
+      "academicLevels": [],
+      "modalities": [],
+      "durations": [],
+      "subjectTypes": [],
+      "processes": [
+        "GUIDE_REVIEW"
+      ]
+    }
+  ]
+}

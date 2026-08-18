@@ -16,7 +16,7 @@ async function main() {
   }
 
   const content = await readFile(
-    new URL("../knowledge/especificacion-adaptacion-plan-16-a-8-v1.txt", import.meta.url),
+    new URL("../knowledge/specifications/adaptacion-plan-16-a-8.txt", import.meta.url),
     "utf8",
   );
   const created = await database.generationInstruction.create({

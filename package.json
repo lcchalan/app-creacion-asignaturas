@@ -14,7 +14,10 @@
     "db:cleanup-ai-knowledge": "node --import tsx prisma/cleanup-ai-knowledge-versions.ts",
     "db:seed-teaching-plan-checklist": "node --import tsx prisma/seed-teaching-plan-checklist-20.ts",
     "knowledge:sync-official": "node --import tsx prisma/sync-official-knowledge.ts",
-    "knowledge:check-official": "node --import tsx prisma/check-official-knowledge.ts"
+    "knowledge:check-official": "node --import tsx prisma/check-official-knowledge.ts",
+    "knowledge:normalize-layout": "node --import tsx prisma/normalize-knowledge-layout.ts",
+    "knowledge:sync-git": "node --import tsx prisma/sync-official-knowledge.ts",
+    "knowledge:check-git": "node --import tsx prisma/check-official-knowledge.ts"
   },
   "repository": {
     "type": "git",

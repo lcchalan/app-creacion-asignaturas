@@ -6,9 +6,12 @@ import { fileURLToPath } from "node:url";
 import { database } from "../db/client.js";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const OFFICIAL_DIR = join(PROJECT_ROOT, "knowledge", "official");
-const MANIFEST_PATH = join(OFFICIAL_DIR, "manifest.json");
-const MANAGED_STORAGE_PREFIXES = ["knowledge/uploads/", "knowledge/official/"];
+const KNOWLEDGE_DIR = join(PROJECT_ROOT, "knowledge");
+const OFFICIAL_DIR = join(KNOWLEDGE_DIR, "official");
+const SPECIFICATIONS_DIR = join(KNOWLEDGE_DIR, "specifications");
+const OFFICIAL_MANIFEST_PATH = join(OFFICIAL_DIR, "manifest.json");
+const SPECIFICATIONS_MANIFEST_PATH = join(SPECIFICATIONS_DIR, "manifest.json");
+const LEGACY_INDICATOR_KEY = "indicadores-generales";
 
 const MIME_EXTENSIONS: Record<string, string> = {
   "application/pdf": ".pdf",
@@ -47,6 +50,29 @@ export type OfficialKnowledgeManifest = {
   documents: OfficialKnowledgeManifestDocument[];
 };
 
+export type FunctionalSpecificationManifestItem = {
+  sourceType: "GENERATION_INSTRUCTION" | "GUIDE_INDICATOR_VERSION";
+  key: string;
+  title: string;
+  version: number;
+  status: "ACTIVE";
+  gitPath: string;
+  checksum: string;
+  priority: number | null;
+  academicLevels: string[];
+  modalities: string[];
+  durations: number[];
+  subjectTypes: string[];
+  processes: string[];
+};
+
+export type FunctionalSpecificationManifest = {
+  schemaVersion: 1;
+  environmentPolicy: "LATEST_ACTIVE_ONLY";
+  description: string;
+  specifications: FunctionalSpecificationManifestItem[];
+};
+
 export type OfficialKnowledgeSourceStatus = "AVAILABLE" | "OFFICIAL_FALLBACK" | "MISSING";
 
 export type OfficialKnowledgeSourceCheck = {
@@ -67,7 +93,7 @@ function safeKnowledgeKey(value: string) {
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 120);
-  if (!normalized) throw new Error(`La clave de conocimiento «${value}» no permite construir un nombre oficial seguro.`);
+  if (!normalized) throw new Error(`La clave de conocimiento «${value}» no permite construir un nombre seguro para Git.`);
   return normalized;
 }
 
@@ -92,9 +118,13 @@ export function canonicalOfficialKnowledgePath(input: {
   )}`;
 }
 
+export function canonicalFunctionalSpecificationPath(key: string) {
+  return `knowledge/specifications/${safeKnowledgeKey(key)}.txt`;
+}
+
 function absoluteProjectPath(relativePath: string) {
   const absolute = resolve(PROJECT_ROOT, relativePath);
-  const normalizedRoot = resolve(PROJECT_ROOT) + "/";
+  const normalizedRoot = `${resolve(PROJECT_ROOT)}/`;
   if (!absolute.startsWith(normalizedRoot)) {
     throw new Error(`Ruta de conocimiento fuera del proyecto: ${relativePath}`);
   }
@@ -117,6 +147,10 @@ function normalizedStringArray(values: string[]) {
 
 function normalizedNumberArray(values: number[]) {
   return [...values].sort((a, b) => a - b);
+}
+
+function sha256(content: string | Buffer) {
+  return createHash("sha256").update(content).digest("hex");
 }
 
 function manifestDocumentFrom(input: {
@@ -169,14 +203,26 @@ export function buildOfficialKnowledgeManifest(
     schemaVersion: 1,
     environmentPolicy: "LATEST_ACTIVE_ONLY",
     description:
-      "Documentos institucionales vigentes administrados desde Conocimiento e IA. En el ambiente de pruebas Git conserva únicamente la versión activa actual de cada clave.",
+      "Documentos institucionales vigentes administrados desde Conocimiento e IA. Git conserva únicamente la versión activa actual de cada clave; el historial permanece en PostgreSQL y en los commits de Git.",
     documents: [...documents].sort((a, b) => a.key.localeCompare(b.key, "es")),
   };
 }
 
-async function previousManifest(): Promise<OfficialKnowledgeManifest | null> {
+export function buildFunctionalSpecificationManifest(
+  specifications: FunctionalSpecificationManifestItem[],
+): FunctionalSpecificationManifest {
+  return {
+    schemaVersion: 1,
+    environmentPolicy: "LATEST_ACTIVE_ONLY",
+    description:
+      "Especificaciones funcionales vigentes administradas desde Conocimiento e IA. Incluye las reglas de generación activas y la configuración activa de indicadores de la Guía Didáctica.",
+    specifications: [...specifications].sort((a, b) => a.key.localeCompare(b.key, "es")),
+  };
+}
+
+async function previousManifest<T>(path: string): Promise<T | null> {
   try {
-    return JSON.parse(await readFile(MANIFEST_PATH, "utf8")) as OfficialKnowledgeManifest;
+    return JSON.parse(await readFile(path, "utf8")) as T;
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") return null;
@@ -184,20 +230,25 @@ async function previousManifest(): Promise<OfficialKnowledgeManifest | null> {
   }
 }
 
-function isManagedKnowledgeStoragePath(storagePath: string) {
-  return MANAGED_STORAGE_PREFIXES.some((prefix) => storagePath.startsWith(prefix));
+function isKnowledgeStoragePath(storagePath: string) {
+  return storagePath.startsWith("knowledge/");
 }
 
 async function activeManagedDocuments() {
-  return database.knowledgeDocument.findMany({
+  const documents = await database.knowledgeDocument.findMany({
     where: {
       status: "ACTIVE",
-      OR: [
-        { storagePath: { startsWith: "knowledge/uploads/" } },
-        { storagePath: { startsWith: "knowledge/official/" } },
-      ],
+      key: { notIn: [LEGACY_INDICATOR_KEY, "especificacion-funcional"] },
     },
     orderBy: [{ priority: "asc" }, { key: "asc" }],
+  });
+  return documents.filter((document) => isKnowledgeStoragePath(document.storagePath));
+}
+
+async function activeFunctionalSpecifications() {
+  return database.generationInstruction.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: [{ priority: "asc" }, { key: "asc" }, { version: "desc" }],
   });
 }
 
@@ -206,7 +257,6 @@ export async function inspectOfficialKnowledgeSources(): Promise<OfficialKnowled
   const result: OfficialKnowledgeSourceCheck[] = [];
 
   for (const document of documents) {
-    if (!isManagedKnowledgeStoragePath(document.storagePath)) continue;
     const canonicalPath = canonicalOfficialKnowledgePath(document);
     const sourcePath = absoluteProjectPath(document.storagePath);
     const targetPath = absoluteProjectPath(canonicalPath);
@@ -234,16 +284,141 @@ export function missingOfficialKnowledgeMessage(items: OfficialKnowledgeSourceCh
     `- ${item.title} [${item.key}]\n  BD: ${item.storagePath}\n  Git esperado: ${item.canonicalPath}\n  Archivo original: ${item.originalName || "sin nombre registrado"}`
   ).join("\n");
   return [
-    `No se puede sincronizar Conocimiento e IA porque faltan ${missing.length} archivo(s) físico(s) de documentos ACTIVE.`,
+    `No se puede sincronizar Conocimiento e IA porque faltan ${missing.length} archivo(s) físico(s) de documentos institucionales ACTIVE.`,
     details,
     "Vuelva a cargar esos documentos desde Administración > Conocimiento e IA, o reponga el archivo original en la ruta indicada por la BD.",
     "Después ejecute nuevamente: npm run knowledge:sync-official",
-    "No se modificó el manifiesto ni se cambiaron las rutas de esos registros.",
+    "No se modificaron los manifiestos ni se cambiaron las rutas de esos registros.",
   ].join("\n\n");
+}
+
+export function renderGuideIndicatorSpecification(input: {
+  version: number;
+  title: string;
+  indicators: Array<{
+    code: string;
+    name: string;
+    description: string;
+    stage: string;
+    score: unknown;
+    active: boolean;
+    required: boolean;
+    sortOrder: number;
+  }>;
+}) {
+  const stageLabels: Record<string, string> = {
+    PEER: "Par académico",
+    QUALITY: "Equipo de calidad",
+    DIITEP: "DIITEP",
+    DIRECTOR: "Dirección de carrera",
+  };
+  const active = [...input.indicators]
+    .filter((item) => item.active)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return [
+    "INDICADORES GENERALES DE LA GUÍA DIDÁCTICA",
+    `Versión activa: ${input.version}`,
+    `Título: ${input.title}`,
+    "",
+    ...active.flatMap((indicator) => [
+      `${indicator.code} · ${indicator.name}`,
+      `Responsable: ${stageLabels[indicator.stage] || indicator.stage}`,
+      `Puntuación: ${Number(indicator.score).toFixed(2)}`,
+      `Obligatorio: ${indicator.required ? "Sí" : "No"}`,
+      indicator.description.trim(),
+      "",
+    ]),
+  ].join("\n").trimEnd() + "\n";
+}
+
+async function syncFunctionalSpecifications() {
+  await mkdir(SPECIFICATIONS_DIR, { recursive: true });
+  const previous = await previousManifest<FunctionalSpecificationManifest>(SPECIFICATIONS_MANIFEST_PATH);
+  const currentPaths = new Set<string>();
+  const items: FunctionalSpecificationManifestItem[] = [];
+  let written = 0;
+
+  const specifications = await activeFunctionalSpecifications();
+  for (const specification of specifications) {
+    const gitPath = canonicalFunctionalSpecificationPath(specification.key);
+    const content = `${specification.content.trim()}\n`;
+    await writeFile(absoluteProjectPath(gitPath), content, "utf8");
+    const checksum = sha256(content);
+    currentPaths.add(gitPath);
+    written += 1;
+    items.push({
+      sourceType: "GENERATION_INSTRUCTION",
+      key: specification.key,
+      title: specification.title,
+      version: specification.version,
+      status: "ACTIVE",
+      gitPath,
+      checksum,
+      priority: specification.priority,
+      academicLevels: normalizedStringArray(specification.academicLevels),
+      modalities: normalizedStringArray(specification.modalities),
+      durations: normalizedNumberArray(specification.durations),
+      subjectTypes: normalizedStringArray(specification.subjectTypes),
+      processes: normalizedStringArray(specification.processes),
+    });
+  }
+
+  const indicatorVersion = await database.indicatorVersion.findFirst({
+    where: { status: "ACTIVE" },
+    orderBy: { version: "desc" },
+    include: { indicators: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (indicatorVersion) {
+    const gitPath = canonicalFunctionalSpecificationPath(LEGACY_INDICATOR_KEY);
+    const content = renderGuideIndicatorSpecification(indicatorVersion);
+    await writeFile(absoluteProjectPath(gitPath), content, "utf8");
+    const checksum = sha256(content);
+    currentPaths.add(gitPath);
+    written += 1;
+    items.push({
+      sourceType: "GUIDE_INDICATOR_VERSION",
+      key: LEGACY_INDICATOR_KEY,
+      title: indicatorVersion.title,
+      version: indicatorVersion.version,
+      status: "ACTIVE",
+      gitPath,
+      checksum,
+      priority: null,
+      academicLevels: [],
+      modalities: [],
+      durations: [],
+      subjectTypes: [],
+      processes: ["GUIDE_REVIEW"],
+    });
+  }
+
+  const manifest = buildFunctionalSpecificationManifest(items);
+  await writeFile(SPECIFICATIONS_MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+
+  let removed = 0;
+  for (const oldItem of previous?.specifications || []) {
+    if (!oldItem.gitPath.startsWith("knowledge/specifications/")) continue;
+    if (oldItem.gitPath === "knowledge/specifications/manifest.json") continue;
+    if (currentPaths.has(oldItem.gitPath)) continue;
+    try {
+      await unlink(absoluteProjectPath(oldItem.gitPath));
+      removed += 1;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+
+  return {
+    specifications: manifest.specifications.length,
+    written,
+    removed,
+    manifestPath: "knowledge/specifications/manifest.json",
+  };
 }
 
 export async function syncOfficialKnowledgeFromDatabase() {
   await mkdir(OFFICIAL_DIR, { recursive: true });
+  await mkdir(SPECIFICATIONS_DIR, { recursive: true });
 
   const documents = await activeManagedDocuments();
   const checks = await inspectOfficialKnowledgeSources();
@@ -251,7 +426,7 @@ export async function syncOfficialKnowledgeFromDatabase() {
   if (missingMessage) throw new Error(missingMessage);
 
   const statusById = new Map(checks.map((item) => [item.id, item]));
-  const previous = await previousManifest();
+  const previous = await previousManifest<OfficialKnowledgeManifest>(OFFICIAL_MANIFEST_PATH);
   const currentPaths = new Set<string>();
   const manifestDocuments: OfficialKnowledgeManifestDocument[] = [];
   const canonicalUpdates: Array<{ id: string; storagePath: string; checksum: string }> = [];
@@ -259,8 +434,6 @@ export async function syncOfficialKnowledgeFromDatabase() {
   let recoveredFromOfficial = 0;
 
   for (const document of documents) {
-    if (!isManagedKnowledgeStoragePath(document.storagePath)) continue;
-
     const check = statusById.get(document.id);
     if (!check) continue;
     const canonicalPath = check.canonicalPath;
@@ -276,7 +449,7 @@ export async function syncOfficialKnowledgeFromDatabase() {
     }
 
     const bytes = await readFile(targetPath);
-    const checksum = createHash("sha256").update(bytes).digest("hex");
+    const checksum = sha256(bytes);
 
     currentPaths.add(canonicalPath);
     canonicalUpdates.push({ id: document.id, storagePath: canonicalPath, checksum });
@@ -289,8 +462,6 @@ export async function syncOfficialKnowledgeFromDatabase() {
     );
   }
 
-  // Una vez que el archivo oficial existe, PostgreSQL pasa a apuntar a la ruta
-  // versionada por Git. Así una clonación futura no depende de knowledge/uploads/.
   if (canonicalUpdates.length) {
     await database.$transaction(
       canonicalUpdates.map((item) => database.knowledgeDocument.update({
@@ -301,7 +472,7 @@ export async function syncOfficialKnowledgeFromDatabase() {
   }
 
   const manifest = buildOfficialKnowledgeManifest(manifestDocuments);
-  await writeFile(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(OFFICIAL_MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
   let removed = 0;
   for (const oldDocument of previous?.documents || []) {
@@ -315,6 +486,8 @@ export async function syncOfficialKnowledgeFromDatabase() {
     }
   }
 
+  const specificationSync = await syncFunctionalSpecifications();
+
   return {
     ok: true as const,
     documents: manifest.documents.length,
@@ -323,6 +496,35 @@ export async function syncOfficialKnowledgeFromDatabase() {
     relinkedDatabaseRecords: canonicalUpdates.length,
     removed,
     manifestPath: "knowledge/official/manifest.json",
+    specifications: specificationSync.specifications,
+    specificationFilesWritten: specificationSync.written,
+    specificationFilesRemoved: specificationSync.removed,
+    specificationManifestPath: specificationSync.manifestPath,
+  };
+}
+
+export async function inspectFunctionalSpecifications() {
+  const [specifications, indicatorVersion] = await Promise.all([
+    activeFunctionalSpecifications(),
+    database.indicatorVersion.findFirst({
+      where: { status: "ACTIVE" },
+      orderBy: { version: "desc" },
+      select: { version: true, title: true },
+    }),
+  ]);
+  return {
+    specifications: specifications.map((item) => ({
+      key: item.key,
+      title: item.title,
+      version: item.version,
+      gitPath: canonicalFunctionalSpecificationPath(item.key),
+    })),
+    indicatorVersion: indicatorVersion ? {
+      key: LEGACY_INDICATOR_KEY,
+      title: indicatorVersion.title,
+      version: indicatorVersion.version,
+      gitPath: canonicalFunctionalSpecificationPath(LEGACY_INDICATOR_KEY),
+    } : null,
   };
 }
 
@@ -331,7 +533,7 @@ export async function syncOfficialKnowledgeSafely(context: string) {
     return await syncOfficialKnowledgeFromDatabase();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[Conocimiento oficial] No se pudo sincronizar (${context}):`, error);
+    console.error(`[Conocimiento Git] No se pudo sincronizar (${context}):`, error);
     return { ok: false as const, error: message };
   }
 }

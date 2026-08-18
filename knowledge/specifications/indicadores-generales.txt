@@ -1,0 +1,207 @@
+INDICADORES GENERALES DE LA GUÍA DIDÁCTICA
+Versión activa: 1
+Título: Indicadores para la evaluación de guías en línea e IA
+
+PA-01 · Correspondencia curricular
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Verifica que contenidos, actividades, recursos y evaluaciones respondan a los resultados de aprendizaje y a la planificación microcurricular.
+
+PA-02 · Rigor disciplinar
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Comprueba que los contenidos sean correctos, suficientes y conceptualmente sólidos.
+
+PA-03 · Actualidad de los contenidos
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Valora que la información y las fuentes estén actualizadas según la naturaleza de la disciplina.
+
+PA-04 · Contextualización del aprendizaje
+Responsable: Par académico
+Puntuación: 3.00
+Obligatorio: Sí
+Explica qué aprenderá el estudiante, cómo lo logrará y en qué contextos podrá aplicar lo aprendido.
+
+PA-05 · Profundidad y progresión
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Comprueba que los contenidos avancen gradualmente desde la comprensión hasta la aplicación o el análisis.
+
+PA-06 · Relación entre teoría y práctica
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Verifica la inclusión de casos, ejemplos, problemas o aplicaciones relacionados con situaciones reales o profesionales.
+
+PA-07 · Pertinencia de las actividades
+Responsable: Par académico
+Puntuación: 4.00
+Obligatorio: Sí
+Evalúa si las actividades permiten desarrollar y evidenciar los resultados de aprendizaje.
+
+PA-08 · Evaluación auténtica
+Responsable: Par académico
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que la evaluación demande aplicación, análisis, argumentación, toma de decisiones o producción propia.
+
+PA-09 · Evaluación formativa y retroalimentación
+Responsable: Par académico
+Puntuación: 2.00
+Obligatorio: Sí
+Verifica que las autoevaluaciones y retroalimentaciones ayuden a identificar errores y mejorar el aprendizaje.
+
+PA-10 · Validez de las fuentes
+Responsable: Par académico
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que las fuentes sean académicas, confiables, pertinentes y adecuadas para la asignatura.
+
+EC-01 · Correspondencia con la matriz
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica que resultados, unidades, contenidos, semanas y metodología coincidan con la matriz aprobada.
+
+EC-02 · Estructura institucional
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que la guía incluya los componentes, denominaciones y organización establecidos institucionalmente.
+
+EC-03 · Distribución semanal
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Valora que los contenidos y actividades estén distribuidos equilibradamente entre las semanas.
+
+EC-04 · Consistencia interna
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica que no existan contradicciones entre contenidos, actividades, recursos, tiempos y evaluaciones.
+
+EC-05 · Claridad de las instrucciones
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que las consignas expliquen qué hacer, cómo hacerlo, con qué recursos y qué resultado se espera.
+
+EC-06 · Diálogo didáctico
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Valora una redacción orientadora, motivadora y adecuada para acompañar el aprendizaje autónomo.
+
+EC-07 · Claridad y corrección lingüística
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba la claridad, cohesión, precisión, ortografía, gramática y puntuación del documento.
+
+EC-08 · Citación y referencias
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica el cumplimiento de APA 7 y la correspondencia entre citas y referencias.
+
+EC-09 · Integridad de enlaces y elementos
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que enlaces, tablas, figuras, títulos, numeración y remisiones estén completos e identificados.
+
+EC-10 · Declaración del uso de IA
+Responsable: Equipo de calidad
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica que el empleo de IA esté declarado de acuerdo con las disposiciones institucionales.
+
+DT-01 · Pertinencia de la metodología activa
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica que la metodología responda a los resultados, contenidos y características de la modalidad en línea.
+
+DT-02 · Implementación de la metodología
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que la metodología se evidencie en actividades, recursos, interacción y evaluación.
+
+DT-03 · Integración guía–aula virtual
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Valora que la guía oriente hacia los recursos, actividades y evaluaciones disponibles en el LMS.
+
+DT-04 · Navegación y secuencia digital
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Comprueba que la ruta de aprendizaje sea clara, ordenada y fácil de seguir.
+
+DT-05 · Interacción y presencia docente
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Verifica oportunidades de interacción con el contenido, los docentes y otros estudiantes.
+
+DT-06 · Calidad de los recursos digitales y REA
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Evalúa la pertinencia, funcionalidad, actualidad, legalidad y finalidad pedagógica de los recursos.
+
+DT-07 · Accesibilidad e inclusión
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que contenidos y recursos consideren subtítulos, transcripciones, texto alternativo, contraste y legibilidad.
+
+DT-08 · Diversidad de aprendizaje
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Verifica diferentes formas de acceder a la información, participar y demostrar el aprendizaje.
+
+DT-09 · Carga de trabajo y factibilidad
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Valora que el tiempo requerido sea razonable y coherente con las horas y créditos de la asignatura.
+
+DT-10 · Uso pedagógico de IA
+Responsable: DIITEP
+Puntuación: 3.00
+Obligatorio: Sí
+Comprueba que la IA tenga una finalidad formativa y favorezca el análisis y el pensamiento crítico.
+
+DT-11 · Uso ético y transparente de IA
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Verifica que se definan los usos permitidos, la supervisión humana y la responsabilidad sobre los resultados.
+
+DT-12 · Privacidad y protección de datos
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Comprueba que las actividades no exijan ingresar información sensible en herramientas no autorizadas.
+
+DT-13 · Integridad académica ante la IA
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Verifica que las actividades permitan evidenciar autoría, razonamiento y proceso de elaboración.
+
+DT-14 · Seguimiento mediante analíticas
+Responsable: DIITEP
+Puntuación: 2.00
+Obligatorio: Sí
+Valora el uso responsable de datos del LMS para acompañar al estudiante y mejorar la experiencia.

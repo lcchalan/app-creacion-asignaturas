@@ -322,10 +322,11 @@ la migración.
 Confirme que existen:
 
 ```text
-knowledge/especificacion-funcional-v1.txt
-knowledge/metodologias-activas.txt
-knowledge/normas-apa.txt
-knowledge/indicaciones-rea.txt
+knowledge/specifications/especificacion-funcional.txt
+knowledge/specifications/adaptacion-plan-16-a-8.txt
+knowledge/official/metodologias-activas.md
+knowledge/official/normas-apa.txt
+knowledge/official/indicaciones-rea.txt
 ```
 
 Ejecute desde una copia completa del repositorio, no desde un paquete que

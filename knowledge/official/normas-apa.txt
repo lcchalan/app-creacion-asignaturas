@@ -5,11 +5,11 @@ Elementos de cita textual o directa:
 Apellido(s), año, página.
     Romero Camacho, 2022, p. 24)
 Cita parentética:
-Idea del autor escrita textualmente (Apellido(s), año, p. #). 
+Idea del autor escrita textualmente (Apellido(s), año, p. #).
     (Romero Camacho, 2022, p. 24).
 
 Cita narrativa
-Apellido(s) (año) idea del autor escrita textualmente (p. #). 
+Apellido(s) (año) idea del autor escrita textualmente (p. #).
     Según Romero Camacho (2022) … (p. 24).
 
 Regla: cita textual o directa corta (hasta 39 palabras)
@@ -30,7 +30,7 @@ Cita narrativa
 Ejemplo:
 
         De acuerdo a Rodríguez y Corvo-Pérez (2011) la pérdida del agua capilar es completa sin que se aprecie aún la alteración en la estructura del cemento hidratado, “además adquiere el hormigón un color rosáceo debido a la ausencia del agua de las sales de hierro presentes en los áridos, y sin que la resistencia mecánica del hormigón y el acero disminuyan” (p. 350).
- 
+
  Regla: cita textual o directa en bloque (40 palabras o más)
 
 No utilice comillas para encerrar el texto en bloque.
@@ -48,7 +48,7 @@ Los investigadores han estudiado cómo las personas hablan consigo mismas:
 1,27 cm
            El discurso interno es un fenómeno paradójico. Es una experiencia que es fundamental para la vida cotidiana de muchas personas y, sin embargo, presenta desafíos considerables para cualquier esfuerzo por estudiarla científicamente.
 
-            1,27 cm   
+            1,27 cm
             Es una experiencia que es fundamental para la vida cotidiana de muchas personas y, sin embargo, presenta desafíos considerables para cualquier esfuerzo por estudiarla científicamente.
 
            (Alvarado y Castillo, 2015, p. 957)
@@ -69,8 +69,8 @@ Cita de parafraseo o indirecta
 
     Permite resumir y sintetizar información de una o más fuentes, centrarse en información importante, comparar y contrastar detalles relevantes.
 
-Elementos para cita de parafraseo o ndirecta                       
-    Autor, año 
+Elementos para cita de parafraseo o ndirecta
+    Autor, año
         Romero Camacho, 2022
 
 Cita parentética
@@ -539,4 +539,3 @@ Video tutorial Normas APA: https://www.youtube.com/watch?v=Dv4ZlxLqhNA
 Tutoriales de biblioteca: https://www.youtube.com/@bibliotecautpl7669
 Página oficial de Normas APA: https://apastyle.apa.org/
 Gracias
-

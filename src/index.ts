@@ -209,10 +209,10 @@ async function readKnowledgeFile(fileName: string): Promise<string> {
 }
 
 const fallbackInstitutionalKnowledge = {
-  specification: await readKnowledgeFile("especificacion-funcional-v1.txt"),
-  rea: await readKnowledgeFile("indicaciones-rea.txt"),
-  apa: await readKnowledgeFile("normas-apa.txt"),
-  methodologies: await readKnowledgeFile("metodologias-activas.txt"),
+  specification: await readKnowledgeFile("specifications/especificacion-funcional.txt"),
+  rea: await readKnowledgeFile("official/indicaciones-rea.txt"),
+  apa: await readKnowledgeFile("official/normas-apa.txt"),
+  methodologies: await readKnowledgeFile("official/metodologias-activas.md"),
 };
 
 const openaiModel =
@@ -501,7 +501,7 @@ const stageRole = { PEER: "REVIEWER", QUALITY: "QUALITY", DIITEP: "DIITEP" } as 
 
 function canReview(user: Awaited<ReturnType<typeof requireUser>>, stage: keyof typeof stageRole) {
   const roles = new Set(user.roles.map((entry) => entry.role.code));
-  return roles.has("ADMIN") || roles.has(stageRole[stage]);
+  return roles.has(stageRole[stage]);
 }
 
 const teachingPlanReviewProcessId = "DEFAULT";
@@ -2532,16 +2532,18 @@ async function activeAdministrativeContext(
       return "";
     }
   }));
-  const activeKeys = new Set(applicableDocuments.map((document) => document.key));
-  const fallbackCatalog: Array<[string, string, string]> = [
-    ["especificacion-funcional", "Especificación funcional", fallbackInstitutionalKnowledge.specification],
-    ["metodologias-activas", "Metodologías activas", fallbackInstitutionalKnowledge.methodologies],
-    ["normas-apa", "Normas APA", fallbackInstitutionalKnowledge.apa],
-    ["indicaciones-rea", "Indicaciones REA", fallbackInstitutionalKnowledge.rea],
+  const activeDocumentKeys = new Set(applicableDocuments.map((document) => document.key));
+  const activeSpecificationKeys = new Set(applicableInstructions.map((instruction) => instruction.key));
+  const fallbackCatalog: Array<[string, string, string, "DOCUMENT" | "SPECIFICATION"]> = [
+    ["especificacion-funcional", "Especificación funcional", fallbackInstitutionalKnowledge.specification, "SPECIFICATION"],
+    ["metodologias-activas", "Metodologías activas", fallbackInstitutionalKnowledge.methodologies, "DOCUMENT"],
+    ["normas-apa", "Normas APA", fallbackInstitutionalKnowledge.apa, "DOCUMENT"],
+    ["indicaciones-rea", "Indicaciones REA", fallbackInstitutionalKnowledge.rea, "DOCUMENT"],
   ];
-  const fallbackItems = fallbackCatalog.filter(([key]) => !activeKeys.has(key));
+  const fallbackItems = fallbackCatalog.filter(([key, , , kind]) =>
+    kind === "SPECIFICATION" ? !activeSpecificationKeys.has(key) : !activeDocumentKeys.has(key));
   const fallback = fallbackItems.length
-    ? `CONOCIMIENTO INSTITUCIONAL DE RESPALDO:\n${fallbackItems.map(([, title, content]) => `### ${title}\n${content}`).join("\n\n")}`
+    ? `CONOCIMIENTO DE RESPALDO:\n${fallbackItems.map(([, title, content]) => `### ${title}\n${content}`).join("\n\n")}`
     : "";
   return [
     applicableInstructions.length ? `ESPECIFICACIONES FUNCIONALES APLICABLES:\n${applicableInstructions.map((item) =>
@@ -3935,7 +3937,13 @@ URL adicional: ${body.url || "No indicada"}`,
             academicOffering: { select: { programId: true, program: { select: { id: true, name: true } } } },
             teachingPlan: { select: {
               id: true, version: true, teacherReviewedAt: true,
-              reviewWorkflow: { select: { status: true } },
+              reviewWorkflow: { select: {
+                id: true, status: true,
+                stages: { orderBy: { sortOrder: "asc" }, select: {
+                  stage: true, sortOrder: true, status: true, approvedAt: true,
+                  reviewer: { select: { id: true, displayName: true, email: true } },
+                } },
+              } },
             } },
           },
         }),
@@ -4251,6 +4259,81 @@ URL adicional: ${body.url || "No indicada"}`,
       return;
     }
 
+    const teachingPlanIndicatorMutationMatch = requestUrl.pathname.match(/^\/api\/admin\/teaching-plan-review\/indicators(?:\/([0-9a-f-]+))?$/i);
+    if (teachingPlanIndicatorMutationMatch && ["POST", "PATCH", "DELETE"].includes(request.method ?? "")) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const activeVersion = await database.teachingPlanIndicatorVersion.findFirst({
+        where: { status: "ACTIVE" }, orderBy: { version: "desc" },
+        include: { indicators: { orderBy: { sortOrder: "asc" } } },
+      });
+      if (!activeVersion) throw new Error("No existe una versión activa de la lista de cotejo del Plan Docente.");
+      const targetId = teachingPlanIndicatorMutationMatch[1];
+      const body = request.method === "DELETE" ? null : z.object({
+        code: z.string().trim().min(1).max(50),
+        name: z.string().trim().min(3).max(250),
+        description: z.string().trim().min(3).max(3000),
+        stage: teachingPlanReviewStageSchema,
+        required: z.boolean().default(true),
+        active: z.boolean().default(true),
+      }).parse(await readJsonBody(request));
+      let next = activeVersion.indicators.map((item) => ({
+        code: item.code, name: item.name || item.code, description: item.description, stage: item.stage,
+        active: item.active, required: item.required, sortOrder: item.sortOrder,
+      }));
+      if (request.method === "POST" && body) {
+        const code = body.code.toUpperCase();
+        if (next.some((item) => item.code.toUpperCase() === code)) throw new Error("Ya existe un criterio con ese código.");
+        const stageItems = next.filter((item) => item.stage === body.stage);
+        const insertOrder = Math.max(0, ...stageItems.map((item) => item.sortOrder)) + 1;
+        next.push({ ...body, code, sortOrder: insertOrder });
+      } else {
+        const target = activeVersion.indicators.find((item) => item.id === targetId);
+        const index = next.findIndex((item) => item.code === target?.code);
+        if (index < 0) throw Object.assign(new Error("Criterio del Plan Docente no encontrado."), { statusCode: 404 });
+        if (request.method === "PATCH" && body) {
+          const code = body.code.toUpperCase();
+          if (next.some((item, itemIndex) => itemIndex !== index && item.code.toUpperCase() === code)) throw new Error("Ya existe un criterio con ese código.");
+          next[index] = { ...next[index]!, ...body, code };
+        }
+        if (request.method === "DELETE") next.splice(index, 1);
+      }
+      const stageOrder = new Map(teachingPlanReviewStages.map((stage, index) => [stage, index]));
+      next = next
+        .sort((left, right) => (stageOrder.get(left.stage as TeachingPlanReviewStage) ?? 99) - (stageOrder.get(right.stage as TeachingPlanReviewStage) ?? 99) || left.sortOrder - right.sortOrder || left.code.localeCompare(right.code, "es"))
+        .map((item, sortOrder) => ({ ...item, sortOrder }));
+      if (!next.length) throw new Error("La lista de cotejo del Plan Docente debe conservar al menos un criterio.");
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      if (config.enabled) {
+        for (const stage of config.stages.filter((item) => item.enabled)) {
+          if (!next.some((indicator) => indicator.active && indicator.stage === stage.stage)) {
+            throw new Error(`La etapa ${teachingPlanReviewStageLabel[stage.stage as TeachingPlanReviewStage]} debe conservar al menos un criterio activo mientras el proceso esté habilitado.`);
+          }
+        }
+      }
+      const latest = await database.teachingPlanIndicatorVersion.findFirst({ orderBy: { version: "desc" } });
+      const created = await database.$transaction(async (transaction) => {
+        await transaction.teachingPlanIndicatorVersion.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE" } });
+        const version = await transaction.teachingPlanIndicatorVersion.create({
+          data: {
+            version: (latest?.version ?? 0) + 1, title: activeVersion.title, status: "ACTIVE", activatedAt: new Date(), createdById: admin.id,
+            indicators: { create: next.map((item) => ({
+              code: item.code, name: item.name, description: item.description, stage: item.stage,
+              active: item.active, required: item.required, sortOrder: item.sortOrder,
+            })) },
+          },
+          include: { indicators: { orderBy: { sortOrder: "asc" } } },
+        });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "TEACHING_PLAN_CHECKLIST_UPDATED", entityType: "TeachingPlanIndicatorVersion", entityId: version.id,
+          details: { previousVersion: activeVersion.version, version: version.version, operation: request.method, targetId: targetId || null },
+        } });
+        return version;
+      });
+      json(response, 200, { ok: true, indicatorVersion: created });
+      return;
+    }
+
     const teachingPlanReviewerAssignmentMatch = requestUrl.pathname.match(/^\/api\/admin\/projects\/([0-9a-f-]+)\/teaching-plan-review\/assignments$/i);
     if (request.method === "PUT" && teachingPlanReviewerAssignmentMatch) {
       const admin = await requireUser(request);
@@ -4451,7 +4534,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         });
       });
-      json(response, 201, { ok: true, instruction });
+      const knowledgeGitSync = effectiveActivate
+        ? await syncOfficialKnowledgeSafely(`activación de especificación ${instruction.key}`)
+        : null;
+      json(response, 201, { ok: true, instruction, knowledgeGitSync });
       return;
     }
     const instructionAdminMatch = requestUrl.pathname.match(/^\/api\/admin\/instructions\/([0-9a-f-]+)$/i);
@@ -4506,7 +4592,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         });
       });
-      json(response, 200, { ok: true, instruction });
+      const knowledgeGitSync = keepActive
+        ? await syncOfficialKnowledgeSafely(`edición de especificación ${instruction.key}`)
+        : null;
+      json(response, 200, { ok: true, instruction, knowledgeGitSync });
       return;
     }
     const instructionActivateMatch = requestUrl.pathname.match(/^\/api\/admin\/instructions\/([0-9a-f-]+)\/activate$/i);
@@ -4523,7 +4612,8 @@ URL adicional: ${body.url || "No indicada"}`,
         database.generationInstruction.updateMany({ where: { key: selected.key, status: "ACTIVE" }, data: { status: "INACTIVE" } }),
         database.generationInstruction.update({ where: { id }, data: { status: "ACTIVE", activatedAt: new Date() } }),
       ]);
-      json(response, 200, { ok: true });
+      const knowledgeGitSync = await syncOfficialKnowledgeSafely(`activación de especificación ${selected.key}`);
+      json(response, 200, { ok: true, knowledgeGitSync });
       return;
     }
     const instructionArchiveMatch = requestUrl.pathname.match(/^\/api\/admin\/instructions\/([0-9a-f-]+)\/archive$/i);
@@ -4550,7 +4640,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         }),
       ]);
-      json(response, 200, { ok: true });
+      const knowledgeGitSync = selected.status === "ACTIVE"
+        ? await syncOfficialKnowledgeSafely(`baja de especificación ${selected.key}`)
+        : null;
+      json(response, 200, { ok: true, knowledgeGitSync });
       return;
     }
     if (request.method === "POST" && requestUrl.pathname === "/api/admin/ai-impact-analysis") {
@@ -5348,7 +5441,10 @@ URL adicional: ${body.url || "No indicada"}`,
           include: { indicators: { orderBy: { sortOrder: "asc" } } },
         });
       });
-      json(response, 201, { ok: true, indicatorVersion });
+      const knowledgeGitSync = body.activate
+        ? await syncOfficialKnowledgeSafely(`activación de indicadores de guía v${indicatorVersion.version}`)
+        : null;
+      json(response, 201, { ok: true, indicatorVersion, knowledgeGitSync });
       return;
     }
     const indicatorMutationMatch = requestUrl.pathname.match(/^\/api\/admin\/indicators(?:\/([0-9a-f-]+))?$/i);
@@ -5367,6 +5463,7 @@ URL adicional: ${body.url || "No indicada"}`,
         stage: z.enum(["PEER", "QUALITY", "DIITEP"]),
         score: z.number().positive().max(100),
         active: z.boolean().optional(),
+        required: z.boolean().optional(),
       }).parse(await readJsonBody(request));
       let next = activeVersion.indicators.map((item) => ({
         code: item.code, name: item.name || item.code, description: item.description,
@@ -5376,14 +5473,14 @@ URL adicional: ${body.url || "No indicada"}`,
         const prefix = body.stage === "PEER" ? "PA" : body.stage === "QUALITY" ? "EC" : "DT";
         const used = next.filter((item) => item.code.startsWith(`${prefix}-`))
           .map((item) => Number(item.code.split("-")[1])).filter(Number.isFinite);
-        next.push({ code: `${prefix}-${String(Math.max(0, ...used) + 1).padStart(2, "0")}`, ...body, active: true, required: true });
+        next.push({ code: `${prefix}-${String(Math.max(0, ...used) + 1).padStart(2, "0")}`, ...body, active: body.active ?? true, required: body.required ?? true });
       } else {
         const target = activeVersion.indicators.find((item) => item.id === targetId);
         const index = next.findIndex((item) => item.code === target?.code);
         if (index < 0) throw Object.assign(new Error("Indicador no encontrado."), { statusCode: 404 });
         if (request.method === "PATCH" && body) {
           const current = next[index]!;
-          next[index] = { ...current, ...body, code: current.code, required: current.required, active: body.active ?? current.active };
+          next[index] = { ...current, ...body, code: current.code, required: body.required ?? current.required, active: body.active ?? current.active };
         }
         if (request.method === "DELETE") next.splice(index, 1);
       }
@@ -5395,7 +5492,7 @@ URL adicional: ${body.url || "No indicada"}`,
       const latest = await database.indicatorVersion.findFirst({ orderBy: { version: "desc" } });
       const version = await database.$transaction(async (transaction) => {
         await transaction.indicatorVersion.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE" } });
-        return transaction.indicatorVersion.create({
+        const created = await transaction.indicatorVersion.create({
           data: {
             version: (latest?.version ?? 0) + 1, title: activeVersion.title, status: "ACTIVE",
             activatedAt: new Date(), createdById: admin.id,
@@ -5403,8 +5500,14 @@ URL adicional: ${body.url || "No indicada"}`,
           },
           include: { indicators: { orderBy: { sortOrder: "asc" } } },
         });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "GUIDE_CHECKLIST_UPDATED", entityType: "IndicatorVersion", entityId: created.id,
+          details: { previousVersion: activeVersion.version, version: created.version, operation: request.method, targetId: targetId || null },
+        } });
+        return created;
       });
-      json(response, 200, { ok: true, indicatorVersion: version });
+      const knowledgeGitSync = await syncOfficialKnowledgeSafely(`actualización de indicadores de guía v${version.version}`);
+      json(response, 200, { ok: true, indicatorVersion: version, knowledgeGitSync });
       return;
     }
     const checklistProjectMatch = requestUrl.pathname.match(/^\/api\/admin\/projects\/([0-9a-f-]+)\/checklist$/i);

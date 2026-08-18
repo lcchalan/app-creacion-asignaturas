@@ -156,13 +156,12 @@ async function main() {
     });
   }
   const knowledgeDocuments = [
-    { key: "especificacion-funcional", title: "Especificación funcional", file: "especificacion-funcional-v1.txt", priority: 10 },
-    { key: "metodologias-activas", title: "Metodologías activas", file: "metodologias-activas.txt", priority: 40 },
-    { key: "normas-apa", title: "Normas APA", file: "normas-apa.txt", priority: 50 },
-    { key: "indicaciones-rea", title: "Indicaciones REA", file: "indicaciones-rea.txt", priority: 60 },
+    { key: "metodologias-activas", title: "Metodologías activas", file: "official/metodologias-activas.md", originalName: "metodologias-activas.md", mimeType: "text/markdown", priority: 40 },
+    { key: "normas-apa", title: "Normas APA", file: "official/normas-apa.txt", originalName: "normas-apa.txt", mimeType: "text/plain", priority: 50 },
+    { key: "indicaciones-rea", title: "Indicaciones REA", file: "official/indicaciones-rea.txt", originalName: "indicaciones-rea.txt", mimeType: "text/plain", priority: 60 },
   ];
   await database.knowledgeDocument.updateMany({
-    where: { key: "indicadores-generales" },
+    where: { key: { in: ["indicadores-generales", "especificacion-funcional"] } },
     data: { status: "ARCHIVED" },
   });
   for (const item of knowledgeDocuments) {
@@ -172,17 +171,42 @@ async function main() {
       await database.knowledgeDocument.create({
         data: {
           key: item.key, title: item.title, version: 1, status: "ACTIVE",
-          storagePath: `knowledge/${item.file}`, mimeType: "text/plain",
-          originalName: item.file, contentMarkdown, priority: item.priority,
+          storagePath: `knowledge/${item.file}`, mimeType: item.mimeType,
+          originalName: item.originalName, contentMarkdown, priority: item.priority,
           activatedAt: new Date(), createdById: admin.id,
         },
       });
     } else if (!existing.contentMarkdown && ["text/plain", "text/markdown"].includes(existing.mimeType)) {
       await database.knowledgeDocument.update({
         where: { id: existing.id },
-        data: { contentMarkdown, originalName: existing.originalName || item.file, priority: item.priority },
+        data: { contentMarkdown, originalName: existing.originalName || item.originalName, priority: item.priority },
       });
     }
+  }
+
+  const genericSpecificationKey = "especificacion-funcional";
+  const existingGenericSpecification = await database.generationInstruction.findFirst({
+    where: { key: genericSpecificationKey },
+    orderBy: { version: "desc" },
+  });
+  if (!existingGenericSpecification) {
+    const content = await readFile(
+      new URL("../knowledge/specifications/especificacion-funcional.txt", import.meta.url),
+      "utf8",
+    );
+    await database.generationInstruction.create({
+      data: {
+        key: genericSpecificationKey,
+        title: "Especificación funcional",
+        content,
+        version: 1,
+        status: "ACTIVE",
+        processes: ["GUIDE_GENERATION", "GUIDE_ADAPTATION"],
+        priority: 10,
+        activatedAt: new Date(),
+        createdById: admin.id,
+      },
+    });
   }
 
   const planAdaptationSpecificationKey = "adaptacion-plan-16-a-8";
@@ -192,7 +216,7 @@ async function main() {
   });
   if (!existingPlanAdaptationSpecification) {
     const content = await readFile(
-      new URL("../knowledge/especificacion-adaptacion-plan-16-a-8-v1.txt", import.meta.url),
+      new URL("../knowledge/specifications/adaptacion-plan-16-a-8.txt", import.meta.url),
       "utf8",
     );
     await database.generationInstruction.create({

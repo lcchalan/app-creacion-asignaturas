@@ -30,15 +30,14 @@ flowchart TD
     U["Navegador o cliente MCP"] --> A["Servidor Node.js v28"]
     A --> P["PostgreSQL mediante Prisma"]
     A --> O["API de OpenAI"]
-    A --> F["public y knowledge/uploads"]
+    A --> F["public + knowledge/official + knowledge/specifications + knowledge/uploads"]
 ```
 
 - El servidor HTTP, la API y el servidor MCP se ejecutan en un solo proceso.
 - La interfaz de `public/` se sirve desde el mismo origen.
 - PostgreSQL guarda usuarios, proyectos, semanas, revisiones e imágenes
   generadas. Las imágenes se almacenan como bytes en la tabla `GeneratedImage`.
-- Los documentos administrativos cargados durante la ejecución también guardan
-  un archivo original en `knowledge/uploads/`; esa ruta debe ser persistente.
+- Los documentos cargados durante la ejecución se reciben primero en `knowledge/uploads/`. Las versiones activas se sincronizan a `knowledge/official/` cuando son documentos institucionales y a `knowledge/specifications/` cuando son especificaciones funcionales. `knowledge/uploads/` permanece como almacenamiento temporal fuera de Git.
 
 Consulte [Arquitectura y datos](docs/ARQUITECTURA_Y_DATOS.md) para el detalle.
 
@@ -139,12 +138,12 @@ administrador si se ejecuta otra vez.
 | `INITIAL_ADMIN_PASSWORD` | Solo `seed` | Contraseña inicial; debe ser larga, única y segura. |
 | `APP_BASE_URL` | Para correo institucional | URL pública del Sistema de Gestión Guía didáctica usada para construir enlaces de restablecimiento y acceso a revisiones. En producción debe ser HTTPS. |
 | `SMTP_HOST` | Para correo institucional | Servidor SMTP que enviará recuperación de contraseña y notificaciones del proceso de revisión. |
-| `SMTP_PORT` | Para correo institucional | Puerto SMTP; normalmente `587` con STARTTLS o `465` con TLS implícito. |
-| `SMTP_SECURE` | Para correo institucional | `true` para TLS implícito (habitualmente puerto 465). |
-| `SMTP_STARTTLS` | Para correo institucional | `true` para elevar una conexión SMTP a TLS (habitualmente puerto 587). |
+| `SMTP_PORT` | Para recuperación | Puerto SMTP; normalmente `587` con STARTTLS o `465` con TLS implícito. |
+| `SMTP_SECURE` | Para recuperación | `true` para TLS implícito (habitualmente puerto 465). |
+| `SMTP_STARTTLS` | Para recuperación | `true` para elevar una conexión SMTP a TLS (habitualmente puerto 587). |
 | `SMTP_USER` | Según servidor SMTP | Usuario SMTP. Puede dejarse vacío si el relay autorizado no requiere autenticación. |
 | `SMTP_PASSWORD` | Según servidor SMTP | Contraseña SMTP; debe permanecer únicamente en secretos del servidor. |
-| `SMTP_FROM` | Para correo institucional | Remitente de los mensajes, por ejemplo `Sistema de Gestión Guía didáctica <no-reply@institucion.edu>`. |
+| `SMTP_FROM` | Para recuperación | Remitente de los mensajes, por ejemplo `Sistema de Gestión Guía didáctica <no-reply@institucion.edu>`. |
 | `SMTP_HELO_NAME` | No | Nombre enviado por el cliente en `EHLO`; por defecto `gestion-guia.local`. |
 
 La API oficial recomienda mantener las claves en variables del servidor o en un
@@ -200,7 +199,10 @@ pendiente y debe realizarse en una versión posterior.
 ```text
 app-creacion-asignaturas/
 ├── docs/                  Documentación y bitácora
-├── knowledge/             Fuentes institucionales versionadas
+├── knowledge/             Conocimiento versionado
+│   ├── official/          Documentos institucionales activos sincronizados con Git
+│   ├── specifications/    Especificaciones funcionales activas sincronizadas con Git
+│   └── uploads/           Cargas temporales no versionadas
 ├── prisma/                Esquema, migraciones y seed
 ├── public/                Interfaz web servida por Node.js
 ├── src/                   Código TypeScript

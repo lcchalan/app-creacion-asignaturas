@@ -11,7 +11,7 @@ Los REAS pueden ser encontrados en cualquier formato:
 3. ¿Cómo identificar REAS?
 Los Recursos Educativos Abiertos (REA) son producto del Movimiento de Cultura Libre y pueden estar publicados bajo dos tipos de licencia.
     •   Copyleft: El copyleft es una práctica que consiste en el ejercicio del derecho de autor con el objetivo de permitir la libre distribución de copias y versiones modificadas de una obra u otro trabajo, exigiendo que los mismos derechos sean preservados en las versiones modificadas.
-    
+
     •   Creative Commons (CC): Creative Commons es una organización que permite publicar obras creativas bajo licencias que permiten flexibilidad ante el Copyright o el “todos los derechos reservados”.
 
     Existen 6 tipos de licencias Creative Commons y de acuerdo a la que conste en una obra, podremos determinar qué permisos ha otorgado el autor sobre su trabajo.
@@ -19,7 +19,7 @@ Los Recursos Educativos Abiertos (REA) son producto del Movimiento de Cultura Li
     • Creative Commons Zero (CC0): Creative Commons Zero, donde el autor renuncia a todos los derechos sobre la obra en la medida que la ley de su país se lo permita.
 
     • Obras en Dominio público: Implica a las obras que pueden ser explotadas por cualquier persona, siempre respetando los derechos morales de sus autores, pero que, por la finalización de los plazos de protección, han entrado a formar parte del dominio público.
-    
+
     Por ejemplo:
     Literatura
     • "Don Quijote de la Mancha" – Miguel de Cervantes (1605 y 1615)
@@ -31,7 +31,7 @@ Los Recursos Educativos Abiertos (REA) son producto del Movimiento de Cultura Li
     • "Himno a la alegría" – Beethoven (solo la música, no las letras modernas)
     Pintura y Arte Visual
     • "La noche estrellada" – Vincent van Gogh
-    • "La Mona Lisa" – Leonardo da Vinci    
+    • "La Mona Lisa" – Leonardo da Vinci
 
 4. ¿Cuál es la diferencia entre los REA y las publicaciones de acceso abierto?
     • Publicaciones de acceso abierto: Las publicaciones de acceso abierto se encuentran claramente relacionadas con los REA pero son distintas.

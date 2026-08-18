@@ -4,7 +4,6 @@ let authenticatedUserData = null;
 let currentWorkView = "TEACHER";
 let currentReviewStageId = null;
 let currentReviewDetail = null;
-let planChecklistDraft = [];
 const workViewMeta = {
   TEACHER: { label: "Docente", profile: "Docente", kind: "teacher" },
   REVIEWER: { label: "Par académico", profile: "Par académico", kind: "review", stage: "PEER" },
@@ -5867,20 +5866,47 @@ function renderAiVersions() {
 function activeIndicatorVersion() {
   return adminData?.indicatorVersions.find((item) => item.status === "ACTIVE") || adminData?.indicatorVersions[0];
 }
+function activePlanChecklistVersion() {
+  return adminData?.teachingPlanIndicatorVersions?.find((item) => item.status === "ACTIVE") || adminData?.teachingPlanIndicatorVersions?.[0];
+}
 function renderIndicators() {
   const version = activeIndicatorVersion();
   const stage = $("#indicator-stage-filter")?.value || "PEER";
   const labels = { PEER: "Par académico", QUALITY: "Equipo de calidad", DIITEP: "DIITEP" };
   const target = { PEER: 35, QUALITY: 30, DIITEP: 35 };
+  const status = $("#guide-checklist-version-status");
+  if (status) status.textContent = version
+    ? `Versión activa: ${version.title} · v${version.version} · ${version.indicators.filter((item) => item.active).length} criterios activos. Historial: ${adminData?.indicatorVersions?.length || 1} versiones.`
+    : "No existe una versión activa de la lista de cotejo de la Guía Didáctica.";
   const items = (version?.indicators || []).filter((item) => item.stage === stage);
   const activeTotal = items.filter((item) => item.active).reduce((sum, item) => sum + Number(item.score), 0);
-  $("#indicator-weight-summary").textContent = `${labels[stage]} · ${items.filter((item) => item.active).length} indicadores activos · ${activeTotal.toFixed(2)} de ${target[stage]} puntos. Cada cambio crea una nueva versión y redistribuye el puntaje del rol.`;
-  $("#indicator-table-body").innerHTML = items.map((item) => `<tr data-id="${item.id}">
+  if ($("#indicator-weight-summary")) $("#indicator-weight-summary").textContent = `${labels[stage]} · ${items.filter((item) => item.active).length} criterios activos · ${activeTotal.toFixed(2)} de ${target[stage]} puntos. Cada cambio crea una nueva versión y redistribuye el puntaje del responsable.`;
+  if ($("#indicator-table-body")) $("#indicator-table-body").innerHTML = items.map((item) => `<tr data-id="${item.id}">
     <td><strong>${escapeHtml(item.name || item.code)}</strong><small>${escapeHtml(item.code)}</small></td>
     <td>${escapeHtml(item.description)}</td><td>${Number(item.score).toFixed(2)}</td>
+    <td>${item.required ? "Sí" : "No"}</td>
     <td><span class="status-badge ${item.active ? "status-completed" : "status-draft"}">${item.active ? "Activo" : "Deshabilitado"}</span></td>
     <td><div class="table-actions">${adminActionButton("edit", "Actualizar", 'data-indicator-action="edit"')}${adminActionButton(item.active ? "deactivate" : "activate", item.active ? "Deshabilitar" : "Habilitar", 'data-indicator-action="toggle"')}${adminActionButton("delete", "Eliminar", 'data-indicator-action="delete"', "danger")}</div></td></tr>`).join("")
-    || `<tr><td colspan="5">No existen indicadores para este responsable.</td></tr>`;
+    || `<tr><td colspan="6">No existen criterios para este responsable.</td></tr>`;
+}
+
+function renderPlanChecklistManager() {
+  const version = activePlanChecklistVersion();
+  const stage = $("#plan-checklist-stage-filter")?.value || "PEER";
+  const status = $("#plan-checklist-version-status");
+  if (status) status.textContent = version
+    ? `Versión activa: ${version.title} · v${version.version} · ${version.indicators.filter((item) => item.active).length} criterios activos. Historial: ${adminData?.teachingPlanIndicatorVersions?.length || 1} versiones.`
+    : "No existe una versión activa. Ejecute el seed institucional o cree la versión inicial antes de habilitar el proceso.";
+  const target = $("#plan-checklist-table-body");
+  if (!target) return;
+  const items = (version?.indicators || []).filter((item) => item.stage === stage);
+  target.innerHTML = items.map((item) => `<tr data-id="${escapeHtml(item.id)}">
+    <td><strong>${escapeHtml(item.name || item.code)}</strong><small>${escapeHtml(item.code)}</small></td>
+    <td>${escapeHtml(item.description)}</td>
+    <td>${item.required ? "Sí" : "No"}</td>
+    <td><span class="status-badge ${item.active ? "status-completed" : "status-draft"}">${item.active ? "Activo" : "Deshabilitado"}</span></td>
+    <td><div class="table-actions">${adminActionButton("edit", "Actualizar", 'data-plan-checklist-action="edit"')}${adminActionButton(item.active ? "deactivate" : "activate", item.active ? "Deshabilitar" : "Habilitar", 'data-plan-checklist-action="toggle"')}${adminActionButton("delete", "Eliminar", 'data-plan-checklist-action="delete"', "danger")}</div></td>
+  </tr>`).join("") || '<tr><td colspan="5">No existen criterios para este responsable.</td></tr>';
 }
 function renderGuideReport() {
   if (!adminData) return;
@@ -5985,15 +6011,6 @@ function syncCareerDirectorForm() {
   select.value = assignment?.directorId || "";
 }
 
-function renderPlanChecklistDraft() {
-  const target = $("#plan-checklist-draft");
-  if (!target) return;
-  target.innerHTML = planChecklistDraft.length ? planChecklistDraft.map((item, index) => `<article class="checklist-draft-item">
-    <div><span class="review-indicator-code">${escapeHtml(item.code)}</span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(reviewStageLabels[item.stage])}${item.required ? " · Obligatorio" : ""}</small><p>${escapeHtml(item.description)}</p></div>
-    <button type="button" class="admin-icon-action danger" data-remove-plan-checklist="${index}" aria-label="Eliminar criterio" title="Eliminar criterio">×</button>
-  </article>`).join("") : '<p class="field-help">Agregue los criterios oficiales de cada etapa que estará activa. No se cargan criterios simulados.</p>';
-}
-
 function renderPlanReviewNotifications() {
   const target = $("#plan-review-notifications-body");
   if (!target || !adminData) return;
@@ -6010,6 +6027,33 @@ function renderPlanReviewNotifications() {
       <td>${item.status === "SENT" ? "—" : `<button type="button" class="button secondary compact" data-retry-plan-notification="${escapeHtml(item.id)}">Reintentar</button>`}</td>
     </tr>`;
   }).join("") || '<tr><td colspan="6">Todavía no existen notificaciones del proceso.</td></tr>';
+}
+
+function planReviewProgressStageCell(workflow, stage) {
+  const item = workflow?.stages?.find((entry) => entry.stage === stage);
+  if (!item) return '<span class="field-help">No incluida</span>';
+  const css = item.status === "APPROVED" ? "status-completed" : item.status === "CHANGES_REQUESTED" ? "status-draft" : "status-in_progress";
+  return `<span class="status-badge ${css}">${escapeHtml(reviewStageStatusLabels[item.status] || item.status)}</span><small>${escapeHtml(item.reviewer?.displayName || "Sin responsable")}</small>`;
+}
+
+function renderPlanReviewProgress() {
+  const target = $("#plan-review-progress-body");
+  if (!target || !adminData) return;
+  const workflowLabels = { IN_REVIEW: "En revisión", CHANGES_REQUESTED: "Correcciones", APPROVED: "Aprobado", CANCELLED: "Cancelado" };
+  const projects = adminData.projects.filter((project) => project.teachingPlan);
+  target.innerHTML = projects.map((project) => {
+    const workflow = project.teachingPlan?.reviewWorkflow;
+    const status = workflow ? (workflowLabels[workflow.status] || workflow.status) : (project.teachingPlan?.teacherReviewedAt ? "Confirmado por docente" : "No iniciado");
+    const statusClass = workflow?.status === "APPROVED" ? "status-completed" : workflow?.status === "CHANGES_REQUESTED" ? "status-draft" : "status-in_progress";
+    return `<tr>
+      <td><strong>${escapeHtml(project.subjectName)}</strong><small>${escapeHtml(project.subjectCode || "Sin código")} · ${escapeHtml(project.professorName || "")}</small></td>
+      <td>${planReviewProgressStageCell(workflow, "PEER")}</td>
+      <td>${planReviewProgressStageCell(workflow, "QUALITY")}</td>
+      <td>${planReviewProgressStageCell(workflow, "DIITEP")}</td>
+      <td>${planReviewProgressStageCell(workflow, "DIRECTOR")}</td>
+      <td><span class="status-badge ${statusClass}">${escapeHtml(status)}</span></td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="6">Todavía no existen Planes Docentes para seguimiento.</td></tr>';
 }
 
 function renderPlanReviewAdmin() {
@@ -6030,11 +6074,8 @@ function renderPlanReviewAdmin() {
     ["#plan-review-peer", "REVIEWER"], ["#plan-review-quality", "QUALITY"], ["#plan-review-diitep", "DIITEP"],
   ].forEach(([selector, role]) => setSelectOptions($(selector), adminData.users.filter((user) => user.active && adminUserHasRole(user, role))));
 
-  const activeVersion = (adminData.teachingPlanIndicatorVersions || []).find((item) => item.status === "ACTIVE");
-  $("#plan-checklist-version-status").textContent = activeVersion
-    ? `Versión activa: ${activeVersion.title} · v${activeVersion.version} · ${activeVersion.indicators.filter((item) => item.active).length} criterios.`
-    : "No existe una versión activa. Cree la lista de cotejo antes de habilitar el proceso.";
-  renderPlanChecklistDraft();
+  renderPlanReviewProgress();
+  renderPlanChecklistManager();
   renderPlanReviewNotifications();
 }
 
@@ -6129,45 +6170,6 @@ $("#career-director-form")?.addEventListener("submit", async (event) => {
     await loadAdminDashboard();
     $("#career-director-program").value = programId;
     syncCareerDirectorForm();
-  } catch (error) { showAdminMessage(error.message, true); }
-});
-
-$("#plan-checklist-add")?.addEventListener("click", () => {
-  const code = $("#plan-checklist-code").value.trim().toUpperCase();
-  const name = $("#plan-checklist-name").value.trim();
-  const description = $("#plan-checklist-description").value.trim();
-  const stage = $("#plan-checklist-stage").value;
-  if (!code || !name || !description) return showAdminMessage("Complete código, nombre y descripción del criterio.", true);
-  if (planChecklistDraft.some((item) => item.code.toUpperCase() === code)) return showAdminMessage("El código del criterio ya está incluido en esta versión.", true);
-  planChecklistDraft.push({ code, name, description, stage, active: true, required: $("#plan-checklist-required").checked });
-  $("#plan-checklist-code").value = "";
-  $("#plan-checklist-name").value = "";
-  $("#plan-checklist-description").value = "";
-  $("#plan-checklist-required").checked = true;
-  renderPlanChecklistDraft();
-});
-
-$("#plan-checklist-draft")?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-remove-plan-checklist]");
-  if (!button) return;
-  planChecklistDraft.splice(Number(button.dataset.removePlanChecklist), 1);
-  renderPlanChecklistDraft();
-});
-
-$("#plan-checklist-version-form")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const title = $("#plan-checklist-title").value.trim();
-  if (!title) return showAdminMessage("Ingrese el título de la versión de la lista de cotejo.", true);
-  if (!planChecklistDraft.length) return showAdminMessage("Agregue al menos un criterio antes de guardar la versión.", true);
-  try {
-    await authRequest("/api/admin/teaching-plan-review/indicator-versions", {
-      method: "POST", body: JSON.stringify({ title, activate: true, indicators: planChecklistDraft }),
-    });
-    planChecklistDraft = [];
-    event.currentTarget.reset();
-    $("#plan-checklist-required").checked = true;
-    showAdminMessage("Nueva versión de la lista de cotejo creada y activada.");
-    await loadAdminDashboard();
   } catch (error) { showAdminMessage(error.message, true); }
 });
 
@@ -6708,50 +6710,162 @@ $("#knowledge-retire-form")?.addEventListener("submit", async (event) => {
     }
   }
 });
+function syncChecklistManagerView() {
+  const selected = $("#checklist-manager-type")?.value || "PLAN";
+  $$('[data-checklist-manager-view]').forEach((panel) => {
+    panel.classList.toggle("hidden", panel.dataset.checklistManagerView !== selected);
+  });
+}
+$("#checklist-manager-type")?.addEventListener("change", syncChecklistManagerView);
+syncChecklistManagerView();
+
+$("#plan-checklist-stage-filter")?.addEventListener("change", renderPlanChecklistManager);
+$("#new-plan-checklist-indicator")?.addEventListener("click", () => {
+  const form = $("#plan-checklist-editor");
+  form.reset();
+  form.elements.id.value = "";
+  form.elements.stage.value = $("#plan-checklist-stage-filter").value;
+  form.elements.required.checked = true;
+  form.elements.active.checked = true;
+  $("#plan-checklist-editor-title").textContent = "Crear criterio del Plan Docente";
+  form.classList.remove("hidden");
+});
+$("#cancel-plan-checklist-indicator")?.addEventListener("click", () => $("#plan-checklist-editor")?.classList.add("hidden"));
+$("#plan-checklist-editor")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  const payload = {
+    code: form.elements.code.value.trim().toUpperCase(),
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    stage: form.elements.stage.value,
+    required: Boolean(form.elements.required.checked),
+    active: Boolean(form.elements.active.checked),
+  };
+  try {
+    await authRequest(id ? `/api/admin/teaching-plan-review/indicators/${encodeURIComponent(id)}` : "/api/admin/teaching-plan-review/indicators", {
+      method: id ? "PATCH" : "POST", body: JSON.stringify(payload),
+    });
+    showAdminMessage(id ? "Criterio del Plan Docente actualizado en una nueva versión." : "Criterio del Plan Docente agregado en una nueva versión.");
+    form.classList.add("hidden");
+    const stage = payload.stage;
+    await loadAdminDashboard();
+    $("#plan-checklist-stage-filter").value = stage;
+    renderPlanChecklistManager();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+$("#plan-checklist-table-body")?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-plan-checklist-action]");
+  if (!button) return;
+  const id = button.closest("tr")?.dataset.id;
+  const version = activePlanChecklistVersion();
+  const item = version?.indicators?.find((entry) => entry.id === id);
+  if (!item) return;
+  if (button.dataset.planChecklistAction === "edit") {
+    const form = $("#plan-checklist-editor");
+    form.elements.id.value = item.id;
+    form.elements.code.value = item.code;
+    form.elements.name.value = item.name || item.code;
+    form.elements.description.value = item.description;
+    form.elements.stage.value = item.stage;
+    form.elements.required.checked = Boolean(item.required);
+    form.elements.active.checked = Boolean(item.active);
+    $("#plan-checklist-editor-title").textContent = "Actualizar criterio del Plan Docente";
+    form.classList.remove("hidden");
+    return;
+  }
+  try {
+    if (button.dataset.planChecklistAction === "delete") {
+      if (!confirm("El criterio se retirará de la nueva versión. Las revisiones anteriores conservarán la versión y la respuesta registrada. ¿Desea continuar?")) return;
+      await authRequest(`/api/admin/teaching-plan-review/indicators/${encodeURIComponent(id)}`, { method: "DELETE" });
+      showAdminMessage("Criterio retirado de la nueva versión del Plan Docente.");
+    } else {
+      await authRequest(`/api/admin/teaching-plan-review/indicators/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          code: item.code, name: item.name || item.code, description: item.description, stage: item.stage,
+          required: Boolean(item.required), active: !item.active,
+        }),
+      });
+      showAdminMessage(item.active ? "Criterio del Plan Docente deshabilitado en la nueva versión." : "Criterio del Plan Docente habilitado en la nueva versión.");
+    }
+    const stage = $("#plan-checklist-stage-filter").value;
+    await loadAdminDashboard();
+    $("#plan-checklist-stage-filter").value = stage;
+    renderPlanChecklistManager();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
 $("#indicator-stage-filter").onchange = renderIndicators;
 $("#new-indicator").onclick = () => {
-  $("#indicator-editor").reset();
-  $("#indicator-editor").elements.id.value = "";
-  $("#indicator-editor-title").textContent = "Crear nuevo indicador";
-  $("#indicator-editor").classList.remove("hidden");
+  const form = $("#indicator-editor");
+  form.reset();
+  form.elements.id.value = "";
+  form.elements.stage.value = $("#indicator-stage-filter").value;
+  form.elements.required.checked = true;
+  form.elements.active.checked = true;
+  $("#indicator-editor-title").textContent = "Crear criterio de la Guía Didáctica";
+  form.classList.remove("hidden");
 };
 $("#cancel-indicator").onclick = () => $("#indicator-editor").classList.add("hidden");
 $("#indicator-editor").onsubmit = async (event) => {
   event.preventDefault();
-  const submittedForm = event.currentTarget;
-  const values = Object.fromEntries(new FormData(submittedForm));
-  const id = values.id; delete values.id;
-  values.stage = $("#indicator-stage-filter").value;
-  values.score = Number(values.score);
+  const form = event.currentTarget;
+  const id = form.elements.id.value;
+  const payload = {
+    name: form.elements.name.value.trim(),
+    description: form.elements.description.value.trim(),
+    stage: form.elements.stage.value,
+    score: Number(form.elements.score.value),
+    required: Boolean(form.elements.required.checked),
+    active: Boolean(form.elements.active.checked),
+  };
   try {
-    await authRequest(id ? `/api/admin/indicators/${id}` : "/api/admin/indicators", { method: id ? "PATCH" : "POST", body: JSON.stringify(values) });
-    showAdminMessage("Indicador guardado y puntuaciones redistribuidas."); submittedForm.classList.add("hidden"); await loadAdminDashboard();
+    await authRequest(id ? `/api/admin/indicators/${encodeURIComponent(id)}` : "/api/admin/indicators", { method: id ? "PATCH" : "POST", body: JSON.stringify(payload) });
+    showAdminMessage(id ? "Criterio de la Guía actualizado en una nueva versión." : "Criterio de la Guía creado en una nueva versión.");
+    form.classList.add("hidden");
+    const stage = payload.stage;
+    await loadAdminDashboard();
+    $("#indicator-stage-filter").value = stage;
+    renderIndicators();
   } catch (error) { showAdminMessage(error.message, true); }
 };
 $("#indicator-table-body").onclick = async (event) => {
   const button = event.target.closest("[data-indicator-action]");
   if (!button) return;
   const id = button.closest("tr").dataset.id;
-  const item = activeIndicatorVersion().indicators.find((entry) => entry.id === id);
+  const item = activeIndicatorVersion()?.indicators?.find((entry) => entry.id === id);
   if (!item) return;
   if (button.dataset.indicatorAction === "edit") {
-    const form = $("#indicator-editor"); form.elements.id.value = item.id; form.elements.name.value = item.name || item.code;
-    form.elements.description.value = item.description; form.elements.score.value = Number(item.score).toFixed(2);
-    $("#indicator-editor-title").textContent = "Actualizar indicador"; form.classList.remove("hidden"); return;
+    const form = $("#indicator-editor");
+    form.elements.id.value = item.id;
+    form.elements.name.value = item.name || item.code;
+    form.elements.description.value = item.description;
+    form.elements.stage.value = item.stage;
+    form.elements.score.value = Number(item.score).toFixed(2);
+    form.elements.required.checked = Boolean(item.required);
+    form.elements.active.checked = Boolean(item.active);
+    $("#indicator-editor-title").textContent = "Actualizar criterio de la Guía Didáctica";
+    form.classList.remove("hidden");
+    return;
   }
   try {
     if (button.dataset.indicatorAction === "delete") {
-      if (!confirm("El indicador se retirará de la nueva versión. Las evaluaciones anteriores conservarán sus datos. ¿Desea continuar?")) return;
-      await authRequest(`/api/admin/indicators/${id}`, { method: "DELETE" });
-      showAdminMessage("Indicador eliminado de la nueva versión.");
+      if (!confirm("El criterio se retirará de la nueva versión. Las evaluaciones anteriores conservarán sus datos. ¿Desea continuar?")) return;
+      await authRequest(`/api/admin/indicators/${encodeURIComponent(id)}`, { method: "DELETE" });
+      showAdminMessage("Criterio eliminado de la nueva versión de la Guía Didáctica.");
     } else {
-      await authRequest(`/api/admin/indicators/${id}`, { method: "PATCH", body: JSON.stringify({
+      await authRequest(`/api/admin/indicators/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({
         name: item.name || item.code, description: item.description, stage: item.stage,
-        score: Number(item.score), active: !item.active,
+        score: Number(item.score), required: Boolean(item.required), active: !item.active,
       }) });
-      showAdminMessage(item.active ? "Indicador deshabilitado." : "Indicador habilitado.");
+      showAdminMessage(item.active ? "Criterio de la Guía deshabilitado." : "Criterio de la Guía habilitado.");
     }
+    const stage = $("#indicator-stage-filter").value;
     await loadAdminDashboard();
+    $("#indicator-stage-filter").value = stage;
+    renderIndicators();
   } catch (error) { showAdminMessage(error.message, true); }
 };
 $("#load-checklist").onclick = async () => {

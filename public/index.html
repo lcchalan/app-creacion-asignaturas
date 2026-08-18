@@ -127,6 +127,7 @@
         <button data-admin-tab="catalogs">Catálogos académicos</button>
         <button data-admin-tab="assignments">Asignaciones</button>
         <button data-admin-tab="plan-review">Revisión del Plan</button>
+        <button data-admin-tab="checklists">Listas de cotejo</button>
         <button data-admin-tab="knowledge">Conocimiento e IA</button>
         <button data-admin-tab="reports">Reporte de guías</button>
       </div>
@@ -310,25 +311,83 @@
             <label>DIITEP<select id="plan-review-diitep"><option value="">Sin asignar</option></select></label>
             <button class="button" type="submit">Guardar responsables</button>
           </form>
-          <form class="admin-card" id="plan-checklist-version-form">
-            <h2>Lista de cotejo del Plan Docente</h2>
-            <p id="plan-checklist-version-status">No existe una versión activa.</p>
-            <label>Título de la versión<input id="plan-checklist-title" maxlength="200" placeholder="Ej. Lista de cotejo institucional 2026"></label>
-            <div class="checklist-builder-toolbar">
-              <label>Etapa<select id="plan-checklist-stage"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option><option value="DIRECTOR">Dirección de carrera</option></select></label>
-              <label>Código<input id="plan-checklist-code" maxlength="50" placeholder="PA-01"></label>
-            </div>
-            <label>Nombre<input id="plan-checklist-name" maxlength="250"></label>
-            <label>Descripción<textarea id="plan-checklist-description" maxlength="3000"></textarea></label>
-            <label class="confirm"><input id="plan-checklist-required" type="checkbox" checked> Criterio obligatorio</label>
-            <button class="button secondary" id="plan-checklist-add" type="button">Agregar criterio</button>
-            <div id="plan-checklist-draft" class="checklist-draft"></div>
-            <button class="button" type="submit">Guardar y activar nueva versión</button>
-          </form>
+          <div class="admin-card">
+            <h2>Seguimiento del flujo</h2>
+            <p>Visualice qué etapa está pendiente, aprobada o en corrección para cada Plan Docente. Las etapas se habilitan secuencialmente según la configuración vigente al iniciar el proceso.</p>
+            <div class="table-scroll"><table class="admin-table"><thead><tr><th>Plan Docente</th><th>Par académico</th><th>Equipo de calidad</th><th>DIITEP</th><th>Dirección</th><th>Estado</th></tr></thead><tbody id="plan-review-progress-body"></tbody></table></div>
+          </div>
         </div>
         <div class="admin-card">
           <div class="table-toolbar"><div><h2>Notificaciones del proceso</h2><p class="field-help">Se muestran las 100 notificaciones más recientes. Un fallo de correo no invalida la decisión académica y puede reintentarse.</p></div></div>
           <div class="table-scroll"><table class="admin-table"><thead><tr><th>Plan Docente</th><th>Destinatario</th><th>Evento</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead><tbody id="plan-review-notifications-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="checklists">
+        <div class="heading admin-section-heading">
+          <div><p class="eyebrow">Configuración institucional</p><h2>Listas de cotejo</h2><p>Actualice los criterios oficiales sin alterar revisiones ya iniciadas. Cada cambio genera una nueva versión activa y conserva el historial anterior.</p></div>
+        </div>
+        <div class="admin-card checklist-manager-selector-card">
+          <label for="checklist-manager-type">Lista de cotejo a administrar
+            <select id="checklist-manager-type">
+              <option value="PLAN" selected>Plan Docente</option>
+              <option value="GUIDE">Guía Didáctica</option>
+            </select>
+          </label>
+          <p class="field-help">Seleccione el documento académico cuyos criterios desea consultar o actualizar.</p>
+        </div>
+        <div class="admin-grid checklist-admin-grid">
+          <div class="admin-card checklist-admin-view" id="plan-checklist-admin" data-checklist-manager-view="PLAN">
+            <div class="checklist-version-header">
+              <div><h2>Plan Docente</h2><p id="plan-checklist-version-status">No existe una versión activa.</p></div>
+              <button class="button" id="new-plan-checklist-indicator" type="button">Nuevo criterio</button>
+            </div>
+            <label>Responsable
+              <select id="plan-checklist-stage-filter"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option><option value="DIRECTOR">Dirección de carrera</option></select>
+            </label>
+            <div class="table-scroll"><table class="admin-table"><thead><tr><th>Criterio</th><th>Descripción</th><th>Obligatorio</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="plan-checklist-table-body"></tbody></table></div>
+            <form id="plan-checklist-editor" class="indicator-editor hidden">
+              <input name="id" type="hidden">
+              <h3 id="plan-checklist-editor-title">Crear criterio del Plan Docente</h3>
+              <div class="grid">
+                <label>Código<input name="code" required minlength="1" maxlength="50" placeholder="Ej. D03"></label>
+                <label>Responsable<select name="stage" required><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option><option value="DIRECTOR">Dirección de carrera</option></select></label>
+              </div>
+              <label>Nombre<input name="name" required minlength="3" maxlength="250"></label>
+              <label>Descripción<textarea name="description" required minlength="3" maxlength="3000"></textarea></label>
+              <div class="knowledge-options">
+                <label class="confirm"><input name="required" type="checkbox" checked> <span>Criterio obligatorio</span></label>
+                <label class="confirm"><input name="active" type="checkbox" checked> <span>Criterio activo</span></label>
+              </div>
+              <p class="field-help">Guardar, activar/desactivar o eliminar crea una nueva versión. Los procesos ya iniciados continúan con la versión que tenían al comenzar.</p>
+              <div class="form-actions"><button class="button" type="submit">Guardar nueva versión</button><button class="button secondary" id="cancel-plan-checklist-indicator" type="button">Cancelar</button></div>
+            </form>
+          </div>
+
+          <div class="admin-card checklist-admin-view hidden" id="indicator-form" data-checklist-manager-view="GUIDE">
+            <div class="checklist-version-header">
+              <div><h2>Guía Didáctica</h2><p id="guide-checklist-version-status">No existe una versión activa.</p></div>
+              <button class="button" id="new-indicator" type="button">Nuevo criterio</button>
+            </div>
+            <p>La versión activa se aplica tanto a la generación con IA como a las nuevas listas de cotejo de la Guía. Las revisiones existentes conservan su versión.</p>
+            <label>Responsable<select id="indicator-stage-filter"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
+            <p class="field-help" id="indicator-weight-summary"></p>
+            <div class="table-scroll"><table class="admin-table"><thead><tr><th>Criterio</th><th>Descripción</th><th>Puntuación</th><th>Obligatorio</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="indicator-table-body"></tbody></table></div>
+            <form id="indicator-editor" class="indicator-editor hidden">
+              <input name="id" type="hidden">
+              <h3 id="indicator-editor-title">Crear criterio de la Guía Didáctica</h3>
+              <label>Responsable<select name="stage" required><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
+              <label>Indicador<input name="name" required minlength="3" maxlength="250"></label>
+              <label>Descripción<textarea name="description" required minlength="3" maxlength="2000"></textarea></label>
+              <label>Puntuación<input name="score" type="number" min="0.01" max="100" step="0.01" required></label>
+              <div class="knowledge-options">
+                <label class="confirm"><input name="required" type="checkbox" checked> <span>Criterio obligatorio</span></label>
+                <label class="confirm"><input name="active" type="checkbox" checked> <span>Criterio activo</span></label>
+              </div>
+              <p class="field-help">Cada cambio crea una nueva versión y redistribuye el puntaje del responsable sin modificar evaluaciones anteriores.</p>
+              <div class="form-actions"><button class="button" type="submit">Guardar nueva versión</button><button class="button secondary" id="cancel-indicator" type="button">Cancelar</button></div>
+            </form>
+          </div>
         </div>
       </section>
 
@@ -454,29 +513,11 @@
           <div class="inline-actions"><button class="button" type="submit">Guardar formatos de la Guía</button></div>
         </form>
         <div class="admin-card"><h2>Recursos registrados</h2><p class="field-help">Se muestra la versión vigente o más reciente de cada recurso. Use «Ver versiones» para consultar el historial.</p><div id="ai-version-list" class="knowledge-resource-list"></div></div>
-        <div class="admin-card hidden" id="indicator-form">
-          <h2>Indicadores generales de la guía</h2>
-          <p>Esta es la fuente oficial única: la versión activa se aplica tanto a la generación con IA como a las nuevas listas de cotejo. Las revisiones iniciadas conservan su versión original.</p>
-          <div class="table-toolbar">
-            <label>Responsable<select id="indicator-stage-filter"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option></select></label>
-            <button class="button" id="new-indicator" type="button">Crear nuevo indicador</button>
-          </div>
-          <p class="field-help" id="indicator-weight-summary"></p>
-          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Indicador</th><th>Descripción</th><th>Puntuación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="indicator-table-body"></tbody></table></div>
-          <form id="indicator-editor" class="indicator-editor hidden">
-            <input name="id" type="hidden">
-            <h3 id="indicator-editor-title">Crear indicador</h3>
-            <label>Indicador<input name="name" required minlength="3" maxlength="250"></label>
-            <label>Descripción<textarea name="description" required minlength="3" maxlength="2000"></textarea></label>
-            <label>Puntuación<input name="score" type="number" min="0.01" max="100" step="0.01" required></label>
-            <div class="form-actions"><button class="button" type="submit">Guardar y redistribuir</button><button class="button secondary" id="cancel-indicator" type="button">Cancelar</button></div>
-          </form>
-        </div>
       </section>
 
       <section class="admin-panel" data-admin-panel="reports">
         <div id="guide-summary" class="report-cards"></div>
-        <div class="admin-card"><h2>Aprobación externa</h2><p>Los planes docentes y las guías se descargan en Word y se revisan, firman y aprueban fuera del sistema. El flujo por Par académico, Equipo de calidad y Dirección de carrera se incorporará en una fase posterior.</p></div>
+        <div class="admin-card"><h2>Estado de aprobación</h2><p>El Plan Docente dispone de revisión institucional configurable por Par académico, Equipo de calidad, DIITEP y Dirección de carrera. La revisión institucional de la Guía Didáctica conserva por ahora su mecanismo independiente de lista de cotejo.</p></div>
         <div class="admin-card">
           <div class="table-toolbar"><h2>Estado de guías</h2><input id="guide-report-search" type="search" placeholder="Buscar por profesor, asignatura, código o periodo"></div>
           <div class="table-scroll"><table class="admin-table"><thead><tr><th>Guía</th><th>Profesor</th><th>Periodo</th><th>Progreso</th><th>Estado</th><th>Actualización</th></tr></thead><tbody id="guide-report-body"></tbody></table></div>

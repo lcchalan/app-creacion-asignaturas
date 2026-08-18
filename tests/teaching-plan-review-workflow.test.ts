@@ -87,3 +87,30 @@ test("suspende los flujos activos cuando el proceso global está desactivado", (
   assert.equal(teachingPlanReviewWorkflowIsSuspended(false, "APPROVED"), false);
   assert.equal(teachingPlanReviewWorkflowIsSuspended(true, "IN_REVIEW"), false);
 });
+
+test("reconoce los cuatro perfiles institucionales de revisión del Plan Docente", () => {
+  assert.equal(userCanActOnTeachingPlanStage(["REVIEWER"], "PEER"), true);
+  assert.equal(userCanActOnTeachingPlanStage(["QUALITY"], "QUALITY"), true);
+  assert.equal(userCanActOnTeachingPlanStage(["DIITEP"], "DIITEP"), true);
+  assert.equal(userCanActOnTeachingPlanStage(["DIRECTOR"], "DIRECTOR"), true);
+  assert.equal(userCanActOnTeachingPlanStage(["QUALITY"], "DIITEP"), false);
+  assert.equal(userCanActOnTeachingPlanStage(["DIITEP"], "DIRECTOR"), false);
+  assert.equal(userCanActOnTeachingPlanStage(["ADMIN"], "QUALITY"), false);
+});
+
+test("avanza secuencialmente Par, Calidad, DIITEP y Dirección sin reabrir etapas aprobadas", () => {
+  const stages = [
+    { sortOrder: 1, status: "APPROVED", stage: "PEER" },
+    { sortOrder: 2, status: "WAITING", stage: "QUALITY" },
+    { sortOrder: 3, status: "WAITING", stage: "DIITEP" },
+    { sortOrder: 4, status: "WAITING", stage: "DIRECTOR" },
+  ];
+  assert.equal(nextTeachingPlanStage(stages, 1)?.stage, "QUALITY");
+  stages[1]!.status = "APPROVED";
+  assert.equal(nextTeachingPlanStage(stages, 2)?.stage, "DIITEP");
+  stages[2]!.status = "APPROVED";
+  assert.equal(nextTeachingPlanStage(stages, 3)?.stage, "DIRECTOR");
+  stages[3]!.status = "APPROVED";
+  assert.equal(nextTeachingPlanStage(stages, 4), null);
+  assert.deepEqual(previouslyApprovedTeachingPlanStages(stages, 4).map((item) => item.stage), ["PEER", "QUALITY", "DIITEP"]);
+});
