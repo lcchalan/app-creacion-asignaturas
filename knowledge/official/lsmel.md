@@ -1,0 +1,1 @@
+Define la organización modular de 8 semanas lectivas + 2 de recuperación, los tipos de asignatura Conceptual, Activa e Integradora, la distribución de actividades calificadas por semanas y los pesos de evaluación por componente ACD, APE y AA

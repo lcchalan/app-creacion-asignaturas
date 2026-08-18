@@ -89,6 +89,11 @@ import {
 import { buildTeachingPlanWord, extractTemplateLogo } from "./teaching-plan-word.js";
 import { sendPasswordResetEmail } from "./services/smtp-mailer.js";
 import {
+  buildTeachingPlanWorkflowMail,
+  sendTeachingPlanWorkflowEmail,
+  type TeachingPlanWorkflowMailEvent,
+} from "./services/teaching-plan-review-mailer.js";
+import {
   appliesToKnowledgeContext,
   appliesToKnowledgeProcess,
   knowledgeInstructionProcesses,
@@ -105,6 +110,17 @@ import {
   type KnowledgeResourceKind,
 } from "./academic/knowledge-lifecycle.js";
 import { inspectPlanTemplateProfile, type PlanTemplateProfile } from "./academic/plan-template-profile.js";
+import { syncOfficialKnowledgeSafely } from "./services/official-knowledge-sync.js";
+import {
+  nextTeachingPlanStage,
+  orderedEnabledTeachingPlanStages,
+  previouslyApprovedTeachingPlanStages,
+  teachingPlanReviewStageLabel,
+  teachingPlanReviewStageRole,
+  teachingPlanReviewStages,
+  userCanActOnTeachingPlanStage,
+  type TeachingPlanReviewStage,
+} from "./academic/teaching-plan-review-workflow.js";
 import {
   adaptationDecisionSchema,
   adaptationProposalCanBeApproved,
@@ -132,7 +148,7 @@ function applicationBaseUrl() {
   const configured = process.env.APP_BASE_URL?.trim();
   if (!configured) {
     if (process.env.NODE_ENV === "production") {
-      throw new Error("Configure APP_BASE_URL con la URL pública HTTPS del Sistema de Gestión Guía didáctica para enviar enlaces de recuperación.");
+      throw new Error("Configure APP_BASE_URL con la URL pública HTTPS del Sistema de Gestión Guía didáctica para enviar enlaces institucionales por correo.");
     }
     return `http://localhost:${port}`;
   }
@@ -483,6 +499,218 @@ const stageRole = { PEER: "REVIEWER", QUALITY: "QUALITY", DIITEP: "DIITEP" } as 
 function canReview(user: Awaited<ReturnType<typeof requireUser>>, stage: keyof typeof stageRole) {
   const roles = new Set(user.roles.map((entry) => entry.role.code));
   return roles.has("ADMIN") || roles.has(stageRole[stage]);
+}
+
+const teachingPlanReviewProcessId = "DEFAULT";
+const teachingPlanReviewStageSchema = z.enum(teachingPlanReviewStages);
+const assignableTeachingPlanReviewStageSchema = z.enum(["PEER", "QUALITY", "DIITEP"]);
+const defaultTeachingPlanReviewStageConfiguration = teachingPlanReviewStages.map((stage, index) => ({
+  stage, enabled: true, sortOrder: index + 1,
+}));
+
+function hasRole(user: { roles: Array<{ role: { code: string } }> }, roleCode: string) {
+  return user.roles.some((entry) => entry.role.code === roleCode);
+}
+
+function roleCodesFromText(value: string) {
+  return [...new Set(value.split(/[;,|]+/u).map((item) => item.trim().toUpperCase()).filter(Boolean))];
+}
+
+async function ensureTeachingPlanReviewProcessConfig() {
+  return database.$transaction(async (transaction) => {
+    const config = await transaction.teachingPlanReviewProcessConfig.upsert({
+      where: { id: teachingPlanReviewProcessId },
+      update: {},
+      create: { id: teachingPlanReviewProcessId, enabled: false },
+    });
+    const existing = await transaction.teachingPlanReviewStageConfig.findMany({
+      where: { processConfigId: config.id },
+    });
+    const existingStages = new Set(existing.map((item) => item.stage));
+    for (const item of defaultTeachingPlanReviewStageConfiguration) {
+      if (!existingStages.has(item.stage)) {
+        await transaction.teachingPlanReviewStageConfig.create({
+          data: { processConfigId: config.id, ...item },
+        });
+      }
+    }
+    return transaction.teachingPlanReviewProcessConfig.findUniqueOrThrow({
+      where: { id: config.id },
+      include: { stages: { orderBy: { sortOrder: "asc" } } },
+    });
+  });
+}
+
+function teachingPlanReviewLink(projectId: string, stage: TeachingPlanReviewStage) {
+  const url = new URL(applicationBaseUrl());
+  url.searchParams.set("review_project", projectId);
+  url.searchParams.set("review_stage", stage);
+  return url.toString();
+}
+
+async function resolveTeachingPlanStageReviewer(input: {
+  projectId: string;
+  programId: string;
+  ownerId: string;
+  stage: TeachingPlanReviewStage;
+}) {
+  const reviewer = input.stage === "DIRECTOR"
+    ? (await database.careerDirectorAssignment.findFirst({
+        where: { programId: input.programId, active: true },
+        orderBy: { assignedAt: "desc" },
+        include: { director: { include: { roles: { include: { role: true } } } } },
+      }))?.director
+    : (await database.teachingPlanReviewerAssignment.findFirst({
+        where: { projectId: input.projectId, stage: input.stage, active: true },
+        orderBy: { assignedAt: "desc" },
+        include: { reviewer: { include: { roles: { include: { role: true } } } } },
+      }))?.reviewer;
+  if (!reviewer?.active) {
+    throw Object.assign(new Error(`Falta asignar un responsable activo para la etapa ${teachingPlanReviewStageLabel[input.stage]}.`), { statusCode: 409 });
+  }
+  if (!hasRole(reviewer, teachingPlanReviewStageRole[input.stage])) {
+    throw Object.assign(new Error(`${reviewer.displayName} no posee el rol requerido para ${teachingPlanReviewStageLabel[input.stage]}.`), { statusCode: 409 });
+  }
+  if (reviewer.id === input.ownerId) {
+    throw Object.assign(new Error(`El docente del Plan no puede revisar su propio documento en la etapa ${teachingPlanReviewStageLabel[input.stage]}.`), { statusCode: 409 });
+  }
+  return reviewer;
+}
+
+async function prepareNewTeachingPlanReviewWorkflow(project: {
+  id: string;
+  ownerId: string;
+  academicOffering: { programId: string };
+}) {
+  const config = await ensureTeachingPlanReviewProcessConfig();
+  if (!config.enabled) return null;
+  const stages = orderedEnabledTeachingPlanStages(config.stages.map((item) => ({
+    stage: item.stage as TeachingPlanReviewStage, enabled: item.enabled, sortOrder: item.sortOrder,
+  })));
+  if (!stages.length) {
+    throw Object.assign(new Error("El proceso de revisión está habilitado, pero no tiene etapas activas."), { statusCode: 409 });
+  }
+  const indicatorVersion = await database.teachingPlanIndicatorVersion.findFirst({
+    where: { status: "ACTIVE" },
+    orderBy: { version: "desc" },
+    include: { indicators: { where: { active: true }, orderBy: { sortOrder: "asc" } } },
+  });
+  if (!indicatorVersion) {
+    throw Object.assign(new Error("Active una versión de la lista de cotejo del Plan Docente antes de habilitar el proceso de revisión."), { statusCode: 409 });
+  }
+  for (const stage of stages) {
+    if (!indicatorVersion.indicators.some((indicator) => indicator.stage === stage.stage)) {
+      throw Object.assign(new Error(`La lista de cotejo activa no contiene criterios para ${teachingPlanReviewStageLabel[stage.stage]}.`), { statusCode: 409 });
+    }
+  }
+  const resolvedStages = [];
+  for (const stage of stages) {
+    const reviewer = await resolveTeachingPlanStageReviewer({
+      projectId: project.id, programId: project.academicOffering.programId, ownerId: project.ownerId, stage: stage.stage,
+    });
+    resolvedStages.push({ ...stage, reviewer });
+  }
+  return { config, indicatorVersion, stages: resolvedStages };
+}
+
+async function assertTeachingPlanTeacherCanEdit(teachingPlanId: string) {
+  const workflow = await database.teachingPlanReviewWorkflow.findUnique({ where: { teachingPlanId } });
+  if (!workflow || workflow.status === "CHANGES_REQUESTED" || workflow.status === "CANCELLED") return;
+  const message = workflow.status === "APPROVED"
+    ? "El Plan Docente ya cuenta con aprobación institucional. Para modificarlo debe iniciar una nueva versión académica."
+    : "El Plan Docente se encuentra en revisión institucional. Solo puede modificarse cuando un revisor solicite correcciones.";
+  throw Object.assign(new Error(message), { statusCode: 409 });
+}
+
+async function assertTeachingPlanInstitutionallyApproved(teachingPlanId: string) {
+  const workflow = await database.teachingPlanReviewWorkflow.findUnique({ where: { teachingPlanId } });
+  if (workflow) {
+    if (workflow.status !== "APPROVED") {
+      throw Object.assign(new Error("El Plan Docente todavía no ha completado el proceso institucional de revisión y aprobación."), { statusCode: 409 });
+    }
+    return;
+  }
+  const config = await ensureTeachingPlanReviewProcessConfig();
+  if (config.enabled) {
+    throw Object.assign(new Error("El Plan Docente debe enviarse al proceso institucional de revisión y aprobación antes de continuar con la Guía Didáctica."), { statusCode: 409 });
+  }
+}
+
+async function createTeachingPlanNotification(
+  transaction: Prisma.TransactionClient,
+  input: {
+    workflowId: string;
+    reviewId?: string | null;
+    event: TeachingPlanWorkflowMailEvent;
+    stage?: TeachingPlanReviewStage | null;
+    recipient: { id: string; email: string; displayName: string };
+    project: { id: string; subjectName: string; subjectCode: string; professorName: string; academicPeriod: string; career: string };
+    actorName?: string;
+    observations?: string;
+    includeReviewLink?: boolean;
+  },
+) {
+  const message = buildTeachingPlanWorkflowMail({
+    event: input.event,
+    recipientName: input.recipient.displayName,
+    subjectName: input.project.subjectName,
+    subjectCode: input.project.subjectCode,
+    professorName: input.project.professorName,
+    academicPeriod: input.project.academicPeriod,
+    career: input.project.career,
+    stage: input.stage,
+    actorName: input.actorName,
+    observations: input.observations,
+    reviewUrl: input.includeReviewLink && input.stage ? teachingPlanReviewLink(input.project.id, input.stage) : undefined,
+  });
+  return transaction.teachingPlanNotification.create({
+    data: {
+      workflowId: input.workflowId, reviewId: input.reviewId || null, event: input.event, stage: input.stage || null,
+      recipientUserId: input.recipient.id, recipientEmail: input.recipient.email, recipientName: input.recipient.displayName,
+      subject: message.subject, body: message.body,
+    },
+    select: { id: true },
+  });
+}
+
+async function dispatchTeachingPlanNotification(notificationId: string) {
+  const notification = await database.teachingPlanNotification.findUnique({ where: { id: notificationId } });
+  if (!notification || notification.status === "SENT") return;
+  const attemptedAt = new Date();
+  await database.teachingPlanNotification.update({
+    where: { id: notification.id },
+    data: { attemptCount: { increment: 1 }, lastAttemptAt: attemptedAt, errorMessage: null },
+  });
+  try {
+    await sendTeachingPlanWorkflowEmail({ to: notification.recipientEmail, subject: notification.subject, body: notification.body });
+    await database.teachingPlanNotification.update({
+      where: { id: notification.id }, data: { status: "SENT", sentAt: new Date(), errorMessage: null },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`No fue posible enviar la notificación ${notification.id}:`, error);
+    await database.teachingPlanNotification.update({
+      where: { id: notification.id }, data: { status: "FAILED", errorMessage: message.slice(0, 10_000) },
+    }).catch(() => undefined);
+  }
+}
+
+function dispatchTeachingPlanNotifications(notificationIds: string[]) {
+  for (const id of notificationIds) void dispatchTeachingPlanNotification(id);
+}
+
+function teachingPlanWorkflowApiView(workflow: {
+  id: string; status: string; startedAt: Date; completedAt: Date | null;
+  stages: Array<{ id: string; stage: string; sortOrder: number; status: string; approvedAt: Date | null; reviewer: { id: string; displayName: string; email: string } | null }>;
+}) {
+  return {
+    id: workflow.id, status: workflow.status, startedAt: workflow.startedAt.toISOString(),
+    completedAt: workflow.completedAt?.toISOString() || null,
+    stages: [...workflow.stages].sort((left, right) => left.sortOrder - right.sortOrder).map((stage) => ({
+      id: stage.id, stage: stage.stage, label: teachingPlanReviewStageLabel[stage.stage as TeachingPlanReviewStage],
+      sortOrder: stage.sortOrder, status: stage.status, approvedAt: stage.approvedAt?.toISOString() || null, reviewer: stage.reviewer,
+    })),
+  };
 }
 
 function categoryFor(percentage: number) {
@@ -3561,10 +3789,12 @@ URL adicional: ${body.url || "No indicada"}`,
     if (request.method === "GET" && requestUrl.pathname === "/api/admin/dashboard") {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      await ensureTeachingPlanReviewProcessConfig();
       const [
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
         subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
+        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       ] = await Promise.all([
         database.user.findMany({
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
@@ -3589,8 +3819,10 @@ URL adicional: ${body.url || "No indicada"}`,
           select: {
             id: true, name: true, subjectCode: true, subjectName: true,
             professorName: true, academicPeriod: true, status: true,
-            totalWeeks: true, updatedAt: true,
+            totalWeeks: true, updatedAt: true, ownerId: true,
             weeks: { select: { status: true } },
+            academicOffering: { select: { programId: true, program: { select: { id: true, name: true } } } },
+            teachingPlan: { select: { id: true, version: true, teacherReviewedAt: true } },
           },
         }),
         database.generationInstruction.findMany({ orderBy: [{ key: "asc" }, { version: "desc" }] }),
@@ -3619,11 +3851,38 @@ URL adicional: ${body.url || "No indicada"}`,
         }),
         database.teacherDepartment.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
         database.institutionalSetting.findMany({ orderBy: { key: "asc" } }),
+        database.teachingPlanReviewProcessConfig.findUnique({
+          where: { id: teachingPlanReviewProcessId }, include: { stages: { orderBy: { sortOrder: "asc" } } },
+        }),
+        database.teachingPlanReviewerAssignment.findMany({
+          where: { active: true }, orderBy: { assignedAt: "desc" },
+          include: {
+            reviewer: { select: { id: true, displayName: true, email: true } },
+            project: { select: { id: true, subjectCode: true, subjectName: true, professorName: true, academicPeriod: true } },
+          },
+        }),
+        database.careerDirectorAssignment.findMany({
+          where: { active: true }, orderBy: { assignedAt: "desc" },
+          include: {
+            director: { select: { id: true, displayName: true, email: true } },
+            program: { select: { id: true, code: true, name: true } },
+          },
+        }),
+        database.teachingPlanIndicatorVersion.findMany({
+          orderBy: { version: "desc" }, include: { indicators: { orderBy: { sortOrder: "asc" } } },
+        }),
+        database.teachingPlanNotification.findMany({
+          orderBy: { createdAt: "desc" }, take: 100,
+          include: {
+            workflow: { include: { teachingPlan: { include: { project: { select: { id: true, subjectCode: true, subjectName: true } } } } } },
+          },
+        }),
       ]);
       json(response, 200, {
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
         subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
+        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       });
       return;
     }
@@ -3689,18 +3948,21 @@ URL adicional: ${body.url || "No indicada"}`,
         firstName: z.string().trim().min(2), lastName: z.string().trim().min(2),
         nationalId: z.string().trim().min(6),
         email: z.string().trim().email().transform((value) => value.toLowerCase()),
-        roleCode: z.string().trim().min(1),
+        roleCodes: z.array(z.string().trim().min(1)).min(1).max(10).optional(),
+        roleCode: z.string().trim().min(1).optional(),
         temporaryPassword: z.string().min(8).max(200).optional(),
-      }).parse(await readJsonBody(request));
+      }).refine((value) => value.roleCodes?.length || value.roleCode, { message: "Seleccione al menos un rol." })
+        .parse(await readJsonBody(request));
+      const roleCodes = [...new Set(body.roleCodes?.length ? body.roleCodes : [body.roleCode!])];
+      const selectedRoles = await database.role.findMany({ where: { code: { in: roleCodes } } });
+      if (selectedRoles.length !== roleCodes.length) throw new Error("Uno o más roles seleccionados no existen.");
       const temporaryPassword = body.temporaryPassword || randomBytes(9).toString("base64url");
-      const selectedRole = await database.role.findUnique({ where: { code: body.roleCode } });
-      if (!selectedRole) throw new Error("El rol seleccionado no existe.");
       const user = await database.user.create({
         data: {
           firstName: body.firstName, lastName: body.lastName, nationalId: body.nationalId,
           email: body.email, displayName: `${body.firstName} ${body.lastName}`,
           passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
-          roles: { create: { roleId: selectedRole.id } },
+          roles: { create: selectedRoles.map((role) => ({ roleId: role.id })) },
         },
       });
       json(response, 201, { ok: true, userId: user.id, temporaryPassword });
@@ -3713,14 +3975,16 @@ URL adicional: ${body.url || "No indicada"}`,
       const userId = z.string().uuid().parse(userAdminMatch[1]);
       const body = z.object({
         active: z.boolean().optional(),
+        roleCodes: z.array(z.string().trim().min(1)).min(1).max(10).optional(),
         roleCode: z.string().trim().min(1).optional(),
         firstName: z.string().trim().min(2).optional(),
         lastName: z.string().trim().min(2).optional(),
         nationalId: z.string().trim().min(6).optional(),
         email: z.string().trim().email().transform((value) => value.toLowerCase()).optional(),
       }).parse(await readJsonBody(request));
+      const requestedRoleCodes = body.roleCodes?.length ? [...new Set(body.roleCodes)] : body.roleCode ? [body.roleCode] : null;
       if (userId === admin.id && body.active === false) throw new Error("No puede desactivar su propia cuenta.");
-      if (userId === admin.id && body.roleCode && body.roleCode !== "ADMIN") {
+      if (userId === admin.id && requestedRoleCodes && !requestedRoleCodes.includes("ADMIN")) {
         throw new Error("No puede retirar su propio rol de administrador.");
       }
       await database.$transaction(async (transaction) => {
@@ -3737,11 +4001,11 @@ URL adicional: ${body.url || "No indicada"}`,
           await transaction.user.update({ where: { id: userId }, data: { active: body.active } });
           if (!body.active) await transaction.userSession.deleteMany({ where: { userId } });
         }
-        if (body.roleCode) {
-          const selectedRole = await transaction.role.findUnique({ where: { code: body.roleCode } });
-          if (!selectedRole) throw new Error("El rol seleccionado no existe.");
+        if (requestedRoleCodes) {
+          const selectedRoles = await transaction.role.findMany({ where: { code: { in: requestedRoleCodes } } });
+          if (selectedRoles.length !== requestedRoleCodes.length) throw new Error("Uno o más roles seleccionados no existen.");
           await transaction.userRole.deleteMany({ where: { userId } });
-          await transaction.userRole.create({ data: { userId, roleId: selectedRole.id } });
+          await transaction.userRole.createMany({ data: selectedRoles.map((role) => ({ userId, roleId: role.id })) });
         }
       });
       json(response, 200, { ok: true });
@@ -3763,6 +4027,208 @@ URL adicional: ${body.url || "No indicada"}`,
       json(response, 200, { ok: true, temporaryPassword });
       return;
     }
+    if (request.method === "PATCH" && requestUrl.pathname === "/api/admin/teaching-plan-review/config") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const body = z.object({
+        enabled: z.boolean(),
+        stages: z.array(z.object({
+          stage: teachingPlanReviewStageSchema, enabled: z.boolean(), sortOrder: z.number().int().min(1).max(20),
+        })).length(teachingPlanReviewStages.length),
+      }).parse(await readJsonBody(request));
+      const receivedStages = new Set(body.stages.map((item) => item.stage));
+      if (receivedStages.size !== teachingPlanReviewStages.length || teachingPlanReviewStages.some((stage) => !receivedStages.has(stage))) {
+        throw new Error("La configuración debe incluir Par académico, Equipo de calidad, DIITEP y Dirección de carrera.");
+      }
+      const activeStages = orderedEnabledTeachingPlanStages(body.stages);
+      if (body.enabled && !activeStages.length) throw new Error("Active al menos una etapa antes de habilitar el proceso.");
+      if (body.enabled) {
+        const activeIndicators = await database.teachingPlanIndicatorVersion.findFirst({
+          where: { status: "ACTIVE" }, orderBy: { version: "desc" },
+          include: { indicators: { where: { active: true } } },
+        });
+        if (!activeIndicators) throw new Error("Active primero una versión de la lista de cotejo del Plan Docente.");
+        for (const item of activeStages) {
+          if (!activeIndicators.indicators.some((indicator) => indicator.stage === item.stage)) {
+            throw new Error(`La lista de cotejo activa no tiene criterios para ${teachingPlanReviewStageLabel[item.stage]}.`);
+          }
+        }
+      }
+      await ensureTeachingPlanReviewProcessConfig();
+      const config = await database.$transaction(async (transaction) => {
+        await transaction.teachingPlanReviewProcessConfig.update({
+          where: { id: teachingPlanReviewProcessId }, data: { enabled: body.enabled, updatedById: admin.id },
+        });
+        for (const item of body.stages) {
+          await transaction.teachingPlanReviewStageConfig.upsert({
+            where: { processConfigId_stage: { processConfigId: teachingPlanReviewProcessId, stage: item.stage } },
+            update: { enabled: item.enabled, sortOrder: item.sortOrder },
+            create: { processConfigId: teachingPlanReviewProcessId, ...item },
+          });
+        }
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "TEACHING_PLAN_REVIEW_PROCESS_CONFIGURED", entityType: "TeachingPlanReviewProcessConfig",
+          entityId: teachingPlanReviewProcessId, details: { enabled: body.enabled, stages: body.stages },
+        } });
+        return transaction.teachingPlanReviewProcessConfig.findUniqueOrThrow({
+          where: { id: teachingPlanReviewProcessId }, include: { stages: { orderBy: { sortOrder: "asc" } } },
+        });
+      });
+      json(response, 200, { ok: true, config });
+      return;
+    }
+
+    if (request.method === "POST" && requestUrl.pathname === "/api/admin/teaching-plan-review/indicator-versions") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const body = z.object({
+        title: z.string().trim().min(3).max(200),
+        activate: z.boolean().default(true),
+        indicators: z.array(z.object({
+          code: z.string().trim().min(1).max(50),
+          name: z.string().trim().min(3).max(250),
+          description: z.string().trim().min(3).max(3000),
+          stage: teachingPlanReviewStageSchema,
+          active: z.boolean().default(true),
+          required: z.boolean().default(true),
+        })).min(1).max(300),
+      }).parse(await readJsonBody(request));
+      const codes = body.indicators.map((item) => item.code.toUpperCase());
+      if (new Set(codes).size !== codes.length) throw new Error("Los códigos de la lista de cotejo no pueden repetirse.");
+      if (body.activate) {
+        const config = await ensureTeachingPlanReviewProcessConfig();
+        for (const stage of config.stages.filter((item) => item.enabled)) {
+          if (!body.indicators.some((indicator) => indicator.active && indicator.stage === stage.stage)) {
+            throw new Error(`Incluya al menos un criterio activo para ${teachingPlanReviewStageLabel[stage.stage as TeachingPlanReviewStage]}.`);
+          }
+        }
+      }
+      const latest = await database.teachingPlanIndicatorVersion.findFirst({ orderBy: { version: "desc" } });
+      const created = await database.$transaction(async (transaction) => {
+        if (body.activate) {
+          await transaction.teachingPlanIndicatorVersion.updateMany({ where: { status: "ACTIVE" }, data: { status: "INACTIVE" } });
+        }
+        const version = await transaction.teachingPlanIndicatorVersion.create({
+          data: {
+            version: (latest?.version ?? 0) + 1, title: body.title, status: body.activate ? "ACTIVE" : "DRAFT",
+            activatedAt: body.activate ? new Date() : null, createdById: admin.id,
+            indicators: { create: body.indicators.map((item, sortOrder) => ({ ...item, code: item.code.toUpperCase(), sortOrder })) },
+          },
+          include: { indicators: { orderBy: { sortOrder: "asc" } } },
+        });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "TEACHING_PLAN_CHECKLIST_VERSION_CREATED", entityType: "TeachingPlanIndicatorVersion",
+          entityId: version.id, details: { version: version.version, active: body.activate },
+        } });
+        return version;
+      });
+      json(response, 201, { ok: true, indicatorVersion: created });
+      return;
+    }
+
+    const teachingPlanReviewerAssignmentMatch = requestUrl.pathname.match(/^\/api\/admin\/projects\/([0-9a-f-]+)\/teaching-plan-review\/assignments$/i);
+    if (request.method === "PUT" && teachingPlanReviewerAssignmentMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const projectId = z.string().uuid().parse(teachingPlanReviewerAssignmentMatch[1]);
+      const body = z.object({
+        assignments: z.array(z.object({ stage: assignableTeachingPlanReviewStageSchema, reviewerId: z.string().uuid().nullable() })).max(3),
+      }).parse(await readJsonBody(request));
+      if (new Set(body.assignments.map((item) => item.stage)).size !== body.assignments.length) throw new Error("No repita una etapa en la asignación.");
+      const project = await database.project.findUnique({ where: { id: projectId }, select: { id: true, ownerId: true } });
+      if (!project) { json(response, 404, { error: "La asignatura no existe." }); return; }
+      for (const item of body.assignments) {
+        if (!item.reviewerId) continue;
+        const reviewer = await database.user.findUnique({
+          where: { id: item.reviewerId }, include: { roles: { include: { role: true } } },
+        });
+        if (!reviewer?.active) throw new Error(`Seleccione un usuario activo para ${teachingPlanReviewStageLabel[item.stage]}.`);
+        if (!hasRole(reviewer, teachingPlanReviewStageRole[item.stage])) {
+          throw new Error(`${reviewer.displayName} no posee el rol requerido para ${teachingPlanReviewStageLabel[item.stage]}.`);
+        }
+        if (reviewer.id === project.ownerId) throw new Error("El docente no puede ser asignado como revisor de su propio Plan Docente.");
+      }
+      const now = new Date();
+      await database.$transaction(async (transaction) => {
+        for (const item of body.assignments) {
+          const current = await transaction.teachingPlanReviewerAssignment.findFirst({
+            where: { projectId, stage: item.stage, active: true }, orderBy: { assignedAt: "desc" },
+          });
+          if (current && current.reviewerId === item.reviewerId) continue;
+          await transaction.teachingPlanReviewerAssignment.updateMany({
+            where: { projectId, stage: item.stage, active: true }, data: { active: false, endedAt: now },
+          });
+          if (item.reviewerId) {
+            await transaction.teachingPlanReviewerAssignment.create({
+              data: { projectId, stage: item.stage, reviewerId: item.reviewerId, assignedById: admin.id },
+            });
+          }
+        }
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "TEACHING_PLAN_REVIEWERS_ASSIGNED", entityType: "Project", entityId: projectId,
+          details: { assignments: body.assignments },
+        } });
+      });
+      json(response, 200, { ok: true });
+      return;
+    }
+
+    const careerDirectorMatch = requestUrl.pathname.match(/^\/api\/admin\/programs\/([0-9a-f-]+)\/director$/i);
+    if (request.method === "PUT" && careerDirectorMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const programId = z.string().uuid().parse(careerDirectorMatch[1]);
+      const body = z.object({ directorId: z.string().uuid().nullable() }).parse(await readJsonBody(request));
+      const program = await database.academicProgram.findUnique({ where: { id: programId } });
+      if (!program) { json(response, 404, { error: "La carrera o programa no existe." }); return; }
+      if (body.directorId) {
+        const director = await database.user.findUnique({
+          where: { id: body.directorId }, include: { roles: { include: { role: true } } },
+        });
+        if (!director?.active || !hasRole(director, "DIRECTOR")) throw new Error("El responsable debe ser un usuario activo con rol Director.");
+      }
+      const now = new Date();
+      await database.$transaction(async (transaction) => {
+        const current = await transaction.careerDirectorAssignment.findFirst({
+          where: { programId, active: true }, orderBy: { assignedAt: "desc" },
+        });
+        if (current?.directorId !== body.directorId) {
+          await transaction.careerDirectorAssignment.updateMany({
+            where: { programId, active: true }, data: { active: false, endedAt: now },
+          });
+          if (body.directorId) {
+            await transaction.careerDirectorAssignment.create({
+              data: { programId, directorId: body.directorId, assignedById: admin.id },
+            });
+          }
+        }
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "CAREER_DIRECTOR_ASSIGNED", entityType: "AcademicProgram", entityId: programId,
+          details: { directorId: body.directorId },
+        } });
+      });
+      json(response, 200, { ok: true });
+      return;
+    }
+
+    const notificationRetryMatch = requestUrl.pathname.match(/^\/api\/admin\/teaching-plan-review\/notifications\/([0-9a-f-]+)\/retry$/i);
+    if (request.method === "POST" && notificationRetryMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const notificationId = z.string().uuid().parse(notificationRetryMatch[1]);
+      const notification = await database.teachingPlanNotification.findUnique({ where: { id: notificationId } });
+      if (!notification) { json(response, 404, { error: "La notificación no existe." }); return; }
+      if (notification.status === "SENT") { json(response, 200, { ok: true, status: "SENT" }); return; }
+      await dispatchTeachingPlanNotification(notification.id);
+      const updated = await database.teachingPlanNotification.findUniqueOrThrow({ where: { id: notification.id } });
+      await database.auditLog.create({ data: {
+        userId: admin.id, action: "TEACHING_PLAN_NOTIFICATION_RETRY", entityType: "TeachingPlanNotification",
+        entityId: notification.id, details: { previousStatus: notification.status, resultingStatus: updated.status },
+      } });
+      json(response, 200, { ok: updated.status === "SENT", status: updated.status, error: updated.errorMessage });
+      return;
+    }
+
     if (request.method === "PATCH" && requestUrl.pathname === "/api/admin/settings/teaching-plan") {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
@@ -4101,7 +4567,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         });
       });
-      json(response, 201, { ok: true, document });
+      const officialKnowledgeSync = effectiveActivate
+        ? await syncOfficialKnowledgeSafely(`creación/activación de ${document.key}`)
+        : null;
+      json(response, 201, { ok: true, document, officialKnowledgeSync });
       return;
     }
     const knowledgeAdminMatch = requestUrl.pathname.match(/^\/api\/admin\/knowledge\/([0-9a-f-]+)$/i);
@@ -4191,7 +4660,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         });
       });
-      json(response, 200, { ok: true, document });
+      const officialKnowledgeSync = selected.status === "ACTIVE"
+        ? await syncOfficialKnowledgeSafely(`edición de ${document.key}`)
+        : null;
+      json(response, 200, { ok: true, document, officialKnowledgeSync });
       return;
     }
     if (request.method === "GET" && knowledgeAdminMatch) {
@@ -4285,7 +4757,8 @@ URL adicional: ${body.url || "No indicada"}`,
         }),
         database.knowledgeDocument.update({ where: { id }, data: { status: "ACTIVE", activatedAt: new Date() } }),
       ]);
-      json(response, 200, { ok: true });
+      const officialKnowledgeSync = await syncOfficialKnowledgeSafely(`activación de ${selected.key}`);
+      json(response, 200, { ok: true, officialKnowledgeSync });
       return;
     }
     const knowledgeArchiveMatch = requestUrl.pathname.match(/^\/api\/admin\/knowledge\/([0-9a-f-]+)\/archive$/i);
@@ -4346,7 +4819,10 @@ URL adicional: ${body.url || "No indicada"}`,
           },
         }),
       ]);
-      json(response, 200, { ok: true });
+      const officialKnowledgeSync = selected.status === "ACTIVE"
+        ? await syncOfficialKnowledgeSafely(`baja de ${selected.key}`)
+        : null;
+      json(response, 200, { ok: true, officialKnowledgeSync });
       return;
     }
     if (request.method === "POST" && requestUrl.pathname === "/api/admin/users/bulk") {
@@ -4379,10 +4855,11 @@ URL adicional: ${body.url || "No indicada"}`,
               passwordHash: passwordHash(temporaryPassword), mustChangePassword: true,
             },
           });
-          const role = roleByCode.get(entry.role);
-          if (!role) throw new Error(`No existe el rol ${entry.role}.`);
+          const roleCodes = roleCodesFromText(entry.role);
+          const selectedRoles = roleCodes.map((code) => roleByCode.get(code));
+          if (!roleCodes.length || selectedRoles.some((role) => !role)) throw new Error(`Uno o más roles no existen en: ${entry.role}.`);
           await transaction.userRole.deleteMany({ where: { userId: user.id } });
-          await transaction.userRole.create({ data: { userId: user.id, roleId: role.id } });
+          await transaction.userRole.createMany({ data: selectedRoles.map((role) => ({ userId: user.id, roleId: role!.id })) });
           temporaryPasswords.push({ email: entry.email, temporaryPassword });
         }
       });
@@ -4421,8 +4898,9 @@ URL adicional: ${body.url || "No indicada"}`,
       const temporaryPasswords: Array<{ email: string; temporaryPassword: string }> = [];
       await database.$transaction(async (transaction) => {
         for (const entry of users) {
-          const role = roleByCode.get(entry.role);
-          if (!role) throw new Error(`No existe el rol ${entry.role}.`);
+          const roleCodes = roleCodesFromText(entry.role);
+          const selectedRoles = roleCodes.map((code) => roleByCode.get(code));
+          if (!roleCodes.length || selectedRoles.some((role) => !role)) throw new Error(`Uno o más roles no existen en: ${entry.role}.`);
           const temporaryPassword = randomBytes(9).toString("base64url");
           const user = await transaction.user.upsert({
             where: { email: entry.email },
@@ -4437,7 +4915,7 @@ URL adicional: ${body.url || "No indicada"}`,
             },
           });
           await transaction.userRole.deleteMany({ where: { userId: user.id } });
-          await transaction.userRole.create({ data: { userId: user.id, roleId: role.id } });
+          await transaction.userRole.createMany({ data: selectedRoles.map((role) => ({ userId: user.id, roleId: role!.id })) });
           temporaryPasswords.push({ email: entry.email, temporaryPassword });
         }
       });
@@ -4852,6 +5330,10 @@ URL adicional: ${body.url || "No indicada"}`,
       });
       if (!canReview(reviewer, review.stage)) { json(response, 403, { error: "No tiene permisos para evaluar esta etapa." }); return; }
       const submitted = new Map(body.items.map((item) => [item.id, item]));
+      const reviewItemIds = new Set(review.items.map((item) => item.id));
+      if (submitted.size !== body.items.length || body.items.some((item) => !reviewItemIds.has(item.id))) {
+        throw new Error("La lista de cotejo contiene criterios que no pertenecen a esta revisión.");
+      }
       if (review.items.some((item) => !submitted.has(item.id))) throw new Error("La lista de cotejo está incompleta.");
       if (body.decision === "APPROVED" && review.items.some((item) => {
         const result = submitted.get(item.id)?.result;
@@ -5154,6 +5636,7 @@ URL adicional: ${body.url || "No indicada"}`,
           throw Object.assign(new Error("La Guía Didáctica modular ya tiene contenido. Para reestructurar nuevamente el Plan Docente debe iniciar una nueva versión académica."), { statusCode: 409 });
         }
         confirmedPlanNeedsReopen = Boolean(project.teachingPlan?.teacherReviewedAt);
+        if (project.teachingPlan) await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
         if (confirmedPlanNeedsReopen && !body.reopenConfirmedPlan) {
           json(response, 409, {
             code: "CONFIRMED_PLAN_REOPEN_REQUIRED",
@@ -5164,6 +5647,7 @@ URL adicional: ${body.url || "No indicada"}`,
       } else {
         if (!project.teachingPlan) throw Object.assign(new Error("Genere primero el Plan Docente modular antes de analizar la guía anterior."), { statusCode: 409 });
         if (!project.teachingPlan.teacherReviewedAt) throw Object.assign(new Error("Revise y confirme primero el Plan Docente modular antes de analizar la guía anterior."), { statusCode: 409 });
+        await assertTeachingPlanInstitutionallyApproved(project.teachingPlan.id);
         const guideStarted = project.weeks.some((week) =>
           week.status !== "PENDING" || Boolean(week.draftContent) || Boolean(week.approvedContent));
         if (guideStarted) throw Object.assign(new Error("La guía modular ya tiene contenido. Inicie una nueva versión académica para realizar otra adaptación."), { statusCode: 409 });
@@ -5685,6 +6169,7 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         where: { id: teachingPlanGenerateMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: {
           academicOffering: { include: academicOfferingInclude },
+          teachingPlan: { select: { id: true } },
           weeks: { select: { status: true, draftContent: true, approvedContent: true } },
         },
       });
@@ -5692,6 +6177,7 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         json(response, 404, { error: "La asignatura no existe o no pertenece al usuario." });
         return;
       }
+      if (project.teachingPlan) await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
       if (!project.institutionalDataReviewedAt || !project.outcomeMappings || !project.teacherProfileSnapshot) {
         throw new Error("Confirme los datos institucionales y complete la ficha del plan antes de generarlo.");
       }
@@ -5902,6 +6388,7 @@ ${planContext.instructions}`,
         json(response, 404, { error: "El plan docente todavía no ha sido generado." });
         return;
       }
+      await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
       if (project.weeks.some((week) => week.status !== "PENDING" || week.draftContent || week.approvedContent)) {
         throw new Error("La guía ya tiene contenido. No se puede modificar el Plan Docente sin iniciar una nueva versión académica.");
       }
@@ -5988,6 +6475,7 @@ ${planContext.instructions}`,
         json(response, 404, { error: "El plan docente todavía no ha sido generado." });
         return;
       }
+      await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
       if (project.teachingPlan.version !== body.version) {
         json(response, 409, { error: "El Plan Docente cambió desde que abrió la edición. Recargue la vista antes de guardar." });
         return;
@@ -6157,28 +6645,434 @@ ${planContext.instructions}`,
         });
         return;
       }
+      const existingWorkflow = await database.teachingPlanReviewWorkflow.findUnique({
+        where: { teachingPlanId: project.teachingPlan.id },
+        include: {
+          stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+        },
+      });
+      if (existingWorkflow?.status === "APPROVED") {
+        throw Object.assign(new Error("El Plan Docente ya cuenta con aprobación institucional."), { statusCode: 409 });
+      }
+      if (existingWorkflow?.status === "IN_REVIEW") {
+        throw Object.assign(new Error("El Plan Docente ya se encuentra en revisión institucional."), { statusCode: 409 });
+      }
+      const workflowPreparation = existingWorkflow ? null : await prepareNewTeachingPlanReviewWorkflow(project);
+      const correctionStage = existingWorkflow?.status === "CHANGES_REQUESTED"
+        ? existingWorkflow.stages.find((stage) => stage.status === "CHANGES_REQUESTED")
+        : null;
+      if (existingWorkflow?.status === "CHANGES_REQUESTED" && !correctionStage?.reviewer) {
+        throw Object.assign(new Error("No fue posible identificar al responsable que solicitó las correcciones."), { statusCode: 409 });
+      }
       const reviewedAt = new Date();
+      const notificationIds: string[] = [];
       await database.$transaction(async (transaction) => {
         await transaction.teachingPlan.update({
           where: { id: project.teachingPlan!.id },
           data: { teacherReviewedAt: reviewedAt, teacherReviewNotes: body.notes || null },
         });
+        if (workflowPreparation) {
+          const workflow = await transaction.teachingPlanReviewWorkflow.create({
+            data: {
+              teachingPlanId: project.teachingPlan!.id, indicatorVersionId: workflowPreparation.indicatorVersion.id,
+              status: "IN_REVIEW",
+              stages: { create: workflowPreparation.stages.map((stage, index) => ({
+                stage: stage.stage, sortOrder: stage.sortOrder, reviewerId: stage.reviewer.id,
+                status: index === 0 ? "PENDING_REVIEW" : "WAITING",
+              })) },
+            },
+            include: { stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: true } } },
+          });
+          const firstStage = workflow.stages[0]!;
+          const notification = await createTeachingPlanNotification(transaction, {
+            workflowId: workflow.id, event: "SUBMITTED", stage: firstStage.stage as TeachingPlanReviewStage,
+            recipient: firstStage.reviewer!, project, includeReviewLink: true,
+          });
+          notificationIds.push(notification.id);
+          await transaction.auditLog.create({ data: {
+            userId: user.id, action: "TEACHING_PLAN_REVIEW_WORKFLOW_STARTED", entityType: "TeachingPlanReviewWorkflow",
+            entityId: workflow.id, details: { version: body.version, firstStage: firstStage.stage },
+          } });
+        } else if (existingWorkflow && correctionStage?.reviewer) {
+          await transaction.teachingPlanWorkflowStage.update({
+            where: { id: correctionStage.id }, data: { status: "PENDING_REVIEW" },
+          });
+          await transaction.teachingPlanReviewWorkflow.update({
+            where: { id: existingWorkflow.id }, data: { status: "IN_REVIEW" },
+          });
+          const notification = await createTeachingPlanNotification(transaction, {
+            workflowId: existingWorkflow.id, event: "RESUBMITTED", stage: correctionStage.stage as TeachingPlanReviewStage,
+            recipient: correctionStage.reviewer, project, includeReviewLink: true,
+          });
+          notificationIds.push(notification.id);
+          for (const previous of previouslyApprovedTeachingPlanStages(existingWorkflow.stages, correctionStage.sortOrder)) {
+            if (!previous.reviewer) continue;
+            const informational = await createTeachingPlanNotification(transaction, {
+              workflowId: existingWorkflow.id, event: "INFORMATIONAL_RESUBMISSION",
+              stage: correctionStage.stage as TeachingPlanReviewStage, recipient: previous.reviewer, project,
+              actorName: user.displayName, observations: body.notes || undefined,
+            });
+            notificationIds.push(informational.id);
+          }
+          await transaction.auditLog.create({ data: {
+            userId: user.id, action: "TEACHING_PLAN_CORRECTIONS_RESUBMITTED", entityType: "TeachingPlanReviewWorkflow",
+            entityId: existingWorkflow.id, details: { version: body.version, stage: correctionStage.stage },
+          } });
+        }
         await transaction.auditLog.create({ data: {
           userId: user.id, action: "TEACHING_PLAN_REVIEW_CONFIRMED",
           entityType: "TeachingPlan", entityId: project.teachingPlan!.id,
           details: { version: body.version, notes: body.notes },
         } });
       });
+      dispatchTeachingPlanNotifications(notificationIds);
+      const workflow = await database.teachingPlanReviewWorkflow.findUnique({
+        where: { teachingPlanId: project.teachingPlan.id },
+        include: { stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } } },
+      });
       json(response, 200, {
         ok: true,
         teachingPlan: {
           content: plan, version: project.teachingPlan.version, status: project.teachingPlan.status,
           reviewedAt: reviewedAt.toISOString(), reviewNotes: body.notes, reviewChecks, templateProfile,
+          reviewWorkflow: workflow ? teachingPlanWorkflowApiView(workflow) : null,
+          reviewProcessEnabled: Boolean(workflow),
           templateSnapshot: { id: activeTemplate.id, title: activeTemplate.title, version: activeTemplate.version, checksum: activeTemplate.checksum },
           activeTemplate: { id: activeTemplate.id, title: activeTemplate.title, version: activeTemplate.version, checksum: activeTemplate.checksum },
           templateOutdated: false,
         },
       });
+      return;
+    }
+
+
+    const teachingPlanWorkflowStatusMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/review-workflow$/i,
+    );
+    if (request.method === "GET" && teachingPlanWorkflowStatusMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findUnique({
+        where: { id: teachingPlanWorkflowStatusMatch[1] },
+        include: {
+          teachingPlan: { include: { reviewWorkflow: { include: {
+            stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+          } } } },
+        },
+      });
+      if (!project?.teachingPlan) { json(response, 404, { error: "El Plan Docente no existe." }); return; }
+      const workflow = project.teachingPlan.reviewWorkflow;
+      const allowed = project.ownerId === user.id || isAdmin(user) || workflow?.stages.some((stage) => stage.reviewerId === user.id);
+      if (!allowed) { json(response, 403, { error: "No tiene acceso al proceso de revisión de este Plan Docente." }); return; }
+      const config = await ensureTeachingPlanReviewProcessConfig();
+      json(response, 200, {
+        enabled: config.enabled, teacherReviewedAt: project.teachingPlan.teacherReviewedAt?.toISOString() || null,
+        workflow: workflow ? teachingPlanWorkflowApiView(workflow) : null,
+      });
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/api/teaching-plan/review-inbox") {
+      const user = await requireUser(request);
+      const stage = teachingPlanReviewStageSchema.parse(requestUrl.searchParams.get("stage"));
+      if (!userCanActOnTeachingPlanStage(user.roles.map((entry) => entry.role.code), stage)) {
+        json(response, 403, { error: `No tiene permisos para la vista ${teachingPlanReviewStageLabel[stage]}.` }); return;
+      }
+      const items = await database.teachingPlanWorkflowStage.findMany({
+        where: {
+          stage,
+          reviewerId: user.id,
+          workflow: { status: { not: "CANCELLED" } },
+        },
+        orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+        include: {
+          workflow: { include: { teachingPlan: { include: {
+            project: { include: { academicOffering: { include: { program: true, course: true, period: true } } } },
+          } } } },
+          reviewer: { select: { id: true, displayName: true, email: true } },
+          reviews: { orderBy: { attempt: "desc" }, take: 1, select: { decision: true, reviewedAt: true, generalObservation: true } },
+        },
+      });
+      json(response, 200, {
+        stage, label: teachingPlanReviewStageLabel[stage],
+        items: items.map((item) => {
+          const plan = item.workflow.teachingPlan;
+          const project = plan.project;
+          return {
+            workflowStageId: item.id, status: item.status, sortOrder: item.sortOrder,
+            projectId: project.id, subjectCode: project.subjectCode, subjectName: project.subjectName,
+            professorName: project.professorName, career: project.career, academicPeriod: project.academicPeriod,
+            teachingPlanVersion: plan.version, workflowStatus: item.workflow.status,
+            lastReview: item.reviews[0] || null,
+          };
+        }),
+      });
+      return;
+    }
+
+    const teachingPlanReviewStageMatch = requestUrl.pathname.match(/^\/api\/teaching-plan\/review-stages\/([0-9a-f-]+)$/i);
+    if (request.method === "GET" && teachingPlanReviewStageMatch) {
+      const user = await requireUser(request);
+      const stageId = z.string().uuid().parse(teachingPlanReviewStageMatch[1]);
+      let workflowStage = await database.teachingPlanWorkflowStage.findUnique({
+        where: { id: stageId },
+        include: {
+          reviewer: { select: { id: true, displayName: true, email: true } },
+          workflow: { include: {
+            indicatorVersion: { include: { indicators: { where: { active: true }, orderBy: { sortOrder: "asc" } } } },
+            stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+            teachingPlan: { include: { project: { include: {
+              owner: { select: { id: true, displayName: true, email: true } },
+              bibliographyEntries: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] },
+              academicOffering: { include: academicOfferingInclude },
+            } } } },
+          } },
+          reviews: {
+            orderBy: { attempt: "desc" },
+            include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, reviewedBy: { select: { id: true, displayName: true } } },
+          },
+        },
+      });
+      if (!workflowStage) { json(response, 404, { error: "La etapa de revisión no existe." }); return; }
+      const stage = workflowStage.stage as TeachingPlanReviewStage;
+      if (workflowStage.reviewerId !== user.id || !userCanActOnTeachingPlanStage(user.roles.map((entry) => entry.role.code), stage)) {
+        json(response, 403, { error: "Esta revisión no está asignada al usuario autenticado." }); return;
+      }
+      let currentReview = workflowStage.reviews.find((review) => review.decision === "DRAFT") || null;
+      if (workflowStage.status === "PENDING_REVIEW" && !currentReview) {
+        const indicators = workflowStage.workflow.indicatorVersion.indicators.filter((indicator) => indicator.stage === workflowStage!.stage);
+        if (!indicators.length) throw Object.assign(new Error("La versión de lista de cotejo asociada al proceso no contiene criterios para esta etapa."), { statusCode: 409 });
+        const nextAttempt = (workflowStage.reviews[0]?.attempt ?? 0) + 1;
+        currentReview = await database.teachingPlanReview.create({
+          data: {
+            workflowStageId: workflowStage.id, indicatorVersionId: workflowStage.workflow.indicatorVersionId,
+            attempt: nextAttempt, teachingPlanVersion: workflowStage.workflow.teachingPlan.version,
+            items: { create: indicators.map((indicator) => ({ indicatorId: indicator.id })) },
+          },
+          include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, reviewedBy: { select: { id: true, displayName: true } } },
+        });
+        workflowStage = await database.teachingPlanWorkflowStage.findUniqueOrThrow({
+          where: { id: stageId },
+          include: {
+            reviewer: { select: { id: true, displayName: true, email: true } },
+            workflow: { include: {
+              indicatorVersion: { include: { indicators: { where: { active: true }, orderBy: { sortOrder: "asc" } } } },
+              stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+              teachingPlan: { include: { project: { include: {
+                owner: { select: { id: true, displayName: true, email: true } },
+                bibliographyEntries: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] },
+                academicOffering: { include: academicOfferingInclude },
+              } } } },
+            } },
+            reviews: { orderBy: { attempt: "desc" }, include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, reviewedBy: { select: { id: true, displayName: true } } } },
+          },
+        });
+      }
+      const teachingPlan = workflowStage.workflow.teachingPlan;
+      const reviewTeachingPlanContent = normalizedTeachingPlanContent(teachingPlanContentSchema.parse(teachingPlan.content));
+      const project = teachingPlan.project;
+      const offering = project.academicOffering;
+      const reviewTemplateDocument = teachingPlan.templateSnapshotId
+        ? await database.knowledgeDocument.findUnique({ where: { id: teachingPlan.templateSnapshotId } })
+        : null;
+      const reviewTemplateProfile = reviewTemplateDocument
+        ? await knowledgePlanTemplateProfile(reviewTemplateDocument).catch(() => null)
+        : null;
+      const reviewWorkflowView = teachingPlanWorkflowApiView(workflowStage.workflow);
+      json(response, 200, {
+        stage: { id: workflowStage.id, stage, label: teachingPlanReviewStageLabel[stage], status: workflowStage.status, reviewer: workflowStage.reviewer },
+        project: { id: project.id, subjectCode: project.subjectCode, subjectName: project.subjectName, professorName: project.professorName, career: project.career, academicPeriod: project.academicPeriod },
+        teachingPlan: { id: teachingPlan.id, version: teachingPlan.version, content: reviewTeachingPlanContent },
+        planView: {
+          formData: {
+            projectName: project.name, level: project.level, faculty: project.faculty, career: project.career,
+            professorName: project.professorName, subjectCode: project.subjectCode, subjectName: project.subjectName,
+            subjectType: project.subjectType, subjectTypeName: offering.subjectType.name, modality: project.modality,
+            academicPeriod: project.academicPeriod, weeks: project.totalWeeks,
+          },
+          institutionalData: {
+            offeringCode: offering.code, credits: offering.credits === null ? null : Number(offering.credits),
+            acdHours: offering.acdHours, apeHours: offering.apeHours, aaHours: offering.aaHours, semester: offering.semester,
+            description: offering.description, prerequisites: offering.prerequisites, learningOutcomes: offering.learningOutcomes,
+            professionalProfileCompetencies: offering.professionalProfileCompetencies, graduateProfileResults: offering.graduateProfileResults,
+            utplGenericCompetencies: offering.utplGenericCompetencies, unitContents: offering.unitContents,
+            planCategory: offering.subjectType.planCategory, periodStartsAt: offering.period.startsAt?.toISOString() ?? null,
+            periodEndsAt: offering.period.endsAt?.toISOString() ?? null,
+            bimestralEvaluationStartAt: offering.period.bimestralEvaluationStartAt?.toISOString() ?? offering.period.bimestralEvaluationAt?.toISOString() ?? null,
+            bimestralEvaluationEndAt: offering.period.bimestralEvaluationEndAt?.toISOString() ?? offering.period.bimestralEvaluationAt?.toISOString() ?? null,
+            recoveryEvaluationStartAt: offering.period.recoveryEvaluationStartAt?.toISOString() ?? null,
+            recoveryEvaluationEndAt: offering.period.recoveryEvaluationEndAt?.toISOString() ?? null,
+          },
+          setup: {
+            outcomeMappings: project.outcomeMappings ?? [],
+            teacherProfile: project.teacherProfileSnapshot ?? null,
+            teacherEmail: project.owner.email,
+            bibliography: {
+              guideReference: project.guideReference || buildDidacticGuideReference({ subjectName: project.subjectName, subjectCode: project.subjectCode, career: project.career, academicPeriod: project.academicPeriod }),
+              guideReferenceImportance: project.guideReferenceImportance || buildDidacticGuideImportance({ subjectName: project.subjectName }),
+              entries: project.bibliographyEntries.map((entry) => ({
+                id: entry.id, type: entry.type, citation: entry.citation, title: entry.title,
+                url: entry.url, notes: entry.notes, sortOrder: entry.sortOrder,
+              })),
+            },
+          },
+          teachingPlan: {
+            content: reviewTeachingPlanContent, version: teachingPlan.version, reviewedAt: teachingPlan.teacherReviewedAt?.toISOString() ?? null,
+            reviewWorkflow: reviewWorkflowView, reviewProcessEnabled: true, templateProfile: reviewTemplateProfile,
+          },
+        },
+        review: currentReview || workflowStage.reviews[0] || null,
+        history: workflowStage.reviews.filter((review) => review.decision !== "DRAFT"),
+      });
+      return;
+    }
+
+    const teachingPlanReviewerDecisionMatch = requestUrl.pathname.match(/^\/api\/teaching-plan\/reviews\/([0-9a-f-]+)$/i);
+    if (request.method === "PATCH" && teachingPlanReviewerDecisionMatch) {
+      const reviewer = await requireUser(request);
+      const reviewId = z.string().uuid().parse(teachingPlanReviewerDecisionMatch[1]);
+      const body = z.object({
+        decision: z.enum(["DRAFT", "APPROVED", "CHANGES_REQUESTED"]),
+        generalObservation: z.string().trim().max(10_000).optional().default(""),
+        items: z.array(z.object({
+          id: z.string().uuid(), result: z.enum(["PENDING", "COMPLIES", "COMPLIES_PARTIALLY", "DOES_NOT_COMPLY", "NOT_APPLICABLE"]),
+          observation: z.string().trim().max(5000).optional().default(""),
+        })).min(1),
+      }).parse(await readJsonBody(request));
+      const review = await database.teachingPlanReview.findUnique({
+        where: { id: reviewId },
+        include: {
+          items: { include: { indicator: true } },
+          workflowStage: { include: {
+            reviewer: { select: { id: true, displayName: true, email: true } },
+            workflow: { include: {
+              stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+              teachingPlan: { include: { project: { include: { owner: { select: { id: true, displayName: true, email: true } } } } } },
+            } },
+          } },
+        },
+      });
+      if (!review) { json(response, 404, { error: "La revisión no existe." }); return; }
+      const workflowStage = review.workflowStage;
+      const stage = workflowStage.stage as TeachingPlanReviewStage;
+      if (workflowStage.reviewerId !== reviewer.id || !userCanActOnTeachingPlanStage(reviewer.roles.map((entry) => entry.role.code), stage)) {
+        json(response, 403, { error: "Esta revisión no está asignada al usuario autenticado." }); return;
+      }
+      if (review.decision !== "DRAFT") throw Object.assign(new Error("Esta revisión ya fue cerrada."), { statusCode: 409 });
+      if (workflowStage.status !== "PENDING_REVIEW" || workflowStage.workflow.status !== "IN_REVIEW") {
+        throw Object.assign(new Error("La etapa no se encuentra disponible para revisión en este momento."), { statusCode: 409 });
+      }
+      if (review.teachingPlanVersion !== workflowStage.workflow.teachingPlan.version) {
+        throw Object.assign(new Error("El Plan Docente cambió después de iniciar esta revisión. Abra nuevamente la etapa."), { statusCode: 409 });
+      }
+      const submitted = new Map(body.items.map((item) => [item.id, item]));
+      const reviewItemIds = new Set(review.items.map((item) => item.id));
+      if (submitted.size !== body.items.length || body.items.some((item) => !reviewItemIds.has(item.id))) {
+        throw new Error("La lista de cotejo contiene criterios que no pertenecen a esta revisión.");
+      }
+      if (review.items.some((item) => !submitted.has(item.id))) throw new Error("La lista de cotejo está incompleta.");
+      if (body.decision !== "DRAFT" && review.items.some((item) => submitted.get(item.id)?.result === "PENDING")) {
+        throw new Error("Complete todos los criterios antes de cerrar la revisión.");
+      }
+      if (body.decision === "APPROVED" && review.items.some((item) => item.indicator.required && submitted.get(item.id)?.result === "DOES_NOT_COMPLY")) {
+        throw new Error("No se puede aprobar mientras exista un criterio obligatorio marcado como No cumple.");
+      }
+      if (body.decision === "CHANGES_REQUESTED") {
+        const hasObservation = Boolean(body.generalObservation) || body.items.some((item) => item.observation);
+        if (!hasObservation) throw new Error("Registre las correcciones solicitadas antes de devolver el Plan Docente al profesor.");
+      }
+      const project = workflowStage.workflow.teachingPlan.project;
+      const teacher = project.owner;
+      const notificationIds: string[] = [];
+      await database.$transaction(async (transaction) => {
+        for (const item of body.items) {
+          await transaction.teachingPlanReviewItem.update({
+            where: { id: item.id }, data: { result: item.result, observation: item.observation || null },
+          });
+        }
+        await transaction.teachingPlanReview.update({
+          where: { id: review.id }, data: {
+            decision: body.decision, generalObservation: body.generalObservation || null,
+            reviewedById: reviewer.id, reviewedAt: body.decision === "DRAFT" ? null : new Date(),
+          },
+        });
+        if (body.decision === "APPROVED") {
+          await transaction.teachingPlanWorkflowStage.update({
+            where: { id: workflowStage.id }, data: { status: "APPROVED", approvedAt: new Date() },
+          });
+          const nextStage = nextTeachingPlanStage(workflowStage.workflow.stages, workflowStage.sortOrder);
+          if (nextStage?.reviewer) {
+            await transaction.teachingPlanWorkflowStage.update({ where: { id: nextStage.id }, data: { status: "PENDING_REVIEW" } });
+            const nextNotification = await createTeachingPlanNotification(transaction, {
+              workflowId: workflowStage.workflow.id, reviewId: review.id, event: "SUBMITTED",
+              stage: nextStage.stage as TeachingPlanReviewStage, recipient: nextStage.reviewer, project, includeReviewLink: true,
+            });
+            notificationIds.push(nextNotification.id);
+            const approvalRecipients = new Map<string, { id: string; displayName: string; email: string }>();
+            approvalRecipients.set(teacher.id, teacher);
+            for (const previous of previouslyApprovedTeachingPlanStages(workflowStage.workflow.stages, workflowStage.sortOrder)) {
+              if (previous.reviewer) approvalRecipients.set(previous.reviewer.id, previous.reviewer);
+            }
+            for (const recipient of approvalRecipients.values()) {
+              const approvalNotification = await createTeachingPlanNotification(transaction, {
+                workflowId: workflowStage.workflow.id, reviewId: review.id, event: "STAGE_APPROVED", stage,
+                recipient, project, actorName: reviewer.displayName,
+              });
+              notificationIds.push(approvalNotification.id);
+            }
+          } else {
+            await transaction.teachingPlanReviewWorkflow.update({
+              where: { id: workflowStage.workflow.id }, data: { status: "APPROVED", completedAt: new Date() },
+            });
+            await transaction.teachingPlan.update({
+              where: { id: workflowStage.workflow.teachingPlan.id }, data: { status: "APPROVED" },
+            });
+            const recipients = new Map<string, { id: string; displayName: string; email: string }>();
+            recipients.set(teacher.id, teacher);
+            for (const stageItem of workflowStage.workflow.stages) if (stageItem.reviewer) recipients.set(stageItem.reviewer.id, stageItem.reviewer);
+            for (const recipient of recipients.values()) {
+              const notification = await createTeachingPlanNotification(transaction, {
+                workflowId: workflowStage.workflow.id, reviewId: review.id, event: "FINAL_APPROVED", stage, recipient, project, actorName: reviewer.displayName,
+              });
+              notificationIds.push(notification.id);
+            }
+          }
+        } else if (body.decision === "CHANGES_REQUESTED") {
+          await transaction.teachingPlanWorkflowStage.update({ where: { id: workflowStage.id }, data: { status: "CHANGES_REQUESTED" } });
+          await transaction.teachingPlanReviewWorkflow.update({ where: { id: workflowStage.workflow.id }, data: { status: "CHANGES_REQUESTED" } });
+          await transaction.teachingPlan.update({
+            where: { id: workflowStage.workflow.teachingPlan.id }, data: { teacherReviewedAt: null, teacherReviewNotes: null, status: "DRAFT" },
+          });
+          const correctionsText = [
+            body.generalObservation,
+            ...body.items.filter((item) => item.observation).map((item) => {
+              const indicator = review.items.find((reviewItem) => reviewItem.id === item.id)?.indicator;
+              return `${indicator?.code || "Criterio"}: ${item.observation}`;
+            }),
+          ].filter(Boolean).join("\n");
+          const teacherNotification = await createTeachingPlanNotification(transaction, {
+            workflowId: workflowStage.workflow.id, reviewId: review.id, event: "CHANGES_REQUESTED", stage, recipient: teacher,
+            project, actorName: reviewer.displayName, observations: correctionsText, includeReviewLink: false,
+          });
+          notificationIds.push(teacherNotification.id);
+          for (const previous of previouslyApprovedTeachingPlanStages(workflowStage.workflow.stages, workflowStage.sortOrder)) {
+            if (!previous.reviewer) continue;
+            const informational = await createTeachingPlanNotification(transaction, {
+              workflowId: workflowStage.workflow.id, reviewId: review.id, event: "INFORMATIONAL_CORRECTIONS", stage,
+              recipient: previous.reviewer, project, actorName: reviewer.displayName, observations: correctionsText,
+            });
+            notificationIds.push(informational.id);
+          }
+        }
+        await transaction.auditLog.create({ data: {
+          userId: reviewer.id, action: body.decision === "DRAFT" ? "TEACHING_PLAN_REVIEW_DRAFT_SAVED" : body.decision === "APPROVED" ? "TEACHING_PLAN_REVIEW_STAGE_APPROVED" : "TEACHING_PLAN_REVIEW_CHANGES_REQUESTED",
+          entityType: "TeachingPlanReview", entityId: review.id, details: { stage, decision: body.decision, teachingPlanVersion: review.teachingPlanVersion },
+        } });
+      });
+      dispatchTeachingPlanNotifications(notificationIds);
+      const updatedStage = await database.teachingPlanWorkflowStage.findUniqueOrThrow({
+        where: { id: workflowStage.id }, include: { workflow: true },
+      });
+      json(response, 200, { ok: true, decision: body.decision, stageStatus: updatedStage.status, workflowStatus: updatedStage.workflow.status });
       return;
     }
 
@@ -6190,9 +7084,13 @@ ${planContext.instructions}`,
       const user = await requireUser(request);
       const project = await database.project.findFirst({
         where: { id: guideReadinessMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
-        include: { academicOffering: { include: academicOfferingInclude } },
+        include: { academicOffering: { include: academicOfferingInclude }, teachingPlan: true },
       });
       if (!project) { json(response, 404, { error: "La asignatura no existe o no pertenece al usuario." }); return; }
+      if (!project.teachingPlan?.teacherReviewedAt) {
+        throw Object.assign(new Error("Revise y confirme el Plan Docente antes de continuar con la Guía Didáctica."), { statusCode: 409 });
+      }
+      await assertTeachingPlanInstitutionallyApproved(project.teachingPlan.id);
       const context = {
         level: project.level,
         modality: project.modality,
@@ -6453,7 +7351,9 @@ ${planContext.instructions}`,
           matrix: { include: { rows: { orderBy: { rowOrder: "asc" } } } },
           weeks: { orderBy: { weekNumber: "asc" } },
           bibliographyEntries: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] },
-          teachingPlan: true,
+          teachingPlan: { include: { reviewWorkflow: { include: {
+            stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+          } } } },
           academicOffering: { include: academicOfferingInclude },
           legacyDocuments: { where: { active: true }, orderBy: { createdAt: "desc" } },
           adaptationProposals: {
@@ -6502,6 +7402,7 @@ ${planContext.instructions}`,
       const currentTeachingPlanChecks = currentTeachingPlanContent
         ? teachingPlanReviewChecks(currentTeachingPlanContent, projectPlanConsistencyInput(project.academicOffering))
         : [];
+      const teachingPlanReviewProcess = project.teachingPlan ? await ensureTeachingPlanReviewProcessConfig() : null;
       const planAdaptationProposal = project.adaptationProposals.find((item) => item.target === "PLAN");
       const guideAdaptationProposal = project.adaptationProposals.find((item) => item.target === "GUIDE");
       const [planAdaptationProposalPayload, guideAdaptationProposalPayload] = await Promise.all([
@@ -6598,6 +7499,8 @@ ${planContext.instructions}`,
             reviewedAt: project.teachingPlan.teacherReviewedAt?.toISOString() ?? null,
             reviewNotes: project.teachingPlan.teacherReviewNotes ?? "",
             reviewChecks: currentTeachingPlanChecks,
+            reviewWorkflow: project.teachingPlan.reviewWorkflow ? teachingPlanWorkflowApiView(project.teachingPlan.reviewWorkflow) : null,
+            reviewProcessEnabled: Boolean(teachingPlanReviewProcess?.enabled),
             downloadFormats: await teachingPlanDownloadFormats(),
             templateProfile: teachingPlanTemplateProfile,
             templateSnapshot: teachingPlanTemplateSnapshot,
@@ -6641,6 +7544,7 @@ ${planContext.instructions}`,
         return;
       }
       if (body.currentStep > 4 && project.teachingPlan) {
+        await assertTeachingPlanInstitutionallyApproved(project.teachingPlan.id);
         await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, {
           level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType,
           subjectTypeLabel: project.academicOffering.subjectType.name,
@@ -6951,6 +7855,7 @@ ${planContext.instructions}`,
         json(response, 409, { error: "Revise y confirme el Plan Docente antes de crear la Guía Didáctica." });
         return;
       }
+      await assertTeachingPlanInstitutionallyApproved(planSource.teachingPlan.id);
       await assertTeachingPlanUsesCurrentTemplate(planSource.teachingPlan.templateSnapshotId, {
         level: planSource.level, modality: planSource.modality, weeks: planSource.totalWeeks, subjectType: planSource.subjectType,
         subjectTypeLabel: planSource.academicOffering.subjectType.name,

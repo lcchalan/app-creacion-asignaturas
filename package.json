@@ -11,7 +11,10 @@
     "db:seed": "node --import tsx prisma/seed.ts",
     "db:backfill-canonical": "node --import tsx prisma/backfill-canonical-guides.ts",
     "db:seed-plan-adaptation-spec": "node --import tsx prisma/seed-plan-adaptation-spec.ts",
-    "db:cleanup-ai-knowledge": "node --import tsx prisma/cleanup-ai-knowledge-versions.ts"
+    "db:cleanup-ai-knowledge": "node --import tsx prisma/cleanup-ai-knowledge-versions.ts",
+    "db:seed-teaching-plan-checklist": "node --import tsx prisma/seed-teaching-plan-checklist-20.ts",
+    "knowledge:sync-official": "node --import tsx prisma/sync-official-knowledge.ts",
+    "knowledge:check-official": "node --import tsx prisma/check-official-knowledge.ts"
   },
   "repository": {
     "type": "git",

@@ -35,7 +35,7 @@ test("numera Unidad, tema y subtema desde la jerarquía institucional", () => {
   ]);
 });
 
-test("LUIS añade los encabezados y la IA solo desarrolla el cuerpo", () => {
+test("el sistema añade los encabezados y la IA solo desarrolla el cuerpo", () => {
   const outline = buildGuideWeekOutline(hierarchy, ["CONTENIDO: Entorno y diagnóstico organizacional"]);
   const markdown = assembleGuideWeekMarkdown(outline, {
     sections: outline.filter((item) => item.develop).map((item) => ({ sourceId: item.sourceId, markdown: `Desarrollo de ${item.number}.` })),

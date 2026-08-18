@@ -1,17 +1,17 @@
-# Ajuste obligatorio del Prompt de Guía Didáctica · LUIS v31
+# Ajuste obligatorio del Prompt de Guía Didáctica · Sistema de Gestión Guía didáctica v31
 
 Añadir al Prompt de Guía activo:
 
 ## Estructura curricular
 
 - No genere, corrija ni renumere encabezados de Unidad, tema o subtema.
-- LUIS proporciona una lista de `sourceId` con la jerarquía institucional y monta los encabezados de forma determinística.
+- El sistema proporciona una lista de `sourceId` con la jerarquía institucional y monta los encabezados de forma determinística.
 - Devuelva exactamente una sección de desarrollo por cada `sourceId` solicitado y no agregue unidades, temas o subtemas nuevos.
-- El cuerpo puede utilizar párrafos, listas, tablas, negrita, cursiva, enlaces y focalizadores cuando aporten valor pedagógico. Los focalizadores deben expresarse como `> [!TIP] Título` (o IMPORTANT, EXAMPLE, REFLECTION, QUESTION, WARNING) y su contenido debe continuar en líneas prefijadas con `>` para que LUIS pueda identificarlos como bloques semánticos.
+- El cuerpo puede utilizar párrafos, listas, tablas, negrita, cursiva, enlaces y focalizadores cuando aporten valor pedagógico. Los focalizadores deben expresarse como `> [!TIP] Título` (o IMPORTANT, EXAMPLE, REFLECTION, QUESTION, WARNING) y su contenido debe continuar en líneas prefijadas con `>` para que el sistema pueda identificarlos como bloques semánticos.
 
 ## Recursos educativos
 
-- Antes de proponer un recurso, revise la Especificación de recursos educativos activa suministrada por LUIS.
+- Antes de proponer un recurso, revise la Especificación de recursos educativos activa suministrada por el sistema.
 - El recurso debe ser coherente con el resultado de aprendizaje y la metodología de aprendizaje.
 - Determine el nivel de Taxonomía de Bloom y seleccione únicamente un tipo de recurso compatible con la especificación institucional.
 - Respete los límites de complejidad establecidos: cantidad de preguntas, máximo de diapositivas y mínimos de palabras cuando correspondan.

@@ -8,7 +8,7 @@ Este bloque debe incorporarse en una **nueva versión del Prompt del Plan Docent
 2. Cada actividad debe indicar exactamente un componente: `ACD`, `APE` o `AA`.
 3. La redacción de la actividad debe ser concreta, observable y coherente con el resultado de aprendizaje, los contenidos y las horas del componente.
 4. Las actividades calificadas AC1–AC5 deben vincularse a una única actividad mediante `evaluationCode` y conservar exactamente el componente, semana, calificación real y peso definidos por los Lineamientos institucionales.
-5. No cambie ni invente unidades, contenidos o subcontenidos. LUIS construye su numeración jerárquica.
+5. No cambie ni invente unidades, contenidos o subcontenidos. El sistema construye su numeración jerárquica.
 
 ## Instrumentos para EVA
 
@@ -59,9 +59,9 @@ Si `instrumentConfig.type = RATING_SCALE`:
 - niveles base: Muy bien 2,5; Bien 1,75; Regular 1; Deficiente 0;
 - la suma de los puntajes máximos debe ser exactamente 10.
 
-## Responsabilidad de LUIS
+## Responsabilidad del sistema
 
-El modelo no debe intentar reproducir el diseño visual del formato. Debe devolver datos estructurados. LUIS controla en código:
+El modelo no debe intentar reproducir el diseño visual del formato. Debe devolver datos estructurados. El sistema controla en código:
 
 - la estructura y orden de las secciones A–H;
 - el formato de tablas;

@@ -1,0 +1,1 @@
+Establece los niveles Inicial, Intermedio y Avanzado de la taxonomía UTPL, orientaciones para redactar resultados de aprendizaje y criterios para alinear competencias, actividades y evaluación

@@ -30,7 +30,7 @@ export function smtpConfigurationFromEnv(): SmtpConfiguration {
   const password = process.env.SMTP_PASSWORD ?? "";
   const from = process.env.SMTP_FROM?.trim() || user;
   if (!host || !from) {
-    throw new Error("Configure SMTP_HOST y SMTP_FROM para habilitar la recuperación de contraseña por correo.");
+    throw new Error("Configure SMTP_HOST y SMTP_FROM para habilitar el envío de correo institucional.");
   }
   const secure = envBoolean(process.env.SMTP_SECURE, false);
   const defaultPort = secure ? 465 : 587;
@@ -43,7 +43,7 @@ export function smtpConfigurationFromEnv(): SmtpConfiguration {
   }
   const startTls = !secure && envBoolean(process.env.SMTP_STARTTLS, true);
   if (process.env.NODE_ENV === "production" && !secure && !startTls) {
-    throw new Error("La recuperación de contraseña requiere una conexión SMTP cifrada en producción.");
+    throw new Error("El envío de correo institucional requiere una conexión SMTP cifrada en producción.");
   }
   return {
     host,

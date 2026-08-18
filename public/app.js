@@ -1,6 +1,21 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 let authenticatedUserData = null;
+let currentWorkView = "TEACHER";
+let currentReviewStageId = null;
+let currentReviewDetail = null;
+let planChecklistDraft = [];
+const workViewMeta = {
+  TEACHER: { label: "Docente", profile: "Docente", kind: "teacher" },
+  REVIEWER: { label: "Par académico", profile: "Par académico", kind: "review", stage: "PEER" },
+  QUALITY: { label: "Equipo de calidad", profile: "Equipo de calidad", kind: "review", stage: "QUALITY" },
+  DIITEP: { label: "DIITEP", profile: "DIITEP", kind: "review", stage: "DIITEP" },
+  DIRECTOR: { label: "Director/a de carrera", profile: "Director/a de carrera", kind: "review", stage: "DIRECTOR" },
+  ADMIN: { label: "Administración", profile: "Administrador/a", kind: "admin" },
+};
+const reviewStageLabels = { PEER: "Par académico", QUALITY: "Equipo de calidad", DIITEP: "DIITEP", DIRECTOR: "Dirección de carrera" };
+const reviewRoleByStage = { PEER: "REVIEWER", QUALITY: "QUALITY", DIITEP: "DIITEP", DIRECTOR: "DIRECTOR" };
+const reviewStageByRole = { REVIEWER: "PEER", QUALITY: "QUALITY", DIITEP: "DIITEP", DIRECTOR: "DIRECTOR" };
 const impactState = { SPECIFICATION: null, DOCUMENT: null };
 let selectedKnowledgeRecord = null;
 let pendingKnowledgeRetirement = null;
@@ -113,23 +128,82 @@ async function authRequest(path, options = {}) {
   }
   return payload;
 }
+function roleOptionsForUser(user) {
+  const roles = [...new Set(user?.roles || [])].filter((role) => workViewMeta[role]);
+  const order = ["TEACHER", "REVIEWER", "QUALITY", "DIITEP", "DIRECTOR", "ADMIN"];
+  return order.filter((role) => roles.includes(role));
+}
+
+function requestedReviewViewFromUrl(user) {
+  const stage = new URLSearchParams(window.location.search).get("review_stage");
+  const role = reviewRoleByStage[stage];
+  return role && user.roles.includes(role) ? role : null;
+}
+
+function populateWorkViewSelector(user) {
+  const views = roleOptionsForUser(user);
+  const selector = $("#work-view");
+  const wrapper = $("#work-view-selector");
+  if (!selector || !wrapper) return views;
+  selector.innerHTML = views.map((role) => `<option value="${role}">${escapeHtml(workViewMeta[role].label)}</option>`).join("");
+  wrapper.classList.toggle("hidden", views.length <= 1);
+  return views;
+}
+
+async function applyWorkView(role, { remember = true, load = true } = {}) {
+  if (!authenticatedUserData?.roles?.includes(role) || !workViewMeta[role]) return;
+  currentWorkView = role;
+  if (remember) localStorage.setItem("work-view", role);
+  const selector = $("#work-view");
+  if (selector) selector.value = role;
+  $("#profile-role").textContent = workViewMeta[role].profile;
+  const kind = workViewMeta[role].kind;
+  $("#main-content")?.classList.toggle("hidden", kind !== "teacher");
+  $("#review-content")?.classList.toggle("hidden", kind !== "review");
+  $("#admin-content")?.classList.toggle("hidden", kind !== "admin");
+  $("#nav-admin")?.classList.toggle("hidden", role !== "ADMIN");
+  const projectsLabel = $("#nav-projects-label");
+  if (projectsLabel) projectsLabel.textContent = kind === "review" ? "Revisiones" : "Mis asignaturas";
+  $("#nav-home")?.classList.toggle("hidden", kind === "admin");
+  $("#nav-projects")?.classList.toggle("hidden", kind === "admin");
+  $("#nav-templates")?.classList.toggle("hidden", kind !== "teacher");
+  $("#nav-help")?.classList.toggle("hidden", kind === "admin");
+  if (kind === "teacher") {
+    activateNavigation($("#nav-home"));
+    if (load) await loadAcademicCatalog().then(() => loadProjects()).catch(() => loadProjects());
+  } else if (kind === "review") {
+    activateNavigation($("#nav-projects"));
+    if (load) await loadReviewInbox(workViewMeta[role].stage);
+  } else {
+    activateNavigation($("#nav-admin"));
+    if (load) await loadAdminDashboard();
+  }
+}
+
 function showAuthenticatedUser(user) {
   authenticatedUserData = user;
   $("#auth-layer").classList.add("hidden");
   $("#profile-name").textContent = user.displayName;
-  $("#profile-role").textContent = user.roles.includes("ADMIN") ? "Administrador" : "Profesor";
   $("#profile-initials").textContent = `${user.firstName?.[0] || ""}${user.lastName?.[0] || ""}`.toUpperCase() || "U";
-  $("#nav-admin").classList.toggle("hidden", !user.roles.includes("ADMIN"));
+  const views = populateWorkViewSelector(user);
   if (user.mustChangePassword) {
+    $("#profile-role").textContent = views.length ? workViewMeta[views[0]].profile : "Usuario";
     openPasswordChange(true);
     return;
   }
   syncProfessorName();
-  loadAcademicCatalog().then(() => loadProjects()).catch((error) => {
-    console.error(error);
-    loadProjects();
-  });
+  const requested = requestedReviewViewFromUrl(user);
+  const stored = localStorage.getItem("work-view");
+  const initial = requested || (stored && views.includes(stored) ? stored : null) || (views.includes("TEACHER") ? "TEACHER" : views[0]);
+  if (initial) applyWorkView(initial).catch((error) => console.error(error));
 }
+
+$("#work-view")?.addEventListener("change", (event) => {
+  applyWorkView(event.target.value).catch((error) => {
+    console.error(error);
+    if ($("#review-inbox-list")) $("#review-inbox-list").innerHTML = `<p class="projects-empty error">${escapeHtml(error.message)}</p>`;
+  });
+});
 
 function openPasswordChange(required = false) {
   const layer = $("#password-change-layer");
@@ -1138,203 +1212,6 @@ function adaptationColumnTitles(change) {
   };
 }
 
-function compactWeekRanges(values) {
-  const weeks = [...new Set((Array.isArray(values) ? values : [values])
-    .map((value) => Number(value))
-    .filter((value) => Number.isInteger(value) && value > 0))].sort((left, right) => left - right);
-  if (!weeks.length) return "—";
-  const ranges = [];
-  let start = weeks[0];
-  let previous = weeks[0];
-  for (let index = 1; index < weeks.length; index += 1) {
-    const current = weeks[index];
-    if (current === previous + 1) {
-      previous = current;
-      continue;
-    }
-    ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
-    start = current;
-    previous = current;
-  }
-  ranges.push(start === previous ? `${start}` : `${start}–${previous}`);
-  return ranges.join(", ");
-}
-
-function adaptationWeeksLabel(values, { modular = false } = {}) {
-  const formatted = compactWeekRanges(values);
-  if (formatted === "—") return modular ? "sin semana modular de destino" : "sin semana de origen";
-  const list = (Array.isArray(values) ? values : [values]).filter((value) => Number.isFinite(Number(value)));
-  const plural = list.length !== 1;
-  const noun = modular ? `semana${plural ? "s" : ""} modular${plural ? "es" : ""}` : `semana${plural ? "s" : ""}`;
-  return `${noun} ${formatted}`;
-}
-
-function adaptationOperationSummary(change) {
-  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
-  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
-  const sameContent = String(change.sourceContent || "").trim() === String(change.proposedContent || "").trim();
-  switch (change.action) {
-    case "KEEP":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: sameContent
-          ? `Se conserva el contenido institucional y su cobertura pedagógica. Revise principalmente el cambio de secuencia entre ${sourceLabel} y ${targetLabel}.`
-          : `Se conserva la cobertura institucional del bloque, con ajustes menores de organización o redacción entre ${sourceLabel} y ${targetLabel}.`,
-      };
-    case "GROUP":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se conservan los contenidos, pero se consolidan ${sourceLabel} del documento anterior en ${targetLabel}. El cambio principal es la concentración temporal del mismo bloque temático.`,
-      };
-    case "MERGE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se integran contenidos relacionados que antes estaban separados en ${sourceLabel}, para trabajarlos de forma articulada en ${targetLabel}. El cambio principal es la integración pedagógica del bloque.`,
-      };
-    case "SYNTHESIZE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se sintetiza el contenido de ${sourceLabel} para conservar los elementos esenciales en ${targetLabel}. El cambio principal es la focalización de ideas y actividades clave sin perder cobertura formativa.`,
-      };
-    case "MOVE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `El contenido se conserva, pero se traslada desde ${sourceLabel} hacia ${targetLabel} para alinearlo mejor con la progresión del resultado de aprendizaje. El cambio principal es la reubicación temporal del bloque.`,
-      };
-    case "REFORMULATE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se mantiene la intención formativa del bloque, pero se reorganiza o reformula pedagógicamente entre ${sourceLabel} y ${targetLabel}. El cambio principal es la manera de presentar o articular el contenido para mejorar su aprendizaje.`,
-      };
-    case "DELETE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel: change.proposedContent ? targetLabel : "sin cobertura conservada",
-        message: change.proposedContent
-          ? `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel}, conservando su cobertura en ${targetLabel}. La omisión solo se aplicará si el profesor la aprueba.`
-          : `Se propone omitir el contenido del documento anterior identificado en ${sourceLabel} porque no forma parte de la oferta vigente. La omisión solo se aplicará si el profesor la aprueba.`,
-      };
-    case "SPLIT":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se conserva el bloque de contenidos del origen, pero se redistribuye pedagógicamente desde ${sourceLabel} hacia ${targetLabel}. El cambio principal es la secuencia temporal en varias semanas consecutivas.`,
-      };
-    case "UPDATE":
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `Se actualiza la formulación del contenido o su redacción pedagógica entre ${sourceLabel} y ${targetLabel}, manteniendo la cobertura institucional. El cambio principal es el ajuste de formulación para mayor claridad o coherencia.`,
-      };
-    default:
-      return {
-        title: "Operación propuesta",
-        sourceLabel,
-        targetLabel,
-        message: `La propuesta reorganiza el contenido desde ${sourceLabel} hacia ${targetLabel}. Revise la justificación pedagógica para comprender el criterio de reorganización.`,
-      };
-  }
-}
-
-function adaptationColumnTitles(change) {
-  const sourceLabel = adaptationWeeksLabel(change.sourceWeeks || []);
-  const targetLabel = adaptationWeeksLabel(change.proposedWeeks || [], { modular: true });
-  if (change.action === "DELETE") {
-    return {
-      sourceTitle: `Contenido propuesto para omitir · ${sourceLabel}`,
-      destinationTitle: change.proposedContent
-        ? `Cobertura que se conserva · ${targetLabel}`
-        : "Omisión propuesta",
-      destinationFallback: "Este material del documento anterior no forma parte de la oferta vigente y se propone retirarlo.",
-      destinationHelp: "Revise la justificación pedagógica y, si corresponde, la cobertura conservada indicada por la propuesta.",
-    };
-  }
-  if (change.action === "GROUP") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Distribución propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "Los contenidos se conservan; lo que cambia es que las semanas de origen se consolidan en una sola semana modular.",
-    };
-  }
-  if (change.action === "SPLIT") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Distribución propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "Los contenidos se conservan; lo que cambia es su distribución pedagógica entre varias semanas modulares consecutivas.",
-    };
-  }
-  if (change.action === "MOVE") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Nueva ubicación propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "El contenido se conserva; lo que cambia es su ubicación temporal dentro de la secuencia modular.",
-    };
-  }
-  if (change.action === "KEEP") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Cobertura conservada · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "La cobertura institucional se mantiene. Revise si la secuencia o la redacción presenta ajustes menores.",
-    };
-  }
-  if (change.action === "MERGE") {
-    return {
-      sourceTitle: `Bloques de origen · ${sourceLabel}`,
-      destinationTitle: `Integración propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "La propuesta integra contenidos relacionados para trabajarlos como un bloque articulado en la semana modular indicada.",
-    };
-  }
-  if (change.action === "SYNTHESIZE") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Síntesis propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "La propuesta concentra los elementos esenciales del contenido para mantener la cobertura formativa con una versión más sintética.",
-    };
-  }
-  if (change.action === "REFORMULATE") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Reformulación propuesta · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "La propuesta conserva la intención formativa, pero reorganiza o reescribe pedagógicamente el bloque para mejorar su articulación.",
-    };
-  }
-  if (change.action === "UPDATE") {
-    return {
-      sourceTitle: `Bloque de origen · ${sourceLabel}`,
-      destinationTitle: `Versión actualizada · ${targetLabel}`,
-      destinationFallback: "—",
-      destinationHelp: "La propuesta ajusta la formulación o redacción del bloque sin alterar su cobertura institucional.",
-    };
-  }
-  return {
-    sourceTitle: `Contenido de origen · ${sourceLabel}`,
-    destinationTitle: `Propuesta para ${targetLabel}`,
-    destinationFallback: "—",
-    destinationHelp: "Compare el contenido de origen con la propuesta y revise la justificación pedagógica del cambio.",
-  };
-}
 
 function renderInstitutionalData() {
   const target = $("#institutional-data-details");
@@ -1859,6 +1736,161 @@ async function loadProjects(search = "") {
     list.innerHTML = `<p class="projects-empty error">${escapeHtml(error.message)}</p>`;
   }
 }
+const reviewStageStatusLabels = {
+  WAITING: "Pendiente de etapa anterior",
+  PENDING_REVIEW: "Pendiente de revisión",
+  CHANGES_REQUESTED: "Correcciones solicitadas",
+  APPROVED: "Etapa aprobada",
+};
+const reviewResultLabels = {
+  PENDING: "Pendiente",
+  COMPLIES: "Cumple",
+  COMPLIES_PARTIALLY: "Cumple parcialmente",
+  DOES_NOT_COMPLY: "No cumple",
+  NOT_APPLICABLE: "No aplica",
+};
+const teachingPlanNotificationEventLabels = {
+  SUBMITTED: "Enviado a revisión",
+  RESUBMITTED: "Correcciones reenviadas",
+  CHANGES_REQUESTED: "Correcciones solicitadas",
+  STAGE_APPROVED: "Etapa aprobada",
+  FINAL_APPROVED: "Aprobación final",
+  INFORMATIONAL_CORRECTIONS: "Correcciones · informativo",
+  INFORMATIONAL_RESUBMISSION: "Reenvío de correcciones · informativo",
+};
+
+function reviewInboxCard(item) {
+  const actionable = item.status === "PENDING_REVIEW";
+  const statusClass = item.status === "APPROVED" ? "status-completed" : item.status === "CHANGES_REQUESTED" ? "status-draft" : "status-in_progress";
+  return `<article class="saved-project review-inbox-card ${actionable ? "actionable" : ""}">
+    <div class="saved-project-main">
+      <div class="saved-project-title"><span class="status-badge ${statusClass}">${escapeHtml(reviewStageStatusLabels[item.status] || item.status)}</span><h3>${escapeHtml(item.subjectName)}</h3></div>
+      <p class="project-code">${escapeHtml(item.subjectCode || "Sin código")} · Plan Docente v${escapeHtml(String(item.teachingPlanVersion))}</p>
+      <dl>
+        <div><dt>Profesor</dt><dd>${escapeHtml(item.professorName || "No registrado")}</dd></div>
+        <div><dt>Carrera</dt><dd>${escapeHtml(item.career || "No registrada")}</dd></div>
+        <div><dt>Periodo</dt><dd>${escapeHtml(item.academicPeriod || "—")}</dd></div>
+        <div><dt>Última decisión</dt><dd>${escapeHtml(item.lastReview?.decision ? (item.lastReview.decision === "APPROVED" ? "Aprobada" : item.lastReview.decision === "CHANGES_REQUESTED" ? "Correcciones solicitadas" : item.lastReview.decision) : "Sin revisión cerrada")}</dd></div>
+      </dl>
+    </div>
+    <button class="button ${actionable ? "" : "secondary"}" type="button" data-open-review-stage="${escapeHtml(item.workflowStageId)}">${actionable ? "Revisar Plan" : "Consultar"}</button>
+  </article>`;
+}
+
+async function loadReviewInbox(stage = workViewMeta[currentWorkView]?.stage) {
+  const list = $("#review-inbox-list");
+  if (!list || !stage) return;
+  currentReviewStageId = null;
+  currentReviewDetail = null;
+  $("#review-detail")?.classList.add("hidden");
+  list.closest(".projects-panel")?.classList.remove("hidden");
+  $("#review-view-title").textContent = `Vista de ${reviewStageLabels[stage]}`;
+  $("#review-view-description").textContent = `Planes Docentes asignados a su responsabilidad como ${reviewStageLabels[stage]}.`;
+  list.innerHTML = '<p class="projects-empty">Cargando revisiones…</p>';
+  try {
+    const payload = await authRequest(`/api/teaching-plan/review-inbox?stage=${encodeURIComponent(stage)}`);
+    list.innerHTML = payload.items.length
+      ? payload.items.map(reviewInboxCard).join("")
+      : `<div class="projects-empty"><strong>No tiene Planes Docentes asignados en esta etapa.</strong><span>La bandeja se actualizará cuando Administración asigne un Plan y el proceso alcance esta etapa.</span></div>`;
+    const params = new URLSearchParams(window.location.search);
+    const requestedProject = params.get("review_project");
+    const requestedStage = params.get("review_stage");
+    if (requestedProject && requestedStage === stage) {
+      const target = payload.items.find((item) => item.projectId === requestedProject);
+      if (target) await openTeachingPlanReviewStage(target.workflowStageId);
+    }
+  } catch (error) {
+    list.innerHTML = `<p class="projects-empty error">${escapeHtml(error.message)}</p>`;
+  }
+}
+
+function reviewTeachingPlanContentHtml(detail) {
+  if (!detail?.planView?.teachingPlan?.content) return '<p class="projects-empty">No se pudo cargar el contenido completo del Plan Docente.</p>';
+  return teachingPlanPreviewHtml(detail.planView, { readOnly: true, sectionPrefix: "review-plan-preview-" });
+}
+
+function reviewHistoryHtml(history = []) {
+  if (!history.length) return '<p class="field-help">Todavía no existen decisiones cerradas en esta etapa.</p>';
+  return history.map((item) => `<article class="review-history-item"><div><strong>Intento ${escapeHtml(String(item.attempt || "—"))}</strong><span>${escapeHtml(item.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas")}</span></div><p>${escapeHtml(item.generalObservation || "Sin observación general.")}</p><small>Plan v${escapeHtml(String(item.teachingPlanVersion || "—"))}${item.reviewedBy?.displayName ? ` · ${escapeHtml(item.reviewedBy.displayName)}` : ""}${item.reviewedAt ? ` · ${new Date(item.reviewedAt).toLocaleString("es-EC")}` : ""}</small></article>`).join("");
+}
+
+function renderReviewChecklist(detail) {
+  const review = detail.review;
+  const editable = detail.stage.status === "PENDING_REVIEW" && review?.decision === "DRAFT";
+  const items = review?.items || [];
+  $("#review-checklist-items").innerHTML = items.length ? items.map((item, index) => `<article class="review-checklist-item" data-review-item="${escapeHtml(item.id)}">
+    <div class="review-checklist-heading"><span class="review-indicator-code">${escapeHtml(item.indicator?.code || String(index + 1))}</span><div><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong><p>${escapeHtml(item.indicator?.description || "")}</p>${item.indicator?.required ? '<small>Obligatorio</small>' : '<small>No obligatorio</small>'}</div></div>
+    <label>Resultado<select data-review-result ${editable ? "" : "disabled"}>${Object.entries(reviewResultLabels).map(([value, label]) => `<option value="${value}" ${item.result === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select></label>
+    <label>Observación<textarea data-review-observation maxlength="5000" ${editable ? "" : "disabled"} placeholder="Detalle el hallazgo o la evidencia revisada.">${escapeHtml(item.observation || "")}</textarea></label>
+  </article>`).join("") : '<p class="projects-empty">Esta etapa todavía no está disponible para completar su lista de cotejo.</p>';
+  const general = $("#review-general-observation");
+  general.value = review?.generalObservation || "";
+  general.disabled = !editable;
+  [$("#save-review-draft"), $("#request-review-changes"), $("#approve-review-stage")].forEach((button) => { if (button) button.disabled = !editable; });
+  $("#review-checklist-help").textContent = editable
+    ? "Complete todos los criterios antes de aprobar o solicitar correcciones. Puede guardar un borrador y continuar después."
+    : detail.stage.status === "WAITING" ? "Esta etapa se habilitará cuando finalice la etapa anterior." : detail.stage.status === "APPROVED" ? "Esta etapa ya fue aprobada y permanece disponible solo para consulta." : "La etapa no está disponible para edición en este momento.";
+  $("#review-decision-status").textContent = review?.decision && review.decision !== "DRAFT" ? `Decisión registrada: ${review.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas"}.` : "";
+}
+
+async function openTeachingPlanReviewStage(stageId) {
+  const detail = await authRequest(`/api/teaching-plan/review-stages/${encodeURIComponent(stageId)}`);
+  currentReviewStageId = stageId;
+  currentReviewDetail = detail;
+  $("#review-inbox-list")?.closest(".projects-panel")?.classList.add("hidden");
+  $("#review-detail")?.classList.remove("hidden");
+  $("#review-detail-stage").textContent = detail.stage.label;
+  $("#review-detail-title").textContent = `${detail.project.subjectCode || "Plan"} — ${detail.project.subjectName}`;
+  $("#review-detail-meta").textContent = `${detail.project.professorName} · ${detail.project.career} · ${detail.project.academicPeriod} · Plan v${detail.teachingPlan.version}`;
+  $("#review-plan-preview").innerHTML = reviewTeachingPlanContentHtml(detail);
+  renderReviewChecklist(detail);
+  $("#review-stage-history").innerHTML = reviewHistoryHtml(detail.history);
+  $("#review-detail")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function reviewPayloadFromForm(decision) {
+  if (!currentReviewDetail?.review?.id) throw new Error("La revisión no está disponible para guardar.");
+  const items = $$("[data-review-item]", $("#review-checklist-items")).map((article) => ({
+    id: article.dataset.reviewItem,
+    result: $("[data-review-result]", article).value,
+    observation: $("[data-review-observation]", article).value.trim(),
+  }));
+  return { decision, generalObservation: $("#review-general-observation").value.trim(), items };
+}
+
+async function submitTeachingPlanReviewDecision(decision) {
+  const labels = { DRAFT: "Guardando borrador…", CHANGES_REQUESTED: "Enviando correcciones…", APPROVED: "Aprobando etapa…" };
+  const status = $("#review-decision-status");
+  status.textContent = labels[decision];
+  try {
+    const payload = reviewPayloadFromForm(decision);
+    if (decision === "CHANGES_REQUESTED" && !confirm("¿Desea enviar estas correcciones al profesor? Las etapas anteriores conservarán su aprobación y recibirán una notificación informativa.")) return;
+    if (decision === "APPROVED" && !confirm("¿Confirma la aprobación de esta etapa del Plan Docente?")) return;
+    await authRequest(`/api/teaching-plan/reviews/${encodeURIComponent(currentReviewDetail.review.id)}`, { method: "PATCH", body: JSON.stringify(payload) });
+    status.textContent = decision === "DRAFT" ? "Borrador guardado." : decision === "APPROVED" ? "Etapa aprobada correctamente." : "Correcciones enviadas al profesor.";
+    if (decision === "DRAFT") await openTeachingPlanReviewStage(currentReviewStageId);
+    else await loadReviewInbox(workViewMeta[currentWorkView]?.stage);
+  } catch (error) {
+    status.textContent = error.message;
+    throw error;
+  }
+}
+
+$("#review-inbox-list")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-open-review-stage]");
+  if (!button) return;
+  button.disabled = true;
+  openTeachingPlanReviewStage(button.dataset.openReviewStage).catch((error) => {
+    button.disabled = false;
+    $("#review-inbox-list").insertAdjacentHTML("afterbegin", `<p class="projects-empty error">${escapeHtml(error.message)}</p>`);
+  });
+});
+$("#refresh-review-inbox")?.addEventListener("click", () => loadReviewInbox(workViewMeta[currentWorkView]?.stage));
+$("#close-review-detail")?.addEventListener("click", () => loadReviewInbox(workViewMeta[currentWorkView]?.stage));
+$("#save-review-draft")?.addEventListener("click", () => submitTeachingPlanReviewDecision("DRAFT").catch(() => {}));
+$("#request-review-changes")?.addEventListener("click", () => submitTeachingPlanReviewDecision("CHANGES_REQUESTED").catch(() => {}));
+$("#approve-review-stage")?.addEventListener("click", () => submitTeachingPlanReviewDecision("APPROVED").catch(() => {}));
+
 async function openSavedProject(id) {
   const response = await fetch(`/api/projects/${encodeURIComponent(id)}`, { cache: "no-store" });
   const payload = await response.json();
@@ -1884,16 +1916,16 @@ function formatDateEc(value) {
   const date = new Date(value); if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("es-EC", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC" }).format(date);
 }
-function planPeriodState() {
-  if (institutionalDataState?.periodStartsAt || institutionalDataState?.bimestralEvaluationStartAt || institutionalDataState?.recoveryEvaluationStartAt) return {
-    startsAt: institutionalDataState.periodStartsAt,
-    endsAt: institutionalDataState.periodEndsAt,
-    bimestralEvaluationStartAt: institutionalDataState.bimestralEvaluationStartAt,
-    bimestralEvaluationEndAt: institutionalDataState.bimestralEvaluationEndAt,
-    recoveryEvaluationStartAt: institutionalDataState.recoveryEvaluationStartAt,
-    recoveryEvaluationEndAt: institutionalDataState.recoveryEvaluationEndAt,
+function planPeriodState(institutionalData = institutionalDataState, academicPeriod = form?.elements?.academicPeriod?.value || "") {
+  if (institutionalData?.periodStartsAt || institutionalData?.bimestralEvaluationStartAt || institutionalData?.recoveryEvaluationStartAt) return {
+    startsAt: institutionalData.periodStartsAt,
+    endsAt: institutionalData.periodEndsAt,
+    bimestralEvaluationStartAt: institutionalData.bimestralEvaluationStartAt,
+    bimestralEvaluationEndAt: institutionalData.bimestralEvaluationEndAt,
+    recoveryEvaluationStartAt: institutionalData.recoveryEvaluationStartAt,
+    recoveryEvaluationEndAt: institutionalData.recoveryEvaluationEndAt,
   };
-  const periodName = String(form?.elements?.academicPeriod?.value || "");
+  const periodName = String(academicPeriod || "");
   return (academicCatalog?.periods || []).find((item) => item.name === periodName || item.code === periodName) || null;
 }
 function planEvaluationWindowLabel(start, end) {
@@ -1901,8 +1933,8 @@ function planEvaluationWindowLabel(start, end) {
   if (start && end && formatDateEc(start) !== formatDateEc(end)) return `${formatDateEc(start)} al ${formatDateEc(end)}`;
   return formatDateEc(start || end);
 }
-function planWeekDateRange(weekNumber) {
-  const period = planPeriodState(); if (!period?.startsAt) return "";
+function planWeekDateRange(weekNumber, period = planPeriodState()) {
+  if (!period?.startsAt) return "";
   const start = new Date(period.startsAt); const day = start.getUTCDay(); const offset = day === 0 ? -6 : 1 - day;
   start.setUTCDate(start.getUTCDate() + offset + ((Number(weekNumber) - 1) * 7)); const end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
   return `${formatDateEc(start)} al ${formatDateEc(end)}`;
@@ -2908,11 +2940,21 @@ function activateNavigation(button) {
   $$(".nav").forEach((item) => item.classList.toggle("active", item === button));
 }
 $("#nav-home").onclick = () => {
+  if (workViewMeta[currentWorkView]?.kind === "review") {
+    activateNavigation($("#nav-projects"));
+    loadReviewInbox(workViewMeta[currentWorkView].stage);
+    return;
+  }
   activateNavigation($("#nav-home"));
   $("#project-search").value = "";
   loadProjects();
 };
 $("#nav-projects").onclick = () => {
+  if (workViewMeta[currentWorkView]?.kind === "review") {
+    activateNavigation($("#nav-projects"));
+    loadReviewInbox(workViewMeta[currentWorkView].stage);
+    return;
+  }
   activateNavigation($("#nav-projects"));
   $("#projects-title").scrollIntoView({ behavior: "smooth", block: "start" });
   $("#project-search").focus();
@@ -3408,8 +3450,8 @@ function teachingPlanReviewDate(value) {
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("es-EC", { dateStyle: "long", timeStyle: "short" }).format(date);
 }
-function bibliographyPreviewEntries(type) {
-  return bibliographyEntriesState
+function bibliographyPreviewEntries(type, entries = bibliographyEntriesState) {
+  return (Array.isArray(entries) ? entries : [])
     .filter((entry) => entry.type === type)
     .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0));
 }
@@ -3420,15 +3462,20 @@ function bibliographyPreviewItemHtml(entry, type) {
   const importance = String(entry.notes || "").trim();
   return `<li>${main}${importance ? `<div><strong>Importancia para el estudiante:</strong> ${escapeHtml(importance)}</div>` : ""}</li>`;
 }
-function bibliographyPreviewHtml(type) {
-  const entries = bibliographyPreviewEntries(type);
-  if (!entries.length) return '<p class="muted">No se registraron referencias adicionales.</p>';
-  return `<ol class="plan-preview-list plan-preview-alpha-list">${entries.map((entry) => bibliographyPreviewItemHtml(entry, type)).join("")}</ol>`;
+function bibliographyPreviewHtml(type, entries = bibliographyEntriesState) {
+  const filteredEntries = bibliographyPreviewEntries(type, entries);
+  if (!filteredEntries.length) return '<p class="muted">No se registraron referencias adicionales.</p>';
+  return `<ol class="plan-preview-list plan-preview-alpha-list">${filteredEntries.map((entry) => bibliographyPreviewItemHtml(entry, type)).join("")}</ol>`;
 }
-function bibliographyBasicPreviewHtml() {
-  const entries = bibliographyPreviewEntries("BASIC");
-  const guideReference = escapeHtml(form.elements.guideReference?.value || "—");
-  const guideImportance = escapeHtml(guideReferenceImportanceState || "—");
+function bibliographyBasicPreviewHtml(bibliography = null) {
+  const source = bibliography || {
+    entries: bibliographyEntriesState,
+    guideReference: form?.elements?.guideReference?.value || "",
+    guideReferenceImportance: guideReferenceImportanceState,
+  };
+  const entries = bibliographyPreviewEntries("BASIC", source.entries);
+  const guideReference = escapeHtml(source.guideReference || "—");
+  const guideImportance = escapeHtml(source.guideReferenceImportance || "—");
   return `<ol class="plan-preview-list plan-preview-alpha-list"><li>${guideReference}<div><strong>Importancia para el estudiante:</strong> ${guideImportance}</div></li>${entries.map((entry) => bibliographyPreviewItemHtml(entry, "BASIC")).join("")}</ol>`;
 }
 const planInstrumentTypeLabels = {
@@ -3470,10 +3517,10 @@ function sentenceCaseInstitutionalUnit(value) {
   }).join("");
 }
 
-function planContentDisplayMap() {
+function planContentDisplayMap(unitContents = institutionalDataState?.unitContents || []) {
   const map = new Map();
   let unit = 0, content = 0, subcontent = 0;
-  for (const raw of institutionalDataState?.unitContents || []) {
+  for (const raw of unitContents || []) {
     const depth = institutionalContentDepth(raw);
     const rawText = institutionalContentText(raw);
     const text = depth === 1 ? sentenceCaseInstitutionalUnit(rawText) : rawText;
@@ -3485,8 +3532,8 @@ function planContentDisplayMap() {
   }
   return map;
 }
-function planPreviewContentHtml(values) {
-  const display = planContentDisplayMap();
+function planPreviewContentHtml(values, unitContents = institutionalDataState?.unitContents || []) {
+  const display = planContentDisplayMap(unitContents);
   const items = (Array.isArray(values) ? values : []).filter((value) => String(value || "").trim());
   return items.length ? items.map((value) => `<span class="plan-preview-content-line">${escapeHtml(display.get(normalizePlanPreviewValue(value)) || value)}</span>`).join("") : "—";
 }
@@ -3579,21 +3626,60 @@ function planInstrumentDetailHtml(activity) {
   return `<div class="plan-instrument-detail"><h6>Instrumento EVA · 10 puntos</h6><div class="plan-score-formula">${escapeHtml(formula)}</div></div>`;
 }
 
-function teachingPlanPreviewHtml() {
-  if (!teachingPlanState?.content) return '<div class="plan-preview-empty">Genere el Plan Docente para visualizarlo.</div>';
-  const project = data();
-  const content = teachingPlanState.content;
-  const mappings = Array.isArray(outcomeMappingsState) ? outcomeMappingsState : [];
-  const teacher = teacherProfileState || {};
-  const prerequisites = institutionalDataState?.prerequisites || [];
+function planInstrumentConfigurationsHtml(evaluatedActivities = []) {
+  const configured = evaluatedActivities.filter((activity) => activity?.instrumentConfig);
+  if (!configured.length) return "";
+  return `
+    <h5 class="plan-preview-subtitle">Instrumentos de evaluación configurados para EVA</h5>
+    <p class="plan-preview-paragraph plan-preview-screen-only">Esta información se presenta para revisión académica y configuración en EVA. El detalle del instrumento no forma parte del PDF del Plan Docente.</p>
+    <div class="plan-eva-instruments">
+      ${configured.map((activity) => `<section class="plan-eva-instrument-card"><h6>${escapeHtml(activity.code)} · ${escapeHtml(activity.instrumentConfig?.title || activity.instrument || "Instrumento de evaluación")}</h6><p class="plan-preview-paragraph"><strong>Actividad:</strong> ${escapeHtml(activity.activity || "—")}</p>${planInstrumentDetailHtml(activity)}</section>`).join("")}
+    </div>`;
+}
+
+function teachingPlanApprovalSectionHtml(planState = teachingPlanState, professorName = form?.elements?.professorName?.value || authenticatedUserData?.displayName || "Docente") {
+  const workflow = planState?.reviewWorkflow;
+  const teacherReviewedAt = planState?.reviewedAt;
+  const teacherRow = `<tr><td>Elaboración y confirmación</td><td>${escapeHtml(professorName || "Docente")}</td><td>Docente</td><td>${teacherReviewedAt ? "Confirmado" : "Pendiente"}</td><td>${teacherReviewedAt ? escapeHtml(teachingPlanReviewDate(teacherReviewedAt)) : "—"}</td></tr>`;
+  if (!workflow) {
+    const note = planState?.reviewProcessEnabled
+      ? "El Plan Docente todavía no ha sido enviado al proceso institucional de revisión y aprobación."
+      : "No existe un proceso institucional asociado a este Plan Docente. La confirmación docente se conserva como evidencia de revisión.";
+    return `<p class="plan-preview-paragraph">${escapeHtml(note)}</p><div class="plan-preview-table-wrap"><table><thead><tr><th>Actividad</th><th>Nombre</th><th>Función</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>${teacherRow}</tbody></table></div>`;
+  }
+  const rows = (workflow.stages || []).map((stage) => `<tr><td>${escapeHtml(stage.label || reviewStageLabels[stage.stage] || stage.stage)}</td><td>${escapeHtml(stage.reviewer?.displayName || "Responsable no registrado")}</td><td>${escapeHtml(reviewStageLabels[stage.stage] || stage.stage)}</td><td>${escapeHtml(reviewStageStatusLabels[stage.status] || stage.status)}</td><td>${stage.approvedAt ? escapeHtml(teachingPlanReviewDate(stage.approvedAt)) : "—"}</td></tr>`).join("");
+  const statusText = workflow.status === "APPROVED" ? "Proceso institucional completado." : workflow.status === "CHANGES_REQUESTED" ? "El Plan tiene correcciones pendientes de atención por el docente." : "El Plan se encuentra en revisión institucional.";
+  return `<p class="plan-preview-paragraph">${escapeHtml(statusText)}</p><div class="plan-preview-table-wrap"><table><thead><tr><th>Actividad</th><th>Nombre</th><th>Función</th><th>Estado</th><th>Fecha</th></tr></thead><tbody>${teacherRow}${rows}</tbody></table></div>`;
+}
+
+function teachingPlanPreviewHtml(viewContext = null, options = {}) {
+  const planState = viewContext?.teachingPlan || teachingPlanState;
+  if (!planState?.content) return '<div class="plan-preview-empty">Genere el Plan Docente para visualizarlo.</div>';
+  const project = viewContext?.formData || data();
+  const institutionalData = viewContext?.institutionalData || institutionalDataState || {};
+  const setup = viewContext?.setup || {};
+  const content = planState.content;
+  const mappings = Array.isArray(setup.outcomeMappings) ? setup.outcomeMappings : (Array.isArray(outcomeMappingsState) ? outcomeMappingsState : []);
+  const teacher = setup.teacherProfile || teacherProfileState || {};
+  const teacherEmail = setup.teacherEmail || authenticatedUserData?.email || "—";
+  const bibliography = setup.bibliography || {
+    guideReference: form?.elements?.guideReference?.value || "",
+    guideReferenceImportance: guideReferenceImportanceState,
+    entries: bibliographyEntriesState,
+  };
+  const prerequisites = institutionalData?.prerequisites || [];
   const sequences = Array.isArray(content.sequences) ? content.sequences : [];
   const evaluated = [...(content.evaluatedActivities || [])].sort((left, right) => Number(left.week) - Number(right.week));
-  const category = institutionalDataState?.planCategory || "";
+  const category = institutionalData?.planCategory || "";
   const categoryMarks = `Conceptual ${category === "CONCEPTUAL" ? "☒" : "☐"} · Activa ${category === "ACTIVE" ? "☒" : "☐"} · Integradora ${category === "INTEGRATING" ? "☒" : "☐"}`;
-  const currentTemplateFormat = teachingPlanState?.templateProfile?.profile === "CURRENT_MODULAR";
-  const totalHours = Number(institutionalDataState?.acdHours || 0) + Number(institutionalDataState?.apeHours || 0) + Number(institutionalDataState?.aaHours || 0);
+  const currentTemplateFormat = planState?.templateProfile?.profile === "CURRENT_MODULAR";
+  const totalHours = Number(institutionalData?.acdHours || 0) + Number(institutionalData?.apeHours || 0) + Number(institutionalData?.aaHours || 0);
+  const readOnly = Boolean(options.readOnly);
+  const sectionPrefix = options.sectionPrefix || "plan-preview-";
+  const sectionId = (key) => `${sectionPrefix}${key}`;
+  const period = planPeriodState(institutionalData, project.academicPeriod);
   return `
-    <section class="plan-preview-cover plan-preview-section" id="plan-preview-cover">
+    <section class="plan-preview-cover plan-preview-section" id="${sectionId("cover")}">
       <div class="plan-preview-brand"><strong>UTPL</strong><span>Vicerrectorado Académico</span></div>
       <div class="plan-preview-cover-main">
         <h2>Universidad Técnica Particular de Loja</h2>
@@ -3604,7 +3690,7 @@ function teachingPlanPreviewHtml() {
       </div>
       <p><strong>Modalidad de estudio:</strong> ${escapeHtml(project.modality || "—")}</p>
     </section>
-    <section class="plan-preview-section" id="plan-preview-a">
+    <section class="plan-preview-section" id="${sectionId("a")}">
       <div class="plan-preview-band">A. Datos de identificación de la asignatura</div>
       <div class="plan-preview-table-wrap"><table class="plan-identification-table"><tbody>
         ${currentTemplateFormat ? `
@@ -3612,24 +3698,24 @@ function teachingPlanPreviewHtml() {
           <tr><th>Carrera</th><td colspan="3">${escapeHtml(project.career || "—")}</td></tr>
           <tr><th>Asignatura</th><td colspan="3">${escapeHtml(project.subjectName || "—")}</td></tr>
           <tr><th>Código</th><td colspan="3">${escapeHtml(project.subjectCode || "—")}</td></tr>
-          <tr><th>Número de créditos</th><td colspan="3">${escapeHtml(institutionalDataState?.credits ?? "—")}</td></tr>
+          <tr><th>Número de créditos</th><td colspan="3">${escapeHtml(institutionalData?.credits ?? "—")}</td></tr>
           <tr><th rowspan="2">Total de horas por componente de aprendizaje</th><th>Aprendizaje en contacto con el docente (ACD)</th><th>Aprendizaje Práctico-Experimental (APE)</th><th>Aprendizaje Autónomo (AA)</th></tr>
-          <tr><td>${escapeHtml(institutionalDataState?.acdHours ?? "0")}</td><td>${escapeHtml(institutionalDataState?.apeHours ?? "0")}</td><td>${escapeHtml(institutionalDataState?.aaHours ?? "0")}</td></tr>
+          <tr><td>${escapeHtml(institutionalData?.acdHours ?? "0")}</td><td>${escapeHtml(institutionalData?.apeHours ?? "0")}</td><td>${escapeHtml(institutionalData?.aaHours ?? "0")}</td></tr>
           <tr><th>Tipo de asignatura</th><td colspan="3">${escapeHtml(categoryMarks)}</td></tr>
           <tr><th>Periodo académico/nivel</th><td colspan="3">${escapeHtml(project.academicPeriod || "—")} / ${escapeHtml(project.level || "—")}</td></tr>
-          <tr><th>Período académico ordinario/semestre</th><td colspan="3">${escapeHtml(institutionalDataState?.semester || "—")}</td></tr>
+          <tr><th>Período académico ordinario/semestre</th><td colspan="3">${escapeHtml(institutionalData?.semester || "—")}</td></tr>
         ` : `
           <tr><th colspan="4" class="plan-identification-period">PERÍODO ACADÉMICO ORDINARIO</th></tr>
           <tr><th>Facultad</th><td>${escapeHtml(project.faculty || "—")}</td><th>Carrera</th><td>${escapeHtml(project.career || "—")}</td></tr>
           <tr><th>Asignatura</th><td>${escapeHtml(project.subjectName || "—")}</td><th>Código</th><td>${escapeHtml(project.subjectCode || "—")}</td></tr>
-          <tr><th>Número de créditos/horas</th><td colspan="3">Créditos: ${escapeHtml(institutionalDataState?.credits ?? "—")} · Horas totales: ${totalHours}</td></tr>
-          <tr><th>Total de horas por componente de aprendizaje</th><td><strong>ACD</strong><br>${escapeHtml(institutionalDataState?.acdHours ?? "0")}</td><td><strong>APE</strong><br>${escapeHtml(institutionalDataState?.apeHours ?? "0")}</td><td><strong>AA</strong><br>${escapeHtml(institutionalDataState?.aaHours ?? "0")}</td></tr>
-          <tr><th>Tipo de asignatura</th><td>${escapeHtml(categoryMarks)}</td><th>Duración</th><td>${escapeHtml(project.weeks || totalWeeks())} semanas lectivas</td></tr>
-          <tr><th>Periodo académico/nivel</th><td>${escapeHtml(project.level || "—")}</td><th>Período académico ordinario/semestre</th><td>${escapeHtml(institutionalDataState?.semester || project.academicPeriod || "—")}</td></tr>
+          <tr><th>Número de créditos/horas</th><td colspan="3">Créditos: ${escapeHtml(institutionalData?.credits ?? "—")} · Horas totales: ${totalHours}</td></tr>
+          <tr><th>Total de horas por componente de aprendizaje</th><td><strong>ACD</strong><br>${escapeHtml(institutionalData?.acdHours ?? "0")}</td><td><strong>APE</strong><br>${escapeHtml(institutionalData?.apeHours ?? "0")}</td><td><strong>AA</strong><br>${escapeHtml(institutionalData?.aaHours ?? "0")}</td></tr>
+          <tr><th>Tipo de asignatura</th><td>${escapeHtml(categoryMarks)}</td><th>Duración</th><td>${escapeHtml(project.weeks || 0)} semanas lectivas</td></tr>
+          <tr><th>Periodo académico/nivel</th><td>${escapeHtml(project.level || "—")}</td><th>Período académico ordinario/semestre</th><td>${escapeHtml(institutionalData?.semester || project.academicPeriod || "—")}</td></tr>
         `}
       </tbody></table></div>
     </section>
-    <section class="plan-preview-section" id="plan-preview-b">
+    <section class="plan-preview-section" id="${sectionId("b")}">
       <div class="plan-preview-band">B. Descripción de la asignatura</div>
       <h5 class="plan-preview-subtitle">Presentación y Contextualización en el marco de la descripción microcurricular</h5>
       <p class="plan-preview-paragraph">${escapeHtml(content.presentation || "—")}</p>
@@ -3637,57 +3723,57 @@ function teachingPlanPreviewHtml() {
       <h5 class="plan-preview-subtitle">Adaptaciones curriculares</h5>
       <p class="plan-preview-paragraph">${escapeHtml(content.curricularAdaptations || "—")}</p>
     </section>
-    <section class="plan-preview-section" id="plan-preview-c">
+    <section class="plan-preview-section" id="${sectionId("c")}">
       <div class="plan-preview-band">C. Contribución al perfil de egreso y profesional y relación con las competencias genéricas de la UTPL</div>
       <div class="plan-preview-table-wrap"><table><thead><tr><th>Resultado de aprendizaje de la asignatura</th><th>Contribución</th><th>Competencia del perfil profesional</th><th>Resultado de aprendizaje del perfil de egreso</th><th>Competencia genérica UTPL</th></tr></thead><tbody>
         ${mappings.map((mapping) => `<tr><td>${escapeHtml(mapping.learningOutcome || "—")}</td><td>${escapeHtml(contributionPreviewLabels[mapping.contribution] || mapping.contribution || "—")}</td><td>${planPreviewMultiline(mapping.professionalCompetencies)}</td><td>${planPreviewMultiline(mapping.graduateProfileResults)}</td><td>${planPreviewMultiline(mapping.utplGenericCompetencies)}</td></tr>`).join("") || '<tr><td colspan="5">No existen relaciones registradas.</td></tr>'}
       </tbody></table></div>
     </section>
-    <section class="plan-preview-section" id="plan-preview-d">
+    <section class="plan-preview-section" id="${sectionId("d")}">
       <div class="plan-preview-band">D. Programación del proceso de aprendizaje de la asignatura</div>
       ${sequences.map((sequence, index) => `<section class="plan-preview-sequence">
         <div class="plan-preview-sequence-header">${index + 1}. Resultado de aprendizaje de la asignatura: ${escapeHtml(sequence.learningOutcome)}</div>
         <div class="plan-preview-method-grid"><div><strong>Metodología(s) activa(s)</strong><p>${escapeHtml(sequence.methodology)}</p></div><div><strong>Tecnologías del aprendizaje y conocimiento — TAC</strong>${planPreviewList(sequence.tac)}</div></div>
         <div class="plan-preview-table-wrap"><table><thead><tr><th>Semana</th><th>Contenidos</th><th>ACD</th><th>APE</th><th>AA</th><th>Actividades de aprendizaje</th><th>Recursos de aprendizaje</th>${currentTemplateFormat ? "" : "<th>Instrumento</th><th>Calificación</th>"}</tr></thead><tbody>
-          ${(sequence.weeks || []).map((week) => { const evaluatedActivity = evaluated.find((activity) => Number(activity.week) === Number(week.week)); return `<tr><td>${week.week}<br><button class="icon-action plan-week-edit" type="button" data-edit-plan-week="${week.week}" data-sequence-index="${index}" aria-label="Editar semana ${week.week}" title="Editar semana ${week.week}">✎</button></td><td>${planPreviewContentHtml(week.unitContents)}</td><td>${week.acdHours}</td><td>${week.apeHours}</td><td>${week.aaHours}</td><td>${planPreviewActivitiesHtml(week, evaluated)}</td><td>${planPreviewResourcesHtml(week, evaluated)}</td>${currentTemplateFormat ? "" : `<td>${escapeHtml(week.assessmentInstrument || evaluatedActivity?.instrument || "—")}</td><td>${Number(week.grade || 0) ? escapeHtml(week.grade) : "—"}</td>`}</tr>`; }).join("")}
+          ${(sequence.weeks || []).map((week) => { const evaluatedActivity = evaluated.find((activity) => Number(activity.week) === Number(week.week)); return `<tr><td>${week.week}${readOnly ? "" : `<br><button class="icon-action plan-week-edit" type="button" data-edit-plan-week="${week.week}" data-sequence-index="${index}" aria-label="Editar semana ${week.week}" title="Editar semana ${week.week}">✎</button>`}</td><td>${planPreviewContentHtml(week.unitContents, institutionalData?.unitContents || [])}</td><td>${week.acdHours}</td><td>${week.apeHours}</td><td>${week.aaHours}</td><td>${planPreviewActivitiesHtml(week, evaluated)}</td><td>${planPreviewResourcesHtml(week, evaluated)}</td>${currentTemplateFormat ? "" : `<td>${escapeHtml(week.assessmentInstrument || evaluatedActivity?.instrument || "—")}</td><td>${Number(week.grade || 0) ? escapeHtml(week.grade) : "—"}</td>`}</tr>`; }).join("")}
         </tbody></table></div>
       </section>`).join("")}
     </section>
-    <section class="plan-preview-section" id="plan-preview-e">
+    <section class="plan-preview-section" id="${sectionId("e")}">
       <div class="plan-preview-band">E. Evaluación de la asignatura</div>
       <h5 class="plan-preview-subtitle">Descripción de las actividades calificadas</h5>
       <div class="plan-preview-table-wrap"><table><thead><tr><th>Componente</th><th>Actividad</th><th>Estrategias de trabajo</th><th>Instrumento</th><th>Semana</th><th>Calificación</th><th>Peso</th></tr></thead><tbody>
-        ${evaluated.map((activity) => `<tr><td>${escapeHtml(activity.component)}</td><td><strong>${escapeHtml(activity.code)}.</strong> ${escapeHtml(activity.activity)}</td><td>${linesListHtml(activity.workStrategies)}</td><td>${escapeHtml(activity.instrument)}</td><td>Semana ${activity.week}${planWeekDateRange(activity.week) ? `<br><small>${escapeHtml(planWeekDateRange(activity.week))}</small>` : ""}</td><td>${activity.grade}</td><td>${activity.weight}%</td></tr>`).join("")}
+        ${evaluated.map((activity) => `<tr><td>${escapeHtml(activity.component)}</td><td><strong>${escapeHtml(activity.code)}.</strong> ${escapeHtml(activity.activity)}</td><td>${linesListHtml(activity.workStrategies)}</td><td>${escapeHtml(activity.instrument)}</td><td>Semana ${activity.week}${planWeekDateRange(activity.week, period) ? `<br><small>${escapeHtml(planWeekDateRange(activity.week, period))}</small>` : ""}</td><td>${activity.grade}</td><td>${activity.weight}%</td></tr>`).join("")}
         <tr><th colspan="5">TOTAL</th><th>${evaluated.reduce((sum, item) => sum + Number(item.grade || 0), 0).toFixed(1)}</th><th>${evaluated.reduce((sum, item) => sum + Number(item.weight || 0), 0)}%</th></tr>
       </tbody></table></div>
+      ${planInstrumentConfigurationsHtml(evaluated)}
       <h5 class="plan-preview-subtitle">Periodos institucionales de evaluación</h5>
       <ul class="plan-preview-list">
-        <li><strong>Evaluación bimestral:</strong> ${escapeHtml(planEvaluationWindowLabel(planPeriodState()?.bimestralEvaluationStartAt, planPeriodState()?.bimestralEvaluationEndAt))}</li>
+        <li><strong>Evaluación bimestral:</strong> ${escapeHtml(planEvaluationWindowLabel(period?.bimestralEvaluationStartAt, period?.bimestralEvaluationEndAt))}</li>
       </ul>
       <h5 class="plan-preview-subtitle">Evaluación de recuperación</h5>
-      <p class="plan-preview-paragraph"><strong>Fecha:</strong> ${escapeHtml(planEvaluationWindowLabel(planPeriodState()?.recoveryEvaluationStartAt, planPeriodState()?.recoveryEvaluationEndAt))}</p>
+      <p class="plan-preview-paragraph"><strong>Fecha:</strong> ${escapeHtml(planEvaluationWindowLabel(period?.recoveryEvaluationStartAt, period?.recoveryEvaluationEndAt))}</p>
       <p class="plan-preview-paragraph">Semana 10 · 70% de la evaluación de recuperación más 30% del acumulado del módulo.</p>
     </section>
-    <section class="plan-preview-section" id="plan-preview-f">
+    <section class="plan-preview-section" id="${sectionId("f")}">
       <div class="plan-preview-band">F. Datos del equipo docente</div>
       <div class="plan-preview-table-wrap"><table><tbody>
-        <tr><th>Docente responsable</th><td>${escapeHtml(project.professorName || "—")}</td><th>Correo electrónico</th><td>${escapeHtml(authenticatedUserData?.email || "—")}</td></tr>
+        <tr><th>Docente responsable</th><td>${escapeHtml(project.professorName || "—")}</td><th>Correo electrónico</th><td>${escapeHtml(teacherEmail)}</td></tr>
         <tr><th>Título(s) de tercer nivel</th><td>${planPreviewMultiline(teacher.thirdLevelDegrees)}</td><th>Título(s) de cuarto nivel</th><td>${planPreviewMultiline(teacher.fourthLevelDegrees)}</td></tr>
         <tr><th>Facultad</th><td>${escapeHtml(teacher.faculty || "—")}</td><th>Departamento</th><td>${escapeHtml(teacher.department || "—")}</td></tr>
         <tr><th>Teléfono</th><td>${escapeHtml(teacher.phone || "—")}</td><th>Currículo profesional resumido</th><td>${escapeHtml(teacher.shortCv || "—")}</td></tr>
       </tbody></table></div>
     </section>
-    <section class="plan-preview-section" id="plan-preview-g">
+    <section class="plan-preview-section" id="${sectionId("g")}">
       <div class="plan-preview-band">G. Bibliografía básica y complementaria</div>
       <h5 class="plan-preview-subtitle">Bibliografía básica</h5>
-      ${bibliographyBasicPreviewHtml()}
-      <h5 class="plan-preview-subtitle">Bibliografía complementaria</h5>${bibliographyPreviewHtml("COMPLEMENTARY")}
-      <h5 class="plan-preview-subtitle">Recursos educativos abiertos (REA)</h5>${bibliographyPreviewHtml("REA")}
+      ${bibliographyBasicPreviewHtml(bibliography)}
+      <h5 class="plan-preview-subtitle">Bibliografía complementaria</h5>${bibliographyPreviewHtml("COMPLEMENTARY", bibliography.entries)}
+      <h5 class="plan-preview-subtitle">Recursos educativos abiertos (REA)</h5>${bibliographyPreviewHtml("REA", bibliography.entries)}
     </section>
-    <section class="plan-preview-section" id="plan-preview-h">
+    <section class="plan-preview-section" id="${sectionId("h")}">
       <div class="plan-preview-band">H. Aprobación</div>
-      <p class="plan-preview-paragraph">Esta sección se completa y aprueba fuera del sistema. El documento Word incluirá el espacio correspondiente para la aprobación del director o directora de carrera.</p>
-      <div class="plan-preview-table-wrap"><table><thead><tr><th>Actividad</th><th>Nombre</th><th>Función</th><th>Firma</th></tr></thead><tbody><tr><td>Aprobación</td><td>—</td><td>Director/a de carrera</td><td>—</td></tr></tbody></table></div>
+      ${teachingPlanApprovalSectionHtml(planState, project.professorName)}
     </section>`;
 }
 function renderTeachingPlanTemplateApplied() {
@@ -3736,19 +3822,34 @@ function renderTeachingPlanReview() {
   const checks = teachingPlanReviewChecksState();
   checksContainer.innerHTML = checks.map((check) => `<article class="teaching-plan-review-check ${check.ok ? "ok" : "error"}"><span class="icon">${check.ok ? "✓" : "!"}</span><div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(check.detail)}</small></div></article>`).join("");
   const reviewed = Boolean(teachingPlanState?.reviewedAt);
+  const workflow = teachingPlanState?.reviewWorkflow || null;
+  const workflowLocked = workflow && ["IN_REVIEW", "APPROVED"].includes(workflow.status);
+  const correctionStage = workflow?.stages?.find((stage) => stage.status === "CHANGES_REQUESTED");
+  const pendingStage = workflow?.stages?.find((stage) => stage.status === "PENDING_REVIEW");
   notes.value = teachingPlanState?.reviewNotes || "";
+  notes.disabled = Boolean(workflowLocked);
   confirm.checked = reviewed;
+  confirm.disabled = Boolean(workflowLocked);
   const allOk = checks.length > 0 && checks.every((check) => check.ok);
   const summaryText = $("#teaching-plan-validation-summary-text");
   if (summaryText) summaryText.textContent = allOk
     ? `${checks.filter((check) => check.ok).length}/${checks.length} validaciones automáticas correctas`
     : `${checks.filter((check) => check.ok).length}/${checks.length} validaciones correctas · revise los pendientes`;
-  button.disabled = !allOk || !confirm.checked;
-  button.textContent = reviewed ? "Actualizar confirmación de revisión" : "Confirmar revisión del plan";
-  status.className = `teaching-plan-review-status ${reviewed ? "reviewed" : "pending"}`;
-  status.textContent = reviewed
-    ? `Revisión confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. Si modifica el Plan Docente, deberá revisarlo nuevamente.`
-    : "Pendiente: confirme la revisión para habilitar las descargas configuradas y la generación de la Guía Didáctica.";
+  button.disabled = Boolean(workflowLocked) || !allOk || !confirm.checked;
+  if (workflow?.status === "APPROVED") button.textContent = "Plan aprobado institucionalmente";
+  else if (workflow?.status === "IN_REVIEW") button.textContent = `En revisión · ${pendingStage?.label || "etapa institucional"}`;
+  else if (workflow?.status === "CHANGES_REQUESTED") button.textContent = `Reenviar correcciones a ${correctionStage?.label || "revisión"}`;
+  else if (teachingPlanState?.reviewProcessEnabled) button.textContent = reviewed ? "Enviar a revisión institucional" : "Confirmar y enviar a revisión";
+  else button.textContent = reviewed ? "Actualizar confirmación de revisión" : "Confirmar revisión del plan";
+  status.className = `teaching-plan-review-status ${workflow?.status === "APPROVED" || reviewed ? "reviewed" : "pending"}`;
+  if (workflow?.status === "APPROVED") status.textContent = `Aprobación institucional completada el ${teachingPlanReviewDate(workflow.completedAt)}. Ya puede continuar con la Guía Didáctica.`;
+  else if (workflow?.status === "IN_REVIEW") status.textContent = `Plan enviado a revisión institucional. Etapa actual: ${pendingStage?.label || "revisión"}. El Plan permanecerá bloqueado hasta una aprobación o una solicitud de correcciones.`;
+  else if (workflow?.status === "CHANGES_REQUESTED") status.textContent = `Correcciones solicitadas por ${correctionStage?.label || "la etapa revisora"}. Realice los ajustes, confirme nuevamente la revisión docente y reenvíe el Plan; las aprobaciones anteriores se conservan.`;
+  else if (reviewed && teachingPlanState?.reviewProcessEnabled) status.textContent = `Revisión docente confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. El Plan debe enviarse al proceso institucional antes de generar la Guía Didáctica.`;
+  else if (reviewed) status.textContent = `Revisión confirmada el ${teachingPlanReviewDate(teachingPlanState.reviewedAt)}. Si modifica el Plan Docente, deberá revisarlo nuevamente.`;
+  else status.textContent = teachingPlanState?.reviewProcessEnabled
+    ? "Pendiente: confirme la revisión docente para enviar el Plan a la primera etapa institucional activa."
+    : "Pendiente: confirme la revisión docente para habilitar las descargas configuradas y la generación de la Guía Didáctica.";
 }
 
 function renderTeachingPlan() {
@@ -3764,12 +3865,17 @@ function renderTeachingPlan() {
     return;
   }
   const content = teachingPlanState.content;
+  const institutionalLock = teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status);
   $("#plan-methodologies").innerHTML = content.sequences.map((sequence, index) => `
     <section class="academic-profile-card plan-methodology-card">
       <h5>${escapeHtml(sequence.learningOutcome)}</h5>
-      <label>Metodología activa<textarea data-plan-methodology="${index}">${escapeHtml(sequence.methodology)}</textarea></label>
-      <label>TAC — una por línea<textarea data-plan-tac="${index}">${escapeHtml(sequence.tac.join("\n"))}</textarea></label>
+      <label>Metodología activa<textarea data-plan-methodology="${index}" ${institutionalLock ? "disabled" : ""}>${escapeHtml(sequence.methodology)}</textarea></label>
+      <label>TAC — una por línea<textarea data-plan-tac="${index}" ${institutionalLock ? "disabled" : ""}>${escapeHtml(sequence.tac.join("\n"))}</textarea></label>
     </section>`).join("");
+  const saveMethodologies = $("#save-plan-methodologies");
+  if (saveMethodologies) { saveMethodologies.disabled = Boolean(institutionalLock); saveMethodologies.title = institutionalLock ? "El Plan Docente está bloqueado mientras se encuentra en revisión institucional o aprobado." : ""; }
+  const generatePlanButton = $("#generate-teaching-plan");
+  if (generatePlanButton && institutionalLock) generatePlanButton.disabled = true;
   renderTeachingPlanReview();
   summarize();
   renderAdaptationWorkspaces();
@@ -3894,6 +4000,9 @@ function renderTeachingPlanInstrumentEditor() {
   renderTeachingPlanInstrumentCriteria();
 }
 function openTeachingPlanWeekEditor(sequenceIndex, weekNumber) {
+  if (teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status)) {
+    return showValidationModal("El Plan Docente está bloqueado mientras se encuentra en revisión institucional o cuenta con aprobación final.", "#teaching-plan-review-status");
+  }
   if (!teachingPlanState?.content) return;
   const sequence = teachingPlanState.content.sequences?.[sequenceIndex];
   const week = sequence?.weeks?.find((item) => Number(item.week) === Number(weekNumber));
@@ -4043,6 +4152,8 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
+      reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
+      reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
       downloadFormats: payload.downloadFormats || payload.teachingPlan?.downloadFormats || teachingPlanState?.downloadFormats || ["PDF"],
     };
     matrixRows = payload.matrixRows;
@@ -4093,11 +4204,17 @@ $("#confirm-teaching-plan-review")?.addEventListener("click", async () => {
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
+      reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
+      reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
       downloadFormats: payload.teachingPlan?.downloadFormats || teachingPlanState?.downloadFormats || ["PDF"],
     };
     renderTeachingPlan();
     persistProject();
-    showMessage("Revisión del Plan Docente confirmada. Ya puede descargar el Word y continuar con la Guía Didáctica.");
+    const workflow = teachingPlanState.reviewWorkflow;
+    const activeStage = workflow?.stages?.find((stage) => stage.status === "PENDING_REVIEW");
+    showMessage(workflow
+      ? `Plan Docente enviado a ${activeStage?.label || "revisión institucional"}. La Guía Didáctica se habilitará cuando finalice la última etapa activa.`
+      : "Revisión del Plan Docente confirmada. Ya puede descargar el documento y continuar con la Guía Didáctica.");
   } catch (error) {
     showValidationModal(error.message, "#teaching-plan-review-checks");
     button.disabled = false;
@@ -4125,6 +4242,8 @@ $("#generate-teaching-plan").onclick = async () => {
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
+      reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
+      reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
       downloadFormats: payload.downloadFormats || payload.teachingPlan?.downloadFormats || teachingPlanState?.downloadFormats || ["PDF"],
     };
     matrixRows = payload.matrixRows;
@@ -4156,6 +4275,9 @@ $("#generate-teaching-plan").onclick = async () => {
 
 $("#save-plan-methodologies").onclick = async () => {
   if (!teachingPlanState) return;
+  if (teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status)) {
+    return showValidationModal("El Plan Docente no puede modificarse mientras se encuentra en revisión institucional o aprobado.", "#teaching-plan-review-status");
+  }
   const methodologies = teachingPlanState.content.sequences.map((sequence, index) => ({
     learningOutcome: sequence.learningOutcome,
     methodology: $(`[data-plan-methodology="${index}"]`).value.trim(),
@@ -4173,6 +4295,8 @@ $("#save-plan-methodologies").onclick = async () => {
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
+      reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
+      reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
       downloadFormats: payload.teachingPlan?.downloadFormats || teachingPlanState?.downloadFormats || ["PDF"],
     };
     matrixRows = payload.matrixRows;
@@ -5010,8 +5134,10 @@ if (!passwordResetTokenFromUrl) {
 let adminData = null;
 let academicOfferImportState = null;
 function showMainContent() {
-  $("#main-content").classList.remove("hidden");
-  $("#admin-content").classList.add("hidden");
+  const kind = workViewMeta[currentWorkView]?.kind || "teacher";
+  $("#main-content").classList.toggle("hidden", kind !== "teacher");
+  $("#review-content")?.classList.toggle("hidden", kind !== "review");
+  $("#admin-content").classList.toggle("hidden", kind !== "admin");
 }
 function showAdminMessage(text, error = false) {
   const element = $("#admin-message");
@@ -5022,7 +5148,11 @@ function showAdminMessage(text, error = false) {
   showAdminMessage.timer = setTimeout(() => element.classList.add("hidden"), 9000);
 }
 function roleName(user) {
-  return user.roles[0]?.role.name || "Sin rol";
+  const names = (user.roles || []).map((entry) => entry.role?.name || entry.role?.code).filter(Boolean);
+  return names.length ? names.join(" · ") : "Sin rol";
+}
+function adminUserHasRole(user, roleCode) {
+  return Boolean(user?.roles?.some((entry) => entry.role?.code === roleCode));
 }
 function renderAdminUsers() {
   if (!adminData) return;
@@ -5529,12 +5659,130 @@ function renderGuideDownloadSettings() {
   $$('input[name="guideDownloadFormat"]', form).forEach((input) => input.checked = formats.includes(input.value));
 }
 
+function renderAdminRoleSelector(selectedCodes = null) {
+  if (!adminData) return;
+  const container = $("#admin-user-roles");
+  if (!container) return;
+  const selected = new Set(selectedCodes || $$("input[type=checkbox]:checked", container).map((input) => input.value));
+  const preferredOrder = ["TEACHER", "REVIEWER", "QUALITY", "DIITEP", "DIRECTOR", "ADMIN"];
+  const roles = [...adminData.roles].sort((a, b) => {
+    const ai = preferredOrder.indexOf(a.code); const bi = preferredOrder.indexOf(b.code);
+    if (ai >= 0 || bi >= 0) return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+    return String(a.name).localeCompare(String(b.name), "es");
+  });
+  container.innerHTML = roles.map((role) => `<label class="role-checkbox"><input type="checkbox" value="${escapeHtml(role.code)}" ${selected.has(role.code) ? "checked" : ""}><span><strong>${escapeHtml(role.name)}</strong><small>${escapeHtml(role.code)}</small></span></label>`).join("");
+}
+
+function selectedAdminRoleCodes() {
+  return $$("#admin-user-roles input[type=checkbox]:checked").map((input) => input.value);
+}
+
+function reviewStageConfigRows() {
+  const config = adminData?.teachingPlanReviewProcess;
+  const byStage = new Map((config?.stages || []).map((item) => [item.stage, item]));
+  return ["PEER", "QUALITY", "DIITEP", "DIRECTOR"].map((stage, index) => ({
+    stage,
+    enabled: byStage.get(stage)?.enabled ?? true,
+    sortOrder: byStage.get(stage)?.sortOrder ?? index + 1,
+  }));
+}
+
+function setSelectOptions(select, users, emptyLabel = "Sin asignar") {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${escapeHtml(emptyLabel)}</option>${users.map((user) => `<option value="${escapeHtml(user.id)}">${escapeHtml(`${user.firstName} ${user.lastName} — ${user.email}`)}</option>`).join("")}`;
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function activeReviewerAssignment(projectId, stage) {
+  return (adminData?.teachingPlanReviewerAssignments || []).find((item) => item.projectId === projectId && item.stage === stage && item.active);
+}
+
+function syncPlanReviewerAssignmentForm() {
+  const projectId = $("#plan-review-project")?.value;
+  if (!projectId || !adminData) return;
+  const project = adminData.projects.find((item) => item.id === projectId);
+  const configs = [
+    ["PEER", "REVIEWER", "#plan-review-peer"],
+    ["QUALITY", "QUALITY", "#plan-review-quality"],
+    ["DIITEP", "DIITEP", "#plan-review-diitep"],
+  ];
+  configs.forEach(([stage, role, selector]) => {
+    const users = adminData.users.filter((user) => user.active && user.id !== project?.ownerId && adminUserHasRole(user, role));
+    setSelectOptions($(selector), users);
+    const current = activeReviewerAssignment(projectId, stage);
+    $(selector).value = current?.reviewerId || "";
+  });
+}
+
+function syncCareerDirectorForm() {
+  const programId = $("#career-director-program")?.value;
+  const select = $("#career-director-user");
+  if (!select || !adminData) return;
+  const directors = adminData.users.filter((user) => user.active && adminUserHasRole(user, "DIRECTOR"));
+  setSelectOptions(select, directors);
+  const assignment = (adminData.careerDirectorAssignments || []).find((item) => item.programId === programId && item.active);
+  select.value = assignment?.directorId || "";
+}
+
+function renderPlanChecklistDraft() {
+  const target = $("#plan-checklist-draft");
+  if (!target) return;
+  target.innerHTML = planChecklistDraft.length ? planChecklistDraft.map((item, index) => `<article class="checklist-draft-item">
+    <div><span class="review-indicator-code">${escapeHtml(item.code)}</span><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(reviewStageLabels[item.stage])}${item.required ? " · Obligatorio" : ""}</small><p>${escapeHtml(item.description)}</p></div>
+    <button type="button" class="admin-icon-action danger" data-remove-plan-checklist="${index}" aria-label="Eliminar criterio" title="Eliminar criterio">×</button>
+  </article>`).join("") : '<p class="field-help">Agregue los criterios oficiales de cada etapa que estará activa. No se cargan criterios simulados.</p>';
+}
+
+function renderPlanReviewNotifications() {
+  const target = $("#plan-review-notifications-body");
+  if (!target || !adminData) return;
+  const notifications = adminData.teachingPlanNotifications || [];
+  target.innerHTML = notifications.map((item) => {
+    const project = item.workflow?.teachingPlan?.project;
+    const statusClass = item.status === "SENT" ? "status-completed" : item.status === "FAILED" ? "status-draft" : "status-in_progress";
+    return `<tr>
+      <td><strong>${escapeHtml(project?.subjectName || "Plan Docente")}</strong><small>${escapeHtml(project?.subjectCode || "")}</small></td>
+      <td>${escapeHtml(item.recipientName || "—")}<small>${escapeHtml(item.recipientEmail || "")}</small></td>
+      <td>${escapeHtml(teachingPlanNotificationEventLabels[item.event] || item.event)}${item.stage ? `<small>${escapeHtml(reviewStageLabels[item.stage] || item.stage)}</small>` : ""}</td>
+      <td><span class="status-badge ${statusClass}">${escapeHtml(item.status === "SENT" ? "Enviado" : item.status === "FAILED" ? "Falló" : "Pendiente")}</span>${item.errorMessage ? `<small title="${escapeHtml(item.errorMessage)}">${escapeHtml(item.errorMessage)}</small>` : ""}</td>
+      <td>${item.createdAt ? new Date(item.createdAt).toLocaleString("es-EC") : "—"}</td>
+      <td>${item.status === "SENT" ? "—" : `<button type="button" class="button secondary compact" data-retry-plan-notification="${escapeHtml(item.id)}">Reintentar</button>`}</td>
+    </tr>`;
+  }).join("") || '<tr><td colspan="6">Todavía no existen notificaciones del proceso.</td></tr>';
+}
+
+function renderPlanReviewAdmin() {
+  if (!adminData) return;
+  const config = adminData.teachingPlanReviewProcess;
+  $("#plan-review-process-enabled").checked = Boolean(config?.enabled);
+  $("#plan-review-stage-config").innerHTML = reviewStageConfigRows().map((item) => `<article class="review-stage-config-row" data-plan-review-stage="${item.stage}">
+    <label class="confirm"><input type="checkbox" data-stage-enabled ${item.enabled ? "checked" : ""}> <span><strong>${escapeHtml(reviewStageLabels[item.stage])}</strong><small>Rol requerido: ${escapeHtml(reviewRoleByStage[item.stage])}</small></span></label>
+    <label>Orden<input type="number" min="1" max="20" value="${item.sortOrder}" data-stage-order></label>
+  </article>`).join("");
+
+  const projects = adminData.projects.filter((project) => project.teachingPlan);
+  $("#plan-review-project").innerHTML = `<option value="">Seleccione una asignatura</option>${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(`${project.subjectCode || "Sin código"} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
+  const programs = adminData.academicPrograms.filter((program) => program.active !== false);
+  $("#career-director-program").innerHTML = `<option value="">Seleccione una carrera</option>${programs.map((program) => `<option value="${escapeHtml(program.id)}">${escapeHtml(`${program.code || ""}${program.code ? " — " : ""}${program.name}`)}</option>`).join("")}`;
+  setSelectOptions($("#career-director-user"), adminData.users.filter((user) => user.active && adminUserHasRole(user, "DIRECTOR")));
+  [
+    ["#plan-review-peer", "REVIEWER"], ["#plan-review-quality", "QUALITY"], ["#plan-review-diitep", "DIITEP"],
+  ].forEach(([selector, role]) => setSelectOptions($(selector), adminData.users.filter((user) => user.active && adminUserHasRole(user, role))));
+
+  const activeVersion = (adminData.teachingPlanIndicatorVersions || []).find((item) => item.status === "ACTIVE");
+  $("#plan-checklist-version-status").textContent = activeVersion
+    ? `Versión activa: ${activeVersion.title} · v${activeVersion.version} · ${activeVersion.indicators.filter((item) => item.active).length} criterios.`
+    : "No existe una versión activa. Cree la lista de cotejo antes de habilitar el proceso.";
+  renderPlanChecklistDraft();
+  renderPlanReviewNotifications();
+}
+
 async function loadAdminDashboard() {
   adminData = await authRequest("/api/admin/dashboard");
   renderKnowledgeScopePickers();
-  const enabledRoles = adminData.roles.filter((role) => ["ADMIN", "TEACHER"].includes(role.code));
-  $("#admin-user-role").innerHTML = `<option value="">Seleccione un rol</option>${enabledRoles.map((role) => `<option value="${role.code}">${escapeHtml(role.name)}</option>`).join("")}`;
-  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderGuideReport();
+  renderAdminRoleSelector();
+  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderPlanReviewAdmin(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderGuideReport();
   $("#checklist-project").innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
 }
 $("#nav-admin").onclick = async () => {
@@ -5552,6 +5800,109 @@ $$("[data-admin-tab]").forEach((button) => {
     $$("[data-admin-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.adminPanel === button.dataset.adminTab));
   };
 });
+$("#plan-review-project")?.addEventListener("change", syncPlanReviewerAssignmentForm);
+$("#career-director-program")?.addEventListener("change", syncCareerDirectorForm);
+
+$("#plan-review-config-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const stages = $$("[data-plan-review-stage]", event.currentTarget).map((row) => ({
+    stage: row.dataset.planReviewStage,
+    enabled: $("[data-stage-enabled]", row).checked,
+    sortOrder: Number($("[data-stage-order]", row).value),
+  }));
+  try {
+    await authRequest("/api/admin/teaching-plan-review/config", {
+      method: "PATCH",
+      body: JSON.stringify({ enabled: $("#plan-review-process-enabled").checked, stages }),
+    });
+    showAdminMessage("Configuración del proceso de revisión guardada.");
+    await loadAdminDashboard();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
+$("#plan-review-assignment-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const projectId = $("#plan-review-project").value;
+  if (!projectId) return showAdminMessage("Seleccione una asignatura.", true);
+  const assignments = [
+    { stage: "PEER", reviewerId: $("#plan-review-peer").value || null },
+    { stage: "QUALITY", reviewerId: $("#plan-review-quality").value || null },
+    { stage: "DIITEP", reviewerId: $("#plan-review-diitep").value || null },
+  ];
+  try {
+    await authRequest(`/api/admin/projects/${encodeURIComponent(projectId)}/teaching-plan-review/assignments`, { method: "PUT", body: JSON.stringify({ assignments }) });
+    showAdminMessage("Responsables de revisión guardados para el Plan Docente.");
+    await loadAdminDashboard();
+    $("#plan-review-project").value = projectId;
+    syncPlanReviewerAssignmentForm();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
+$("#career-director-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const programId = $("#career-director-program").value;
+  if (!programId) return showAdminMessage("Seleccione una carrera.", true);
+  try {
+    await authRequest(`/api/admin/programs/${encodeURIComponent(programId)}/director`, {
+      method: "PUT", body: JSON.stringify({ directorId: $("#career-director-user").value || null }),
+    });
+    showAdminMessage("Director/a de carrera actualizado.");
+    await loadAdminDashboard();
+    $("#career-director-program").value = programId;
+    syncCareerDirectorForm();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
+$("#plan-checklist-add")?.addEventListener("click", () => {
+  const code = $("#plan-checklist-code").value.trim().toUpperCase();
+  const name = $("#plan-checklist-name").value.trim();
+  const description = $("#plan-checklist-description").value.trim();
+  const stage = $("#plan-checklist-stage").value;
+  if (!code || !name || !description) return showAdminMessage("Complete código, nombre y descripción del criterio.", true);
+  if (planChecklistDraft.some((item) => item.code.toUpperCase() === code)) return showAdminMessage("El código del criterio ya está incluido en esta versión.", true);
+  planChecklistDraft.push({ code, name, description, stage, active: true, required: $("#plan-checklist-required").checked });
+  $("#plan-checklist-code").value = "";
+  $("#plan-checklist-name").value = "";
+  $("#plan-checklist-description").value = "";
+  $("#plan-checklist-required").checked = true;
+  renderPlanChecklistDraft();
+});
+
+$("#plan-checklist-draft")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-remove-plan-checklist]");
+  if (!button) return;
+  planChecklistDraft.splice(Number(button.dataset.removePlanChecklist), 1);
+  renderPlanChecklistDraft();
+});
+
+$("#plan-checklist-version-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const title = $("#plan-checklist-title").value.trim();
+  if (!title) return showAdminMessage("Ingrese el título de la versión de la lista de cotejo.", true);
+  if (!planChecklistDraft.length) return showAdminMessage("Agregue al menos un criterio antes de guardar la versión.", true);
+  try {
+    await authRequest("/api/admin/teaching-plan-review/indicator-versions", {
+      method: "POST", body: JSON.stringify({ title, activate: true, indicators: planChecklistDraft }),
+    });
+    planChecklistDraft = [];
+    event.currentTarget.reset();
+    $("#plan-checklist-required").checked = true;
+    showAdminMessage("Nueva versión de la lista de cotejo creada y activada.");
+    await loadAdminDashboard();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
+$("#plan-review-notifications-body")?.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-retry-plan-notification]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const result = await authRequest(`/api/admin/teaching-plan-review/notifications/${encodeURIComponent(button.dataset.retryPlanNotification)}/retry`, { method: "POST", body: "{}" });
+    showAdminMessage(result.status === "SENT" ? "Notificación enviada correctamente." : (result.error || "No fue posible enviar la notificación."), result.status !== "SENT");
+    await loadAdminDashboard();
+  } catch (error) { showAdminMessage(error.message, true); button.disabled = false; }
+});
+
 $("#admin-user-search").oninput = renderAdminUsers;
 $("#catalog-search").oninput = renderCatalogs;
 $("#catalog-kind").onchange = () => resetCatalogForm(true);
@@ -5796,6 +6147,8 @@ $("#catalog-table-body").onclick = async (event) => {
 $("#admin-user-form").onsubmit = async (event) => {
   event.preventDefault();
   const values = Object.fromEntries(new FormData(event.currentTarget));
+  values.roleCodes = selectedAdminRoleCodes();
+  if (!values.roleCodes.length) return showAdminMessage("Seleccione al menos un rol para el usuario.", true);
   if (!values.temporaryPassword) delete values.temporaryPassword;
   try {
     if (values.userId) {
@@ -5812,6 +6165,7 @@ $("#admin-user-form").onsubmit = async (event) => {
 };
 function resetAdminUserForm() {
   $("#admin-user-form").reset(); $("#admin-user-id").value = "";
+  renderAdminRoleSelector([]);
   $("#admin-user-form-title").textContent = "Crear usuario"; $("#admin-user-submit").textContent = "Crear usuario";
   $("#admin-user-cancel").classList.add("hidden");
 }
@@ -5826,7 +6180,7 @@ $("#admin-users-body").onclick = async (event) => {
       form.elements.userId.value = user.id; form.elements.firstName.value = user.firstName;
       form.elements.lastName.value = user.lastName; form.elements.nationalId.value = user.nationalId || "";
       form.elements.email.value = user.email;
-      $("#admin-user-role").value = user.roles[0]?.role.code || "";
+      renderAdminRoleSelector((user.roles || []).map((entry) => entry.role.code));
       $("#admin-user-form-title").textContent = "Editar usuario"; $("#admin-user-submit").textContent = "Guardar cambios";
       $("#admin-user-cancel").classList.remove("hidden"); form.scrollIntoView({ behavior: "smooth" }); return;
     } else if (button.dataset.passwordUser) {

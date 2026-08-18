@@ -41,7 +41,7 @@
     <div class="brand"><span class="brand-mark">◇</span><strong>GGD</strong></div>
     <nav aria-label="Navegación principal">
       <button class="nav active" id="nav-home">⌂ <span>Inicio</span></button>
-      <button class="nav" id="nav-projects">□ <span>Mis asignaturas</span></button>
+      <button class="nav" id="nav-projects">□ <span id="nav-projects-label">Mis asignaturas</span></button>
       <button class="nav hidden" id="nav-admin">⚙ <span>Administración</span></button>
       <button class="nav" id="nav-templates">▤ <span>Plantillas</span></button>
       <button class="nav" id="nav-help">? <span>Ayuda</span></button>
@@ -50,8 +50,8 @@
 
   <main class="workspace">
     <header class="topbar">
-      <div class="product"><i></i>Planes Docentes y Guías Didácticas</div>
-      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Profesor</small></div><button id="change-own-password" class="logout" type="button">Cambiar mi contraseña</button><button id="logout" class="logout" type="button">Salir</button></div>
+      <div class="product"><i></i>Sistema de Gestión Guía didáctica</div>
+      <div class="profile"><span id="profile-initials">—</span><div><strong id="profile-name">Usuario</strong><small id="profile-role">Docente</small></div><label class="work-view-selector hidden" id="work-view-selector"><span>Vista</span><select id="work-view" aria-label="Vista de trabajo"></select></label><button id="change-own-password" class="logout" type="button">Cambiar mi contraseña</button><button id="logout" class="logout" type="button">Salir</button></div>
     </header>
 
     <section class="content" id="main-content">
@@ -77,6 +77,46 @@
       </section>
     </section>
 
+    <section class="content hidden" id="review-content">
+      <div class="heading">
+        <div><p class="eyebrow">Revisión institucional</p><h1 id="review-view-title">Planes pendientes de revisión</h1><p id="review-view-description">Consulte los Planes Docentes asignados a su rol actual.</p></div>
+        <button class="button secondary" id="refresh-review-inbox" type="button">↻ Actualizar revisiones</button>
+      </div>
+      <section class="projects-panel" aria-labelledby="review-inbox-title">
+        <div class="projects-toolbar"><div><h2 id="review-inbox-title">Asignaciones de revisión</h2><p>Las etapas anteriores aprobadas no se reinician cuando una etapa posterior solicita correcciones.</p></div></div>
+        <div id="review-inbox-list" class="projects-list" aria-live="polite"><p class="projects-empty">Seleccione una vista de revisión.</p></div>
+      </section>
+
+      <section class="review-detail hidden" id="review-detail" aria-live="polite">
+        <div class="review-detail-header">
+          <div><p class="eyebrow" id="review-detail-stage">Revisión del Plan Docente</p><h2 id="review-detail-title">Plan Docente</h2><p id="review-detail-meta"></p></div>
+          <button class="button secondary" id="close-review-detail" type="button">Volver a la bandeja</button>
+        </div>
+        <div class="review-detail-grid">
+          <article class="admin-card review-plan-card">
+            <h3>Contenido del Plan Docente</h3>
+            <div id="review-plan-preview" class="review-plan-preview teaching-plan-document review-plan-readonly"></div>
+          </article>
+          <form class="admin-card review-checklist-card" id="teaching-plan-review-form">
+            <h3>Lista de cotejo</h3>
+            <p class="field-help" id="review-checklist-help">Complete todos los criterios antes de aprobar o solicitar correcciones.</p>
+            <div id="review-checklist-items" class="review-checklist-items"></div>
+            <label>Observación general<textarea id="review-general-observation" maxlength="10000" placeholder="Registre una síntesis de la revisión o las correcciones solicitadas."></textarea></label>
+            <div class="review-decision-actions">
+              <button class="button secondary" id="save-review-draft" type="button">Guardar borrador</button>
+              <button class="button review-corrections" id="request-review-changes" type="button">Solicitar correcciones</button>
+              <button class="button approve" id="approve-review-stage" type="button">Aprobar etapa</button>
+            </div>
+            <p id="review-decision-status" class="field-help"></p>
+          </form>
+        </div>
+        <article class="admin-card review-history-card">
+          <h3>Historial de esta etapa</h3>
+          <div id="review-stage-history" class="review-stage-history"></div>
+        </article>
+      </section>
+    </section>
+
     <section class="content hidden" id="admin-content">
       <div class="heading">
         <div><p class="eyebrow">Gestión institucional</p><h1>Administración</h1><p>Usuarios, asignaciones, configuración de IA y seguimiento de guías.</p></div>
@@ -86,6 +126,7 @@
         <button class="active" data-admin-tab="users">Usuarios</button>
         <button data-admin-tab="catalogs">Catálogos académicos</button>
         <button data-admin-tab="assignments">Asignaciones</button>
+        <button data-admin-tab="plan-review">Revisión del Plan</button>
         <button data-admin-tab="knowledge">Conocimiento e IA</button>
         <button data-admin-tab="reports">Reporte de guías</button>
       </div>
@@ -101,7 +142,7 @@
               <label>Cédula<input name="nationalId" required></label>
               <label>Correo<input name="email" type="email" required></label>
             </div>
-            <label>Rol<select name="roleCode" id="admin-user-role" required><option value="">Seleccione un rol</option></select></label>
+            <fieldset class="admin-role-selector"><legend>Roles del usuario</legend><p class="field-help">Una misma cuenta puede tener varias responsabilidades institucionales.</p><div id="admin-user-roles" class="role-checkbox-grid"></div></fieldset>
             <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="8" placeholder="El sistema puede generarla"></label>
             <div class="form-actions"><button class="button" id="admin-user-submit" type="submit">Crear usuario</button><button class="button secondary hidden" id="admin-user-cancel" type="button">Cancelar edición</button></div>
           </form>
@@ -240,6 +281,55 @@
           <button class="button" type="submit">Guardar asignación</button>
         </form>
         <div class="admin-card"><h2>Historial de asignaciones</h2><div id="assignment-list" class="assignment-list"></div></div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="plan-review">
+        <div class="admin-grid">
+          <form class="admin-card" id="plan-review-config-form">
+            <h2>Flujo de revisión del Plan Docente</h2>
+            <p>Active únicamente las etapas que la institución requiera. Los cambios de configuración se aplican a nuevos procesos; los procesos ya iniciados conservan sus responsables y etapas.</p>
+            <label class="confirm"><input id="plan-review-process-enabled" type="checkbox"> Habilitar proceso institucional de revisión y aprobación</label>
+            <div id="plan-review-stage-config" class="review-stage-config"></div>
+            <button class="button" type="submit">Guardar configuración</button>
+          </form>
+          <form class="admin-card" id="career-director-form">
+            <h2>Director/a por carrera</h2>
+            <p>Cada carrera puede tener un solo director activo. La persona seleccionada debe tener el rol Director.</p>
+            <label>Carrera<select id="career-director-program" required></select></label>
+            <label>Director/a<select id="career-director-user"><option value="">Sin asignar</option></select></label>
+            <button class="button" type="submit">Guardar director/a</button>
+          </form>
+        </div>
+        <div class="admin-grid">
+          <form class="admin-card" id="plan-review-assignment-form">
+            <h2>Responsables por Plan Docente</h2>
+            <p>Asigne Par académico, Equipo de calidad y DIITEP. La Dirección de carrera se obtiene automáticamente de la carrera.</p>
+            <label>Asignatura<select id="plan-review-project" required></select></label>
+            <label>Par académico<select id="plan-review-peer"><option value="">Sin asignar</option></select></label>
+            <label>Equipo de calidad<select id="plan-review-quality"><option value="">Sin asignar</option></select></label>
+            <label>DIITEP<select id="plan-review-diitep"><option value="">Sin asignar</option></select></label>
+            <button class="button" type="submit">Guardar responsables</button>
+          </form>
+          <form class="admin-card" id="plan-checklist-version-form">
+            <h2>Lista de cotejo del Plan Docente</h2>
+            <p id="plan-checklist-version-status">No existe una versión activa.</p>
+            <label>Título de la versión<input id="plan-checklist-title" maxlength="200" placeholder="Ej. Lista de cotejo institucional 2026"></label>
+            <div class="checklist-builder-toolbar">
+              <label>Etapa<select id="plan-checklist-stage"><option value="PEER">Par académico</option><option value="QUALITY">Equipo de calidad</option><option value="DIITEP">DIITEP</option><option value="DIRECTOR">Dirección de carrera</option></select></label>
+              <label>Código<input id="plan-checklist-code" maxlength="50" placeholder="PA-01"></label>
+            </div>
+            <label>Nombre<input id="plan-checklist-name" maxlength="250"></label>
+            <label>Descripción<textarea id="plan-checklist-description" maxlength="3000"></textarea></label>
+            <label class="confirm"><input id="plan-checklist-required" type="checkbox" checked> Criterio obligatorio</label>
+            <button class="button secondary" id="plan-checklist-add" type="button">Agregar criterio</button>
+            <div id="plan-checklist-draft" class="checklist-draft"></div>
+            <button class="button" type="submit">Guardar y activar nueva versión</button>
+          </form>
+        </div>
+        <div class="admin-card">
+          <div class="table-toolbar"><div><h2>Notificaciones del proceso</h2><p class="field-help">Se muestran las 100 notificaciones más recientes. Un fallo de correo no invalida la decisión académica y puede reintentarse.</p></div></div>
+          <div class="table-scroll"><table class="admin-table"><thead><tr><th>Plan Docente</th><th>Destinatario</th><th>Evento</th><th>Estado</th><th>Fecha</th><th>Acción</th></tr></thead><tbody id="plan-review-notifications-body"></tbody></table></div>
+        </div>
       </section>
 
       <section class="admin-panel" data-admin-panel="knowledge">

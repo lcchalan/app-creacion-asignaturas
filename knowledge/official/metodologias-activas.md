@@ -1,0 +1,1076 @@
+Metodologías activas seleccionadas
+
+A continuación, se enlistan las metodologías activas que deben ser consideradas para aplicarse en el desarrollo de las diferentes asignaturas, según sea su naturaleza:
+
+M1. Aprendizaje orientado a Proyectos
+M2. Aprendizaje basado en Problemas
+M3. Aprendizaje basado en Investigación/Indagación
+M4. Aprendizaje Servicio
+M5. Aprendizaje Colaborativo
+M6. Aprendizaje experiencial
+M7. Aprendizaje Cooperativo
+M8. Aprendizaje basado en Casos
+M9. Aula Invertida (Flipped Classroom).
+M10. Gamificación.
+M11. Aprendizaje basado en Retos - Design Thinking
+M12. Aprendizaje basado en preguntas para la comprensión (IA)
+
+Descripción de las metodologías activas
+
+M1. Aprendizaje Orientado a Proyectos (AOP)
+
+El AOP, también conocido como aprendizaje basado en proyectos, busca que los estudiantes desarrollen un proyecto para resolver un problema en un tiempo determinado. El AOP integra la teoría con la práctica y el trabajo cooperativo (Vargas Vargas et al., 2020). Para llevar a cabo el proyecto, se debe planificar, diseñar y ejecutar actividades, a partir del desarrollo y aplicación de aprendizajes adquiridos, del uso efectivo de recursos (García-Peñalvo et al., 2018) y de la reflexión (Servicio de Innovación Educativa de la UPM, 2008). Además, permite a los docentes orientar el proceso formativo con herramientas tecnológicas innovadoras y a su vez realza el papel de los estudiantes como agentes activos del aprendizaje (García Martín y Pérez Martínes, 2017).
+
+
+El AOP promueve un aprendizaje activo donde los estudiantes investigan, colaboran y aplican conocimientos prácticos en contextos auténticos. Morales Bueno (2018) sostiene que involucrar al estudiante en proyectos complejos y significativos permiten el desarrollo integral de sus capacidades, actitudes y valores, lo que va en sintonía con Gomez-Pablos (2018) quien señala que es una metodología clave en la preparación integral, critica e investigadora del estudiante. Díaz (2006) define cuatro fases: (1) información, (2) planificación, (3) realización y (4) evaluación. Así también, la Dirección de investigación y desarrollo educativo del TEC de Monterrey, menciona que, esta metodología desarrolla en los estudiantes las competencias de manejo de diversas fuentes de información, necesarias para la resolución del problema y consecución del proyecto. Se puede determinar que, las competencias que fomenta el AOP son trabajo en equipo y colaborativo, de investigación o indagación, aprendizaje autónomo, pensamiento crítico y manejo de información.
+
+
+A continuación, se presenta de manera gráfica las fases del AOP propuestas por Díaz (2006), las que van en sintonía con las propuestas por el Servicio de Innovación Educativa de la UPM (2008).
+
+Fases del AOP
+
+Fase 1. Información:
+     •Los estudiantes comprenden el proyecto, identifican la problemática, investigan información necesaria para la resolución del proyecto.
+Fase2. Planificación:
+     •Los estudiantes elaboran el plan de trabajo para la consecución del proyecto, definen la metodología a seguir y analizan las posibles soluciones.
+Fase 3. Realización
+     •Una vez identificado el problema, los estudiantes desarrollan el proyecto. Esta fase supone la acción experimental e investigadora.
+Fase 4. Evaluación:
+     •Los estudiantes presentan los resultados del proyecto (informe final) al docente.
+
+Nota: Datos obtenidos de García-Peñalvo et al. (2018)
+
+
+Características
+ •    Los alumnos trabajan coordinadamente en grupo y también de manera autónoma, asumen mayor compromiso y responsabilidad al trabajar en equipo en la consecución del proyecto.
+ •    El AOP exige que los estudiantes estén mayormente activos, interactuando con sus compañeros, contrastando opiniones.
+ •    El planteamiento de un proyecto se lo puede realizar desde distintas áreas potenciando la interdisciplinariedad, tanto para el estudiante como para los docentes.
+ •    Cuando los estudiantes resuelven problemas de la vida real aumenta su compromiso y motivación por aprender.
+ •    Entre los aprendizajes que fomenta están la identificación, análisis y evaluación de problemas.
+
+Ventajas
+ •    Se impulsa la interdisciplinariedad.
+ •    Parte de un problema real, por lo que, cuando los estudiantes resuelven problemas de la vida real aumentan su motivación por aprender.
+ •    Favorece el compromiso de aprendizaje de manera autónoma y de grupo.
+ •    Fomenta formas de aprendizaje investigador.
+ •   El docente puede conocer los avances del proyecto por fase y reconducirlos si fuera el caso.
+ •   El acompañamiento progresivo del docente motivará a los estudiantes a continuar con su compromiso en el proyecto y a no sentirse solos, disminuyendo las posibilidades de abandono.
+
+
+Ejemplo. Proyecto de sostenibilidad, donde los estudiantes investigan el impacto de la
+contaminación en su comunidad y proponen soluciones innovadoras para reducirla.
+
+Competencias:
+ •   Trabajo en equipo y colaborativo
+ •   Liderazgo
+ •   Investigación o indagación
+ •   Aprendizaje autónomo
+ •   Pensamiento crítico
+ •   Escucha activa
+ •   Manejo de fuentes de información
+ •   Comunicación o expresión oral y escrita
+ •   Manejo del tiempo
+ •   Toma de decisiones
+
+Metodología:
+
+Preparación (planificación del docente)
+
+     ▪   Definir los objetivos y los conocimientos que lograrán los estudiantes, así como las temáticas que abordarán.
+     ▪   Definir las actividades a realizar en el proyecto y los recursos a utilizar: libros, artículos, bases de datos, etc.
+     ▪   Determinar las instrucciones a seguir para el desarrollo del proyecto y del proceso metodológico.
+     ▪   Conformar los grupos de trabajo.
+     ▪   Elaborar el cronograma de actividades (fechas de entrega)
+     ▪   Seleccionar las herramientas de comunicación y definición del plan de asesorías/tutorías individuales/grupales: fechas, horas, medios tecnológicos, espacios físicos.
+     ▪     Definir e identificar los productos resultantes del proyecto: prototipos, presentaciones, exposiciones.
+     ▪     Establecer el sistema de evaluación del proyecto: criterios de evaluación, porcentajes de calificación, momentos de evaluación.
+
+
+Ejecución (desarrollo)
+
+     Actividades del docente
+
+    ✓    El docente presenta a los estudiantes lo planificado en la fase de preparación.
+    ✓    Monitorea el desarrollo del proyecto observando los aspectos positivos y negativos, proporciona recursos a lo largo del proyecto desde el proceso hasta el producto.
+    ✓    Facilita el aprendizaje, anima y refuerza el trabajo de los estudiantes, apoya en la distribución de roles, en la resolución de conflictos (siempre que no puedan resolver los estudiantes).
+    ✓    Asesora y retroalimenta especialmente en las fases de planificación, realización y evaluación.
+    ✓    Promueve la toma de decisiones en grupo a través de consensos.
+    ✓    Evalúa en función de los entregables (resultados) y aprendizajes adquiridos.
+
+     Actividades del estudiante
+
+     Siguiendo las fases establecidas por Díaz (2006):
+    ✓    Información: el estudiante entiende el proyecto, identifica la problemática, recopila, revisa y analiza la información de manera individual y grupal para la realización del proyecto
+    ✓    Planificación: una vez entendido el proyecto, identificado el problema, planea el trabajo, las tareas a realizar de manera individual y grupal, así también, en función del cronograma general establece uno específico. Define el procedimiento metodológico y los medios de trabajo, identifica/elabora los instrumentos, analiza las posibles soluciones para la consecución del resultado.
+    ✓    Realización: investiga y desarrolla el proyecto y entregables en función del cronograma, administrando el tiempo. Implica la 11 acción experimental e investigadora, por lo que elabora el informe del proyecto que evidencia los aprendizajes. Se reúne con el profesor para aclarar dudas.
+    ✓    Evaluación: presenta y difunde los resultados, mediante: informe, prototipos, servicios, exposiciones.
+
+Evaluación
+
+     La evaluación puede ser individual o grupal. se puede aplicar:
+     ▪     Por cada entregable de acuerdo con el cronograma establecido.
+     ▪     Al momento de la entrega del informe final.
+     ▪     Exposición del informe: de manera individual o grupal.
+     Los Instrumentos que pueden apoyar la evaluación de un proyecto son:
+     ▪     Rúbrica
+     ▪     Lista de cotejo
+     ▪     Guía de observación
+     ▪     Coevaluación
+
+M2. Aprendizaje Basado en Problemas (ABP)
+
+Es una metodología activa centrada en el aprendizaje, en la investigación y reflexión que los
+estudiantes siguen para resolver un problema planteado por el profesor (real o ficticia). El ABP permite que los estudiantes puedan construir su aprendizaje a partir de la resolución de problemas reales; por lo que, el punto de partida de esta metodología de aprendizaje es el problema (Barrows, 1986). Díaz (2006) sostiene que el problema es diseñado o planteado por el profesor para que el estudiante lo resuelva y, con ello, desarrolle competencias, dejando en evidencia que el alumno es el protagonista de su aprendizaje, lo que va en sintonía con lo señalado por Prieto (2006) acerca de que el alumno es quien asume la responsabilidad de ser parte activa de su aprendizaje.
+
+El ABP desarrolla competencias como resolución de problemas, toma de decisiones, trabajo en equipo, de comunicación (García-Peñalvo et al., 2018), así también, la del pensamiento crítico (Morales Bueno, 2018) la que se da cuando el estudiante analiza situaciones complejas, formula preguntas, evalúa y cuestiona información; y propone soluciones fundamentadas. Otras competencias que desarrolla son las del razonamiento eficaz y la creatividad (Benito y Cruz, 2005) y la de manejo de información (Servicio de Innovación Educativa de la UPM, 2008).
+
+Características
+
+ •   Los estudiantes pueden trabajar en grupos pequeños, de esta manera se puede asumir con mayor responsabilidad lxos objetivos del problema a resolver, además, es más manejable la resolución de posibles conflictos que puedan surgir en la consecución de la solución al problema.
+ •   Cuando los estudiantes resuelven problemas de la vida real aumenta su compromiso y motivación por aprender.
+ •   Con base en esta metodología se puede planificar, una actividad, una asignatura o incluso el currículo de una carrera.
+ •   Se pueden interrelacionar distintas materias o áreas de conocimiento.
+
+Ventajas
+
+ •   Presencia del profesor.
+ •   Facilita el entrenamiento en resolución de problemas.
+ •   Promueve el trabajo autónomo y colaborativo.
+ •   Incrementa la motivación por buscar la solución al problema.
+
+Ejemplo. En medicina, los estudiantes analizan casos clínicos reales para diagnosticar y proponer tratamientos, esto consolida los conocimientos teóricos y habilidades prácticas.
+
+Competencias:
+
+ •   Resolución de problemas
+ •   Toma de decisiones
+ •   Trabajo en equipo
+ •   Comunicación: argumentación y presentación de la información
+ •   Pensamiento crítico
+
+Metodología:
+
+Preparación (Planificación del docente):
+
+      •   Seleccionar el objetivo o resultado de aprendizaje a alcanzar con la actividad, el que debe estar enmarcado en las competencias de la asignatura.
+      •   Decidir la situación problema que se va a resolver y sobre la cual los estudiantes tienen  que trabajar. Este problema debe ser relevante y complejo, para que los estudiantes se  motiven a encontrar la solución y aborden la problemática con una visión de conjunto.
+      •   Definir las reglas de la actividad, establecer los roles que cada integrante del equipo va  a ejecutar, establecer las actividades del equipo.
+      •   Seleccionar el material o los recursos necesarios para presentar el problema.
+      •   Establecer el tiempo de duración de la actividad, los momentos en compañía con el  docente y los momentos de trabajo de grupo o autónomo. Esto es muy importante a  considerar, cuidando que el tiempo de desarrollo de la actividad mantenga motivados a  los estudiantes y permita en los momentos de contacto con el docente aclarar ciertas  dudas.
+      •   Establecer tutorías u horarios de atención y seguimiento al estudiante para conocer los  avances, para orientar de manera individual o grupal a los alumnos.
+      •   Organizar la presentación de las distintas soluciones al problema planteado por parte  de los estudiantes y moderar la exposición.
+
+Ejecución (Desarrollo):
+
+     Actividades del docente
+     ▪    El docente expone a los estudiantes todo lo planificado en la fase de preparación.
+
+     Actividades del estudiante
+     •    Para la ejecución del proceso Morales y Landa (2004) recomiendan las siguientes  actividades a seguir para que los estudiantes participen del ABP:
+          ▪    Los estudiantes leen y analizan el escenario problema.
+          ▪    Toman conciencia de la situación a la que se enfrentan, para ello, pueden realizar una lluvia de ideas, hacer una lista con aquello que conocen, otra lista con aquello que desconocen, y, finalmente, una lista de aquello que necesitan hacer para resolver el problema.
+          ▪    Finalmente, definen el problema.
+          ▪    Llevan a cabo la tarea asignada de manera individual, recabando información que contribuya a la resolución del problema.
+          ▪    Los estudiantes socializan lo encontrado de manera individual al grupo y escriben el informe final de resultados como solución al problema.
+
+Evaluación:
+
+     La evaluación se puede dar en tres momentos
+     •    Mientras se hace el seguimiento
+     •    En el análisis del informe final entregado por el grupo
+     •    Valoración a la exposición del grupo sobre el trabajo
+
+     Los instrumentos a utilizar para evaluar el ABP podrían ser:
+     •    Rúbrica
+     •    Observación
+     •    Cuestionario
+     •    Autoevaluación
+     •    Coevaluación
+
+M3. Aprendizaje Basado en la Investigación (ABI)
+
+Constituye una metodología centrada en el estudiante, promoviendo la curiosidad y el pensamiento crítico mediante su participación en la formulación de preguntas y la búsqueda activa de respuestas. Su objetivo es vincular la investigación al proceso de enseñanza aprendizaje, desarrollando en los estudiantes habilidades de análisis, reflexión y argumentación (Observatorio TEC, 2021). En este contexto, el rol del docente se enfoca en la orientación y supervisión del proceso investigativo (Servicio de Innovación Educativa de la UPM, 2020). El ABI permite a los estudiantes descubrir nuevas ideas, explicar sus opiniones de manera argumentada, aplicar teorías adquiridas a problemas prácticos y descubrir nuevos caminos para su aprendizaje (Rivadeneira y Silva, 2017).
+
+El proceso del ABI sigue una serie de etapas que incluyen la identificación del problema, la formulación de la pregunta de investigación, la revisión de literatura, la definición de estrategias metodológicas y la obtención y análisis de resultados (Levy y Petrulis, 2012). Por otra parte, Vasilachis (2006) menciona que el estudiante realiza las siguientes tareas para desarrollar el ABI: identifica un problema, formula preguntas de investigación, realiza una investigación exploratoria, interpreta y comunica los resultados.
+
+Figura 3
+
+Etapas de desarrollo del ABI
+
+Nota. Datos tomados de Levy y Petrulis (2012).
+
+Características
+
+EL ABI permite describir, comparar, evaluar, explicar o predecir, diseñar o desarrollar, dependiendo del propósito de la investigación y la metodología aplicada.
+
+ • La investigación puede integrarse de distintas maneras:
+     ▪    Como estrategia didáctica en la acción docente.
+     ▪    Como un componente distintivo de un programa curricular.
+     ▪    Como complemento de una actividad específica dentro de un plan de enseñanza.
+
+Ventajas
+
+Son numerosas las bondades del ABI en el proceso de enseñanza y aprendizaje. A continuación, se detallan algunas:
+ •   Permite que los estudiantes construyan conocimientos basados en la experiencia práctica, el aprendizaje autónomo y el trabajo colaborativo.
+ •   Los estudiantes se convierten en investigadores y desarrollan una responsabilidad compartida con sus docentes.
+ •   Permite la colaboración más allá del aula, por ejemplo, entre asignaturas y/o entidades.
+ •   Promueve un conocimiento innovador a través de la interdisciplinaridad.
+
+Ejemplo. El impacto del uso excesivo de redes sociales en el bienestar emocional de los estudiantes universitarios.
+
+Competencias
+
+ •    Aprendizaje autónomo
+ •    Trabajo colaborativo
+ •    Pensamiento crítico
+ •    Análisis
+ •    Reflexión
+ •    Argumentación
+ •    Comunicación
+ •    Investigación
+
+Metodología en el aula
+
+Preparación (planificación del docente)
+
+ •    El docente selecciona, junto con los estudiantes o de forma anticipada, un tema significativo que esté alineado con los objetivos del curso y que despierte interés y curiosidad investigativa.
+ •    Planificar las posibles preguntas y objetivos de investigación.
+ •    Elegir la metodología de investigación más adecuada para abordar el problema.
+ •    Establecer los criterios de evaluación de la investigación, porcentajes de calificación, momentos de evaluación.
+
+Ejecución (desarrollo)
+
+     Actividades del docente
+
+      •    El docente presenta a los estudiantes lo planificado en la fase de preparación.
+      •    Facilita el proceso de investigación, proporcionando recursos y apoyo a los estudiantes.
+      •    Orienta a los estudiantes en la toma de decisiones y en la resolución de problemas que puedan surgir durante el proceso de investigación.
+      •    Guía a los estudiantes hacia los recursos y las estrategias de investigación más adecuadas.
+      •    Evalúa en función de los entregables (resultados) y aprendizajes adquiridos
+
+     Actividades del estudiante
+
+     Según Vasilachis (2006) se describen las siguientes tareas que realiza un estudiante durante este proceso:
+      •       El estudiante elige el tema o problema que sea relevante para investigar.
+      •       Plantea una o varias preguntas abiertas que guíen su proceso de indagación.
+      •       Consulta fuentes académicas confiables para conocer los antecedentes, teorías y hallazgos relacionados con el tema.
+      •       Selecciona las estrategias de recolección de datos más adecuadas (entrevistas, observaciones, etc.).
+      •       Interpreta la información recopilada y analizada que le permita responder a las preguntas de investigación.
+      •       Presenta los resultados de la investigación en un informe de forma clara y argumentada, destacando los hallazgos de la investigación.
+
+Evaluación
+
+     En cuanto a la evaluación se ofrecen ejemplos como:
+      •       Etapa diagnóstica: entrega de ensayo de aproximación al tema (opinión).
+      •       Etapa formativa: entrega de avances de investigación.
+      •       Etapa sumativa: defensa de la investigación y participación en debates.
+
+     Se recomienda en los tres casos la elaboración de una rúbrica para tener claro aquello que se va a evaluar y para evaluar en todos los estudiantes los mismos aspectos.
+
+     Los instrumentos que se pueden utilizar para evaluar el ABI son:
+     •    Rúbricas
+     •    Lista de cotejo
+     •    Guía de observación
+     •    Entrevista
+
+M4. Aprendizaje- Servicio
+
+El AS se define como una metodología que articula una estrategia educativa con la teoría y
+la acción, permitiendo a los estudiantes aplicar los conocimientos adquiridos en el aula para atender necesidades concretas de la comunidad (Puig et al., 2017). Promueve un aprendizaje significativo, en el cual no solo se adquieren conocimientos, sino que se aplica en situaciones reales, fortaleciendo así la capacidad de resolución de problemas y el pensamiento crítico (Batlle, 2020).
+
+Gottlieb y Robinson (2006) consideran que el Aprendizaje-Servicio puede plantearse como la combinación de instrucción en el aula con servicio comunitario, enfocada en el pensamiento crítico y reflexivo, así como en la responsabilidad personal y cívica. En este contexto, los estudiantes se involucran en actividades orientadas a atender necesidades identificadas a nivel local y comunitario, al tiempo que desarrollan habilidades académicas y fortalecen su compromiso con la comunidad.
+
+Tomando como referencia a Batlle (2018), se consideran los siguientes bloques para desarrollar un proyecto de AS.
+ •    Preparación: proceso previo que debería tener claro el docente antes de plantear el proyecto a osl estudiantes.
+ •    Realización: proceso de preparación, ejecución y cierre del proyecto que desarrolla el grupo de la clase.
+ •    Evaluación: proceso posterior de análisis del proyecto realizado y sus resultados educativos y sociales que lleva a cabo el docente.
+
+Estos bloques pueden desglosarse en etapas, tal como se visualiza en la siguiente figura:
+
+Figura 4
+
+Bloques para desarrollar un proyecto de AS
+Nota. Datos tomados de Batlle (2018).
+
+Características
+
+El Aprendizaje Servicio presenta varias características fundamentales:
+ •       El protagonismo activo recae en los estudiantes, con el acompañamiento y apoyo del equipo docente.
+ •       El aprendizaje es activo y experiencial, ya que los estudiantes participan en proyectos comunitarios que permiten conectar la teoría con la práctica.
+ •       Fomenta el trabajo en equipo y la colaboración entre estudiantes, docentes y miembros de la comunidad, fortaleciendo los vínculos sociales y el trabajo conjunto.
+ •       El AS integra diferentes áreas del conocimiento, permitiendo un aprendizaje más amplio e interdisciplinario.
+
+Ventajas
+
+Entre las principales ventajas del Aprendizaje-Servicio se encuentran:
+ •       Permite la aplicación de conocimientos académicos en contextos reales, consolidando así el aprendizaje y mejorando la comprensión del contenido.
+ •       La experiencia directa y la participación activa hacen que el aprendizaje sea más significativo y duradero.
+ •       Fomenta la reflexión y el pensamiento crítico, promoviendo un papel activo y reflexivo en la toma de decisiones.
+ •       Introduce prácticas pedagógicas innovadoras que enriquecen el proceso educativo y promueven una educación más participativa y comprometida.
+
+Ejemplos:
+
+     •    Los estudiantes de la carrera de Educación diseñan e implementan programas de  alfabetización dirigidos a comunidades en situación de vulnerabilidad. A través de esta  iniciativa, aplican sus conocimientos pedagógicos en un entorno real, promoviendo el  acceso a la educación y el desarrollo social
+     •    Los estudiantes de la carrera de Derecho organizan y desarrollan jornadas de  orientación legal en comunidades vulnerables, brindando asesoría sobre temas  básicos de derecho civil, laboral y de familia. Esta actividad les permite aplicar sus  conocimientos en un contexto real, desarrollar habilidades profesionales y fomentar el  acceso a la justicia en sectores con recursos limitados.
+
+Competencias
+ •   Trabajo en equipo
+ •   Toma de decisiones
+ •   Habilidades interpersonales
+ •   Pensamiento crítico
+ •   Empatía y conciencia social
+ •   Resolución de problemas
+
+Metodología en el aula
+
+Preparación (planificación del docente):
+
+Siguiendo las fases establecidas por Batlle (2018):
+
+ •   Identificar la necesidad social que podrían atender los estudiantes.
+ •   Determinar las instituciones o comunidades que puedan beneficiarse del servicio y que
+     puedan colaborar en el proyecto.
+ •   Planificar el proyecto.
+ •   Realizar un cronograma de actividades, asignación de roles y responsabilidades a los estudiantes, y definición de los recursos necesarios.
+ •   Especificar la gestión del proyecto: calendarización, horarios, materiales, recursos, evaluación, etc.
+
+Ejecución
+
+     Actividades del docente
+
+      •   El docente guía la definición de los objetivos del proyecto, el tipo de servicio a realizar,
+          los aprendizajes esperados y las estrategias de enseñanza-aprendizaje.
+      •   Realiza un cronograma de actividades, asigna roles y responsabilidades a los estudiantes, y define los recursos necesarios.
+      •   Busca instituciones o comunidades que puedan beneficiarse del servicio y que puedan colaborar en el proyecto.
+      •   Acompaña a los estudiantes durante la ejecución del proyecto, brindando retroalimentación, orientación y apoyo.
+      •   Al terminar el proyecto, el docente guía a los estudiantes en la reflexión sobre los aprendizajes adquiridos, el impacto del servicio y los desafíos enfrentados, fomentando la autoevaluación y la evaluación del proyecto en su conjunto.
+
+     Actividades del estudiante
+
+     Consideraciones durante la implementación del servicio:
+      •    Participa en la identificación de necesidades de la comunidad, objetivos del proyecto, la planificación de las actividades y la selección de los recursos necesarios.
+      •    Colabora en equipo con sus pares y con miembros de la comunidad o población beneficiaria.
+      •    Documenta evidencias del proceso mediante registros fotográficos, diarios de campo, testimonios, entre otros.
+      •    Evalúa el impacto del proyecto en la comunidad, los logros alcanzados y los desafíos enfrentados.
+
+Evaluación
+
+Puig et al. (2008) proponen una evaluación multifocal que, desde el inicio y hasta el final, esté presente en el proceso de AS.
+
+Esta evaluación tiene cuatro focos principales:
+ •    Evaluación del grupo y sus miembros.
+ •    Evaluación del trabajo en red.
+ •    Evaluación de la experiencia.
+ •    Autoevaluación.
+
+Para la autoevaluación, es un recurso excelente la creación de registros a modo de portafolio
+Los instrumentos a utilizar para evaluar el AS pueden ser:
+ •    Rúbricas
+ •    Portafolios
+ •    Diarios de reflexión
+ •    Grupos focales
+
+M5. Aprendizaje Colaborativo
+
+El Aprendizaje Colaborativo implica que un grupo de personas realice actividades conjuntas
+hacia un objetivo común, compartiendo conocimientos y responsabilidades. Vargas et al. (2020) mencionan que el aprendizaje colaborativo es el trabajo en grupos heterogéneos, grupos pequeños que propician el diálogo, es decir, no es espontáneo porque debe existir una intención para el logro del objetivo; asimismo, Roselli (2016) determina que la colaboración es un proceso colectivo desde el inicio, donde todos intervienen conjuntamente en la realización de la tarea. Por su parte González et al. (n.d.) determinan que el propósito del aprendizaje colaborativo es contribuir a que el estudiante sea cada vez más consciente de las fronteras existentes entre las diversas comunidades de conocimiento especializado, al cual estará expuesto durante su formación universitaria.
+
+Características
+
+ •   Flexibilidad: estimula la creatividad.
+ •   Preparación: requiere de una preparación menos avanzada para trabajar con grupos de estudiantes.
+ •   Asumir responsabilidades: se da una división de tareas para posteriormente integrarlo para la consecución de los objetivos, la motivación es extrínseca.
+ •   Participación o aportación: los estudiantes deben dudar de las respuestas.
+ •   Participación del profesor: se comparte la responsabilidad, el conocimiento se construye de forma grupal. El profesor da las bases (Osalde Rodríguez, 2015).
+
+Ventajas
+
+De acuerdo con Murillo Luna y Sánchez Lajusticia (2013), se pueden mencionar:
+ •   Enriquecer el trabajo con más variedad de ideas y puntos de vista.
+ •   Dividir el trabajo y ahorrar tiempo.
+ •   Relacionarse y conocer a los compañeros/as de clase.
+ •   Aprender a debatir, respetar otras opiniones, ceder y resolver conflictos.
+ •   Aprender a trabajar en equipo.
+ •   Aprender de los compañeros/as.
+ •   Desinhibirse y ganar confianza en uno/a mismo/a.
+ •   Aproximarse a situaciones más reales del mercado laboral.
+
+Ejemplos
+ •   Proyectos en el aula: presentación grupal sobre cambio climático.
+ •   Foros en línea: discusión en plataformas educativas.
+ •   Resolución de problemas: explicación mutua de matemáticas.
+ •   Talleres prácticos: construcción de un robot en equipo.
+ •   Estudio de casos: análisis grupal de un caso empresarial.
+
+Competencias
+
+ •   Pensamiento crítico
+ •   Resolución de problemas
+ •   Comunicación
+ •   Trabajo en grupo
+
+Metodología
+
+Preparación (planificación del docente):
+
+El profesor actúa como facilitador y diseñador del proceso, asegurando que las condiciones para el aprendizaje colaborativo sean óptimas. Las actividades a realizar son:
+ •    Diseñar la actividad colaborativa.
+ •    Crear equipos heterogéneos considerando habilidades, personalidades o intereses para maximizar la diversidad y el aprendizaje.
+ •    Asignar roles rotativos (coordinador, portavoz, registrador, etc.) para fomentar la responsabilidad individual y grupal.
+ •    Preparar el entorno y recursos.
+ •    Establecer criterios de evaluación.
+
+Ejecución (desarrollo)
+
+Las fases del aprendizaje colaborativo, según diversos autores como Johnson y Johnson (1994) y Slavin (1995), suelen estructurarse en etapas que fomentan la interacción, la cooperación y el logro de objetivos comunes. Aunque los nombres y detalles pueden variar,
+las fases más comunes son:
+ 1.   Formación del grupo y cohesión: se crean equipos heterogéneos (en habilidades, intereses o características). Se establecen normas, roles y objetivos claros para promover confianza y un ambiente de respeto.
+ 2.   Definición de objetivos y tareas: se plantea un propósito común que requiere la contribución de todos los miembros. Se dividen las tareas de forma equitativa, asegurando interdependencia positiva. Se clarifican las expectativas y los criterios de evaluación.
+ 3.   Interacción y colaboración: los miembros trabajan juntos, compartiendo ideas, recursos y resolviendo problemas. Se fomenta la comunicación efectiva y habilidades sociales (escucha activa, respeto, negociación).
+ 4.   Resolución y producción: el grupo integra aportes individuales para crear un producto o solución colectiva. Se aplican estrategias de toma de decisiones y resolución de conflictos.
+ 5.   Evaluación y reflexión: se evalúa tanto el producto final como el proceso colaborativo (autoevaluación, coevaluación y evaluación del profesor). Se reflexiona sobre lo aprendido, las dinámicas grupales y las mejoras posibles.
+ 6.   Cierre y reconocimiento: se celebra el esfuerzo colectivo y los logros alcanzados. Se refuerza la importancia del trabajo en equipo para futuros aprendizajes.
+
+Actividades de los estudiantes
+
+Los estudiantes cocrean conocimiento mediante la interacción libre y el aporte mutuo.
+
+ 1.      Participación activa en las tareas asignadas: cumplen su rol específico, contribuyen con ideas y realizan las tareas individuales.
+ 2.      Comunicación y diálogo con el grupo: expresan sus ideas y opiniones, practican la escucha activa, aportan y reciben retroalimentación de sus aportes.
+ 3.      Colaboración y trabajo en equipo: trabajan en conjunto con sus compañeros, participan en la resolución de la actividad, apoyan si otros miembros del grupo tienen dificultades.
+ 4.      Resolución de problemas y conflictos: producción e integración del trabajo
+ 5.      Gestión del tiempo y organización: respetan los plazos establecidos para las tareas individuales y grupales, coordinándose con el equipo.
+ 6.      Aplicación de habilidades sociales: demuestran respeto, empatía, paciencia y tolerancia en las interacciones con sus compañeros.
+ 7.      Producción e integración del trabajo: participan en la creación, revisión o presentación del entregable grupal.
+
+Evaluación
+
+Con respecto a la evaluación, los profesores como instructores necesitan conducir tres tipos de evaluaciones:
+ •       Diagnóstica: evaluar el nivel actual de conocimientos y habilidades de los estudiantes.
+ •       Formativa: monitorear el progreso en el logro de los objetivos, identificando fortalezas y áreas de mejora.
+ •       Sumativa: proveer datos para juzgar el nivel final del aprendizaje de los estudiantes.
+
+La evaluación se centra en el proceso de colaboración y la calidad de las ideas generadas. Se observa cómo los estudiantes escuchan, aportan y construyen juntos, no solo el resultado final.
+
+Instrumentos que se pueden utilizar:
+ •    Rúbricas
+ •    Listas de cotejo
+ •    Guías de observación
+ •    Cuestionarios para autoevaluación y coevaluación.
+ •    Escalas de Valoración grupal
+ •    Portafolios
+
+M6. Aprendizaje Experiencial
+
+El Aprendizaje Experiencial ocurre a través de la experiencia directa y la reflexión. Kolb (1984)
+lo define como "el proceso mediante el cual el conocimiento se crea a través de la
+transformación de la experiencia" (p. 38). Beard y Wilson (2018) lo describen como un
+enfoque con carácter holístico que conecta de forma directa la experiencia con el aprendizaje
+significativo.
+Características
+
+ •    Enfoque práctico: actividades reales o simuladas.
+ •    Ciclo reflexivo: experiencia, reflexión, conceptualización y aplicación.
+ •    Participación activa
+ •    Conexión con la realidad: contextos auténticos.
+ •    Adaptabilidad: ajustable a distintos estilos.
+ •    Énfasis en el proceso: valora la reflexión.
+
+Ventajas
+
+ •    Aprendizaje significativo: "La experiencia mejora la retención".
+ •    Habilidades prácticas: competencias aplicables.
+ •    Motivación intrínseca: genera interés.
+ •    Flexibilidad: aplicable en diversos contextos.
+ •    Pensamiento crítico: "La reflexión estimula el análisis".
+ •    Transferencia de conocimientos: útil en nuevas situaciones.
+
+Ejemplos
+ •    Pasantías: diagnóstico médico con reflexión.
+ •    Simulaciones: gestión de una empresa ficticia.
+ •    Proyectos al aire libre: construcción de un refugio.
+ •    Talleres artísticos: experimentación con pintura.
+ •   Estudio de casos prácticos: diseño y prueba de un puente.
+
+Competencias
+
+ •   Pensamiento crítico
+ •   Resolución de problemas
+ •   Comunicación
+ •   Trabajo en grupo
+
+Metodología
+
+Preparación (planificación del docente):
+
+En el aprendizaje experiencial, la planificación del docente no se centra solo en transmitir conocimientos, sino en diseñar experiencias significativas que permitan a los estudiantes aprender haciendo.
+El profesor actúa como facilitador, diseñador de experiencias y guía reflexiva, asegurando que las actividades sean significativas y conduzcan al aprendizaje:
+
+ •   Diseño de la experiencia: crea actividades prácticas que sean relevantes, desafiantes y conectadas con los objetivos de aprendizaje. Asegura que la experiencia sea accesible y adecuada al nivel de los estudiantes.
+ •   Contexto y orientación: explica el propósito de la actividad y su relevancia para motivar a los estudiantes. Proporciona instrucciones claras, pero deja espacio para la exploración y la autonomía.
+ •   Preparación del entorno: organiza el espacio físico o virtual para facilitar la experiencia. Proporciona materiales necesarios (herramientas, guías, recursos multimedia).
+ •   Capacitación previa: enseña habilidades básicas necesarias para la actividad (cómo usar un equipo de laboratorio o técnicas de observación). Fomenta una mentalidad abierta hacia la experimentación y el aprendizaje por ensayo y error.
+ •   Establecimiento de normas: define reglas para garantizar un ambiente seguro y respetuoso durante la experiencia ( normas para debates o trabajo en campo). Promueve la colaboración si la actividad involucra grupos, aunque no es un requisito como en el aprendizaje cooperativo.
+ •   Motivación: conecta la experiencia con los intereses o metas de los estudiantes para aumentar su compromiso.
+
+Ejecución (desarrollo)
+
+     Actividades del docente
+
+     El docente actúa como facilitador, supervisando la dinámica grupal y asegurándose de que la colaboración funcione.
+      1.   Facilitar la experiencia concreta: poner en marcha la actividad planificada, asegurándose de que todos participen. El docente observa y apoya, pero no dirige excesivamente.
+      2.   Fomentar la participación activa: motivar a los estudiantes a involucrarse, experimentar y tomar decisiones durante la actividad.
+      3.   Guiar la reflexión: una vez terminada la experiencia, dirigir una discusión o actividad reflexiva para que los estudiantes analicen qué pasó, cómo se sintieron y qué aprendieron.
+      4.   Conectar con conceptos: ayudar a los estudiantes a relacionar la experiencia con teorías o ideas abstractas
+      5.   Diseño de criterios de evaluación: crear rúbricas que valoren la participación en la experiencia, la calidad de la reflexión, la conexión con conceptos teóricos y la aplicación práctica.
+
+     Actividades del estudiante
+
+     Durante la fase de desarrollo, que abarca la experiencia concreta y la observación reflexiva, según el ciclo de Kolb, los estudiantes realizan actividades centradas en vivir la experiencia, reflexionar sobre ella y comenzar a conectar con conceptos:
+      1.   Participación en la experiencia concreta: se involucra activamente en la actividad práctica: realiza un experimento (participa en un juego de roles, trabaja en un proyecto comunitario); explora, experimenta y toma decisiones en un entorno auténtico o simulado.
+      2.   Observación y recolección de datos: registra observaciones, emociones y resultados durante la experiencia (toma notas, hace fotos, graba un video); presta atención a los detalles del proceso y a las interacciones con otros, si la actividad es grupal.
+      3.   Reflexión individual o grupal: analiza la experiencia, respondiendo preguntas como: "¿Qué pasó?", "¿Cómo me sentí?" o "¿Qué funcionó o no?". Comparte reflexiones en discusiones, diarios o foros, si el profesor lo indica.
+      4.   Interacción con compañeros: colabora con otros estudiantes si la experiencia es grupal, compartiendo ideas o resolviendo problemas juntos. Practica habilidades sociales como comunicación o empatía, aunque no es tan estructurado como en el aprendizaje cooperativo.
+      5.   Resolución de problemas: enfrenta desafíos prácticos durante la experiencia, ajustando su enfoque según sea necesario. Usa creatividad y pensamiento crítico para superar obstáculos.
+      6.   Conexión inicial con conceptos: comienza a relacionar la experiencia con ideas teóricas, guiado por preguntas del profesor o materiales complementarios.
+      7.   Creación de documentación del proceso: crea registros de la experiencia (notas, dibujos, fotos).
+
+Evaluación
+El profesor evalúa tanto el proceso (reflexión, participación) como los resultados (aprendizaje, aplicación), con énfasis en el crecimiento personal y la comprensión:
+
+ •    Observación durante la experiencia: monitorea cómo los estudiantes se involucran en la actividad, registrando su compromiso, creatividad o resolución de problemas.
+ •    Evaluación formativa: proporciona retroalimentación durante y después de la experiencia para guiar la reflexión y la conceptualización.
+ •    Evaluación sumativa: evalúa productos derivados de la experiencia (informes, presentaciones, proyectos) y reflexiones escritas o verbales.
+ •    Autoevaluación y reflexión guiada: solicita a los estudiantes que evalúen su propio aprendizaje y proceso reflexivo, usando diarios, cuestionarios o discusiones.
+ •    Reconocimiento: valora el esfuerzo, la creatividad y el crecimiento personal, destacando logros individuales y, si aplica, grupales.
+
+Instrumentos que se pueden utilizar:
+ •    Rúbricas
+ •    Listas de cotejo
+ •    Guías de observación
+ •    Cuestionarios diagnostico
+ •    Escalas de Valoración grupal
+ •    Portafolios
+
+M7. Aprendizaje Cooperativo
+
+El Aprendizaje Cooperativo es una metodología activa estructurada en la que los estudiantes trabajan en grupos pequeños bajo la dirección del docente. Promueve resultados académicos y sociales, puesto que las estrategias a aplicar fomentan la cooperación de los alumnos para maximizar su aprendizaje y el de los demás (Gillies, 2016; Johnson et al., 2014 Slavin, 1990).
+
+Figura 5
+Implementación del aprendizaje cooperativo
+Nota: Universidad de Vic (2008)
+
+Características
+ •    Roles asignados: funciones específicas para cada miembro.
+ •    Responsabilidad individual: evaluación personal dentro del grupo.
+ •    Estructura organizada: diseñada por el docente
+ •    Interacción cara a cara a través de la comunicación directa.
+ •    Evaluación dual: grupal e individual.
+ •    Habilidades sociales: se enseña explícitamente cómo colaborar.
+
+Ventajas
+
+ •    Mejora del rendimiento: los estudiantes aprenden más cuando cooperan.
+ •    Fomento de la responsabilidad: cada miembro es responsable.
+ •    Habilidades interpersonales: fortalece la comunicación.
+ •    Inclusión: favorece la participación equitativa.
+ •    Motivación: aumenta el entusiasmo.
+ •    Preparación laboral: simula entornos de equipo.
+
+Ejemplos
+ •    Técnica Jigsaw: enseñanza entre pares sobre la Revolución Industrial.
+ •    Tutoría entre pares: explicación grupal de ecuaciones.
+ •    Proyectos científicos: experimento con roles definidos.
+ •    Debates estructurados: argumentos literarios en equipo.
+ •    Aprendizaje basado en problemas: análisis de un caso clínico.
+
+Competencias
+
+ •    Pensamiento crítico
+ •    Resolución de problemas
+ •    Comunicación
+ •    Trabajo en grupo
+
+Metodología:
+
+Preparación (planificación del docente):
+
+En el aprendizaje cooperativo, el docente diseña actividades que requieran colaboración y asigna roles claros para asegurar que todos contribuyan, estas son:
+ •    Formar grupos heterogéneos: drear equipos equilibrados considerando habilidades, personalidades o conocimientos previos para que se complementen.
+ •    Definir un objetivo común: esstablecer una tarea que solo se pueda lograr trabajando juntos.
+ •    Asignar roles específicos: planificar roles como coordinador, investigador, redactor o presentador para que cada estudiante tenga una función clara.
+ •    Preparar recursos y estructura: organizar materiales (textos, mapas, líneas de tiempo) y una guía con instrucciones claras para la tarea cooperativa.
+ •    Determinar los instrumentos de evaluación a aplicar.
+
+Ejecución (desarrollo)
+
+El aprendizaje cooperativo se organiza en fases similares a las del aprendizaje colaborativo, pero con un enfoque más estructurado y explícito en los elementos cooperativos. Las fases comunes, basadas en los autores antes mencionados, son:
+ 1.   Formación del grupo y cohesión: se forman equipos pequeños (3-5 estudiantes) heterogéneos en habilidades, género o intereses para maximizar la diversidad. Se establecen normas claras y se fomenta la interdependencia positiva (el éxito de uno depende del éxito de todos).
+ 2.   Definición de objetivos y estructura de la tarea: se plantea un objetivo común que requiere la contribución de todos los miembros, se diseñan tareas con interdependencia positiva y, se clarifican las expectativas y los criterios de evaluación.
+ 3.   Interacción y colaboración: los estudiantes interactúan cara a cara compartiendo ideas, discutiendo y ayudando mutuamente, practican habilidades sociales.
+ 4.   Resolución y producción: el grupo integra aportes individuales para crear un producto o solución colectiva. Se aplican estrategias de toma de decisiones y resolución de conflictos.
+ 5.   Evaluación y reflexión: se evalúa el producto final, el proceso cooperativo y el aprendizaje individual; se establecen normas claras; y, se fomenta la interdependencia positiva.
+ 6.   Cierre y reconocimiento: se celebra el logro grupal, destacando el esfuerzo colectivo y las contribuciones individuales. Se otorgan recompensas grupales.
+
+Actividades del estudiante
+
+Durante la fase de desarrollo (interacción, colaboración y resolución), los estudiantes realizan actividades estructuradas que refuerzan los principios del aprendizaje cooperativo (interdependencia positiva, responsabilidad individual, interacción promotora):
+ 1.   Cumplimiento de roles asignados: ejecuta la responsabilidad de su rol, se asegura que su aporte sea esencial en el desarrollo de la actividad grupal.
+ 2.   Contribución activa en la tarea: comparte ideas, conocimientos, realiza tareas individuales que se integran al trabajo grupal.
+ 3.   Interacción cara a cara: participa en discusiones, debates o actividades estructuradas, realiza preguntas y responde a las ideas de otros.
+ 4.   Práctica de habilidades sociales: aplica habilidades enseñadas, como dar retroalimentación positiva, negociar o resolver conflictos.
+ 5.   Apoyo mutuo: ayuda a compañeros que enfrentan dificultades (explica un concepto o comparte un recurso). Motiva al grupo, celebrando pequeños logros o animando a otros.
+ 6.   Resolución de problemas: colabora en identificar y solucionar problemas relacionados con la tarea (Resuelve conflictos interpersonales mediante el diálogo y las normas establecidas.
+ 7.   Gestión del tiempo y recursos: respeta los plazos y organiza su trabajo para no retrasar al grupo. Comparte y usa recursos de manera equitativa.
+ 8.   Integración del producto final: participa en la creación, revisión o presentación del entregable grupal. Asegura que el producto refleje el esfuerzo colectivo y cumpla con los criterios establecidos.
+
+Evaluación
+
+La evaluación considera tanto el producto grupal como el desempeño individual dentro del equipo. El profesor evalúa el proceso, el producto y el aprendizaje, con énfasis en la responsabilidad individual y grupal:
+ •   Evaluación formativa: permite la retroalimentación durante el proceso para corregir dinámicas o reforzar comportamientos positivos. El docente interviene solo cuando es necesario, promoviendo la autonomía del grupo.
+ •   Evaluación sumativa: evalúa el producto final según los criterios establecidos. Incluye pruebas individuales para medir el aprendizaje personal derivado del trabajo cooperativo.
+ •   Autoevaluación y coevaluación: Solicita a los estudiantes que evalúen su propio aporte y el de sus compañeros, usando cuestionarios o escalas. Fomenta la reflexión sobre el proceso cooperativo.
+
+Instrumentos que se pueden utilizar:
+ •   Rúbricas
+ •   Listas de cotejo
+ •   Guías de observación
+ •   Cuestionarios para autoevaluación y coevaluación.
+ •   Escalas de Valoración grupal
+ •   Portafolios
+
+M8. Aprendizaje Basado en Casos (ABC)
+
+El aprendizaje basado en casos, como método activo de aprendizaje, es un método de enseñanza eminentemente experiencial e inductivo (Diaz Barriga, 2005), parte de la descripción de una situación real o simulada, que normalmente tiene que ver con una decisión, un desafío, una oportunidad, o una situación problemática que los alumnos deben resolver ya sea de forma individual o grupal (Benito et al., 2007; Lacosta Gavary, 2012). El trabajo individual implicará el desarrollo de unas determinadas destrezas cognitivas que se complementan con el trabajo grupal, en el que deberán plantear una estrategia o decisión justificada que responda al caso planteado, que por cierto no es única, pueden surgir diferentes soluciones (Chamorro Mera et al., 2014). Por ello, el trabajo individual es igual de importante que el grupal, ya que el segundo es inviable sin el primero.
+
+El aprendizaje basado en casos promueve principalmente el desarrollo del pensamiento crítico, la resolución de problemas y la toma de decisiones, a través de un análisis profundo del caso que les permita identificar algunas alternativas de solución, para luego decidir la mejor solución de forma justificada. Así mismo, el aprendizaje basado en casos al reflejar casos de la vida real o simulados ayuda a los estudiantes a aplicar lo aprendido en problemas prácticos, esto genera un aprendizaje significativo y duradero. Por lo general, se aplica mayormente en la enseñanza de áreas de salud, pero también hay investigaciones en otras áreas, por ejemplo, en ingeniería apoyada de aplicaciones móviles (Jiang et al., 2018). En todos los casos se evidencia una mejora en el aprendizaje de los estudiantes.
+
+Características
+   •   El ABC se centra en el proceso para la resolución del caso.
+   •   El ABC vincula la teoría con la práctica lo que permite el aprendizaje significativo.
+   •   Favorece el trabajo individual y grupal dado que pueden compartir y contrastar las  reflexiones y los aportes de cada uno.
+   •   Se basa en casos reales con los que se pueden los estudiantes encontrar en su vida  profesional.
+   •   Cuando los estudiantes resuelven problemas de la vida real aumenta su compromiso  y motivación por aprender.
+
+Ventajas
+
+   •   Capacidad de análisis fundamentado sobre temas específicos.
+   •   La motivación intrínseca por el aprendizaje.
+   •   El entrenamiento en resolución de problemas (casos reales).
+   •   La conexión con la realidad y la profesión.
+   •   El desarrollo de habilidades de comunicación.
+
+Ejemplo: análisis de casos judiciales, clínicos, etc.
+
+Competencias
+
+   •   Toma de decisiones
+   •   Pensamiento crítico
+   •   Resolución de problemas
+   •   Comunicación
+   •   Evaluar y anticipar el impacto en las decisiones
+   •   Trabajo en grupo
+
+Metodología
+
+Para la aplicación del aprendizaje basado en casos, es necesari la participación activa tanto del docente como del estudiante. En el caso del docente, su rol inicia desde la preparación, en la que se desarrolla el caso y se planifica cada una de las fases de análisis que realizarán los estudiantes; así mismo, durante la ejecución del análisis del caso su rol es indispensable para el apoyo a los grupos de trabajo y, finalmente, en la evaluación es parte activa de la aplicación de los instrumentos de evaluación, así como de la retroalimentación.
+
+Preparación (planificación del docente)
+
+En esta fase se trabaja en la selección o construcción del caso y en la generación de las preguntas de análisis o discusión.
+
+ 1.    Para la selección o construcción del caso, se puede trabajar con un caso ya  desarrollado o se lo puede construir; para ello:
+
+     a. Se debe desarrollar una historia clara, partiendo de una introducción que enganche al lector. b. Luego se expone el contexto en el que se desarrolla el caso con los antecedentes, personajes clave. c. Finalmente, se desarrolla el cuerpo del caso como tal, que puede estar organizado por subeventos y presentarse en diferentes formatos: realidad aumentada, realidad virtual, videos 360. Es importante considerar información adicional, como notas, artículos, datos estadísticos, imágenes, videos, etc.
+ 2.    En la generación de las preguntas de análisis del caso, se pueden plantear: preguntas  de estudio, preguntas de discusión, preguntas facilitadoras, o preguntas sobre el  resultado de la discusión.
+ 3.    Una vez que se tiene diseñado el caso, es necesario realizar la instrumentación dentro  del módulo o unidad del curso virtual así como la planificación, definición de fechas y  distribución de preguntas de análisis en los foros de discusión, en caso de ser grupal.
+
+Ejecución (desarrollo del análisis del caso)
+
+Desde el punto de vista de los docentes, las acciones a seguir son:
+     1.    Durante el tiempo asignado para el análisis y discusión del caso, el docente, debe presentar a los estudiantes las estrategias de aprendizaje y tareas del estudiante, ya sea por medios sncrónicos o asincrónicos.
+     2.    Debe facilitar el proceso de discusión, actuando como moderador en las discusiones grupales (sincrónicas-asincrónicas), asegurando que los estudiantes se mantengan enfocados en el análisis crítico del caso y fomentando la participación equitativa.
+     3.    En las caminatas pedagógicas sincrónicas o asincrónicas, realizar el sondeo de avances para ofrecer retroalimentación continua (Wassermann, 1994), así como también en las entregas parciales.
+     4.    En caso de definir una presentación final del análisis completo del caso, asesorar a los estudiantes en la estrategia de presentación que utilizarán.
+
+Desde el punto de vista del estudiante, las fases del aprendizaje basado en casos, de modo general son:
+
+     a. Lectura general y análisis del caso, de forma individual o apoyados del profesor.
+     b. Análisis detenido del caso: en esta fase se realiza el análisis más detallado  identificado los puntos fuertes y débiles, intentando dar respuesta a cada una de las  interrogantes del caso, esta actividad ya se desarrolla en grupos pequeños o una  plenaria general.
+     c. Finalmente, se prepara las conclusiones y recomendaciones en el grupo,  encaminándose a la toma de decisiones según las diferentes alternativas de  evaluación, siempre procurando la reflexión individual y luego grupal (Benito et al.,  2007; de Miguel Diaz, 2005).
+
+Evaluación
+
+Para la evaluación del proceso de aprendizaje basado en casos, se debe considerar una evaluación formativa y sumativa.
+ •    En la evaluación formativa, considerar actividades de autoevaluación y coevaluación  entre los estudiantes.
+ •    En la evaluación sumativa, considerar una rúbrica para evaluar el proceso de análisis y la calidad de las respuestas a las preguntas de análisis del caso. En el caso de requerir una rúbrica ver la sección Evaluación para el aprendizaje basado en casos.
+
+M9. Aula Invertida (Flipped Classroom)
+
+Es una metodología activa que transforma la dinámica de enseñanza tradicional, permitiendo a los estudiantes la revisión previa de los contenidos desarrollados o seleccionados por el docente, tales como vídeos y lecturas, mientras que el tiempo en clase/tutorías se dedica a actividades interactivas y prácticas. Según Bergmann y Sams (2012), este modelo permite que la instrucción directa se realice en casa, fomentando un aprendizaje más activo y colaborativo en el aula. Kahn (2012) complementa esta definición al señalar que el Aula Invertida permite a los estudiantes aprender a su propio ritmo, utilizando recursos digitales para mejorar su comprensión del material. Este modelo reorganiza la estructura tradicional de la enseñanza para centrarla en los estudiantes, promoviendo la interacción, el pensamiento crítico y la aplicación práctica del conocimiento en el aula (Tecnológico de Monterrey, 2014).
+
+El modelo de aula invertida cambia el paradigma tradicional de enseñanza: la instrucción directa se realiza fuera del aula (generalmente mediante videos, lecturas o materiales digitales), mientras que el tiempo en clase se dedica a aplicar el conocimiento, resolver dudas y trabajar colaborativamente en actividades de aprendizaje significativo. Desde este enfoque, se ha avanzado hacia un aprendizaje más enfocado en el papel del estudiante, su independencia y su autorregulación (Sams y Bergmann, 2014), mientras se maximiza la utilización de los tiempos de presencia compartida, promoviendo un aprendizaje más relevante.
+
+Debido a la versatilidad de esta metodología, no se tiene una única forma de implementarse. Facilita cualquier actividad o material educativo que el docente desea organizar con base en los objetivos buscados. Chica (2016) proporciona una categorización respecto a sus tipos, que puede ser de ayuda (Figura 6):
+
+Figura 6
+Siete tipos de Aula Invertida (Flipped Classroom)
+Nota: tomado de: Chica (2016) www.theflippedclassroom.es
+
+   •   Flipped tradicional: los estudiantes revisan contenidos teóricos en casa y aplican lo  aprendido en clase mediante ejercicios prácticos.
+   •   Flipped orientado al debate: se centra en la discusión y el análisis crítico de los  contenidos previamente estudiados.
+   •   Flipped orientado a la experimentación: el aula se convierte en un laboratorio donde  se realizan experimentos o prácticas basadas en la teoría revisada en casa.
+   •   Flipped en grupos: los estudiantes trabajan en equipo para resolver problemas o  desarrollar proyectos, promoviendo la colaboración.
+   •   Flipped virtual: toda la interacción se realiza en línea, adecuada para contextos de  educación a distancia.
+   •   Flipped adaptativo: se ajusta a las necesidades individuales de los estudiantes,  ofreciendo recursos personalizados.
+   •   Flipped de investigación: fomenta la indagación y el descubrimiento autónomo por  parte del estudiante.
+
+Características:
+
+   •   Instrucción fuera del aula: los estudiantes acceden a materiales previos (videos,  lecturas, ejercicios interactivos).
+   •   Aprendizaje activo en clase: se fomenta la resolución de problemas, el trabajo en  equipo y la experimentación.
+   •   Uso de tecnología: herramientas digitales permiten un acceso flexible y adaptado al  ritmo de cada estudiante.
+   •   Rol del docente como facilitador: pasa de ser expositor a guía del aprendizaje,  proporcionando apoyo personalizado.
+   •   Flexibilidad en el aprendizaje: los estudiantes pueden revisar los contenidos a su  propio ritmo y utilizar el tiempo en clase para actividades más profundas
+
+Ventajas:
+     •    Mejora la comprensión del contenido, permitiendo a los estudiantes revisar el material  tantas veces como lo necesiten.
+     •    Promueve una mayor participación y colaboración entre estudiantes durante las  sesiones presenciales.
+     •    Facilita la personalización del aprendizaje, ya que los estudiantes pueden avanzar a  su propio ritmo.
+
+Ejemplos:
+     •    Clases donde los estudiantes ven vídeos de conferencias en casa y realizan ejercicios  prácticos en clase de acuerdo a la estrategia del docente.
+     •    Discusiones grupales sobre los conceptos aprendidos a través de plataformas como  Edpuzzle.
+
+Competencias:
+     •    Autonomía en el aprendizaje.
+     •    Pensamiento crítico.
+     •    Resolución de problemas.
+     •    Trabajo colaborativo.
+     •    Competencias Digitales.
+     •    Capacidad de aplicación del conocimiento.
+
+Metodología
+
+¿Qué hay que tener en cuenta para llevar a cabo una experiencia de Aula Invertida (Flipped Classroom)?
+
+Preparación del Docente
+     •       Definir objetivos de aprendizaje
+     Es necesario concretar y especificar los objetivos de aprendizaje y las competencias a desarrollar, definiendo con claridad si la metodología de Aula Invertida se aplicará durante todo el curso o en momentos específicos. Esta metodología puede adaptarse a cualquier materia, ya sea para facilitar la comprensión de contenidos conceptuales y teóricos, o para desarrollar habilidades procedimentales e instrumentales, incluso desde un enfoque interdisciplinar. Para una correcta aplicación, se sugiere:
+          ▪    Identificar los conceptos que se enseñarán de forma autónoma y los que se profundizarán en clase.
+          ▪    Seleccionar momentos clave del curso para aplicar esta metodología (unidad, tema complejo, proyecto).
+
+     •       Diseño de recursos previos
+     Los recursos educativos deben ser cortos pero estimulantes para mantener el interés de los estudiantes. Es aconsejable incorporar tareas de evaluación y retroalimentación en lo posible.
+     Tener en cuenta lo siguiente:
+          ▪    Los videos explicativos deben ser breves (3-12 minutos), claros, con subtítulos de ser posible.
+          ▪    Otros recursos: lecturas clave, infografías, simulaciones, ebooks, libros, publicaciones, mapas conceptuales o podcasts y más.
+          ▪    Usa herramientas como Edpuzzle para incrustar preguntas en videos y monitorear el avance.
+
+     •       Planificación de la sesión presencial
+     Para actividades presenciales se recomienda enfocarse en el desarrollo de las habilidades de pensamiento de orden alto según la taxonomía de Bloom: aplicar, analizar, evaluar y crear; y, para las actividades fuera del aula, las de orden bajo: conocer y comprender.
+         ▪    Diseñar actividades centradas en aplicar y discutir los contenidos previos.
+         ▪    Planificar roles de los estudiantes (trabajo por equipos, peer instruction).
+         ▪    Preparar rúbricas o criterios de evaluación para las actividades presenciales.
+     •       Comunicación clara
+     Es recomendable comunicar a los estudiantes la implementación del modelo y sus características. Los estudiantes sabrán que se les toma en cuenta y que su opinión es importante, de esta forma tendrán menos rechazo al cambio y su disponibilidad puede ser mayor.
+          ▪    Informar al estudiantado sobre el propósito del modelo.
+          ▪    Establecer expectativas y tiempos para la revisión del material autónomo.
+
+Ejecución
+
+Es necesario implementar un método que permita al profesor cerciorarse de que los estudiantes hayan consultado los contenidos previos a la clase; esto le facilitará ofrecer una instrucción diferenciada.
+
+Actividades del Docente
+      •   Preparación de recursos: crea y selecciona materiales de aprendizaje (videos, presentaciones, lecturas, etc.) que los estudiantes puedan estudiar fuera del aula.
+      •   Uso de tecnología: utiliza plataformas en línea para compartir recursos, facilitar la comunicación y la colaboración entre estudiantes. Usa foros o formularios para recoger dudas previas.
+
+      Durante la clase (sesión invertida)
+           •   Organización de actividades: diseña actividades en clase que permitan aplicar lo aprendido en los recursos, como debates, discusiones en grupo, proyectos, resolución de problemas, etc.
+           •   Facilitación del aprendizaje: facilita el trabajo en equipo basado en retos, problemas, proyectos o debates. Guía la discusión en clase, responde dudas, ofrece retroalimentación y evalúa el progreso de los estudiantes. Promueve el trabajo colaborativo y la reflexión sobre el contenido aprendido.
+           •   Utiliza herramientas TIC: crea una breve actividad diagnóstica para saber los conocimientos adquiridos como: Kahoot, Socrative, Mentimeter.
+           •   Retroalimentación constante: monitorea el progreso de los estudiantes, ofrece retroalimentación en tiempo real y adapta las actividades según sea necesario.
+
+     Actividades del Estudiante
+           •   Interacción con recursos: examina los recursos de aprendizaje (videos, lecturas, etc.) antes de la clase y toma apuntes o realiza actividades de preparación.
+           •   Participación en clase: aplica lo aprendido en las actividades en clase, participa en debates, discusiones, resuelve problemas y colabora con sus compañeros.
+           •   Resolución de dudas: formula preguntas y solicita aclaraciones al docente sobre los temas que no entiende.
+           •   Aplicación del conocimiento: aplica los conocimientos adquiridos en actividades prácticas, proyectos o tareas.
+           •   Retroalimentación y auto-evaluación: recibe retroalimentación del docente y de sus compañeros, y evalúa su propio aprendizaje.
+
+Evaluación
+Es necesario implementar un método que permita al docente asegurarse de que los estudiantes hayan consultado los contenidos previos a la clase; esto le facilitará ofrecer una instrucción diferenciada.
+
+ •   Evaluación del estudio autónomo
+      ▪   Cuestionarios automáticos al final del video o lectura.
+      ▪   WSQ (Watch, Summarize, Question): ver, resumir, plantear preguntas.
+
+ •   Evaluación del aprendizaje en el aula
+     ▪   Rúbricas para trabajos en equipo o proyectos.
+     ▪   Evaluaciones entre pares.
+     ▪   Observación directa y retroalimentación inmediata.
+
+ •   Evaluación formativa continua
+     ▪   Tener previsto algún cuestionario utilizando, por ejemplo, alguna herramienta gamificada: (Mentimenter, Kahoot, Socrative).
+     ▪   Portafolios digitales.
+     ▪   Autoevaluación de avances y participación.
+     ▪   Instrumentos de coevaluación.
+
+M10. Gamificación
+
+La gamificación se refiere a la aplicación de elementos de diseño de juegos en contextos educativos para incrementar la motivación y el compromiso de los estudiantes. Deterding et al. (2011) la definen como el uso de elementos de diseño de juegos en situaciones no lúdicas, mientras que Kapp (2012) enfatiza que transforma el aprendizaje en una experiencia más atractiva que fomenta la participación. La gamificación es la aplicación de principios y elementos del juego en contextos educativos con el propósito de influir en el comportamiento, incrementar la motivación y favorecer la participación de los estudiantes en el proceso de aprendizaje (Tecnológico de Monterrey, 2016). Esta metodología promueve un entorno competitivo y colaborativo, utilizando recompensas y retroalimentación constante para mantener el interés y la motivación de los estudiantes.
+
+La gamificación transforma el aprendizaje al hacerlo más dinámico y significativo; además, implementar estrategias gamificadas en la educación potencia la motivación y facilita la adquisición de conocimientos y habilidades esenciales en el siglo XXI.
+
+La gamificación educativa busca transformar el entorno de aprendizaje mediante la introducción de elementos característicos del juego como puntos, niveles, recompensas, misiones, avatares y narrativas. A diferencia del aprendizaje basado en juegos o los juegos serios, la gamificación no requiere necesariamente del uso de juegos como tales, sino de sus principios estructurales para lograr experiencias educativas significativas.
+
+Elementos clave de la gamificación:
+Dinámicas: de acuerdo con el estudio de Herranz y Colomo-Palacios (2012), las dinámicas son los elementos más generales a los que la gamificación debe dirigirse. Están fuertemente vinculadas con las metas, efectos, anhelos y motivaciones que se buscan alcanzar o reforzar en el usuario.
+
+Para aplicar dinámicas en una clase gamificada, se deben considerar cinco elementos clave que potencian el aprendizaje a través del juego:
+ •    Restricciones: se establecen límites en el entorno o en las acciones del estudiante, lo que estimula la creatividad para resolver los desafíos dentro de esas condiciones.
+ •    Emociones y sensaciones: se busca despertar sentimientos como sorpresa, curiosidad o entusiasmo, fundamentales para mantener la motivación y el compromiso.
+ •    Narrativa: se construye una historia atractiva y coherente que contextualiza el juego, conecta las actividades y da sentido a los retos, aumentando la implicación del estudiante.
+ •    Progresión: se diseña un sistema que permita evidenciar el avance del estudiante, como niveles, logros o insignias, generando una percepción de mejora continua.
+ •    Relaciones: se promueve la interacción entre los participantes, ya sea mediante la colaboración o la competencia, fortaleciendo el aprendizaje social.
+
+Mecánicas: según Cortizo et al. (2011), las mecánicas en gamificación son un conjunto de reglas diseñadas para generar experiencias atractivas y motivadoras mediante desafíos y rutas definidas hacia los objetivos. Herranz y Colomo-Palacios (2012), basados en Werbach y Hunter, proponen una clasificación de estas mecánicas clave:
+ •    Retos: plantean desafíos que impulsan al estudiante a superarse.
+ •    Oportunidades: eventos aleatorios que generan sorpresa y variedad.
+ •    Competición: fomenta el rendimiento mediante ganadores, perdedores y recompensas.
+ •    Cooperación: promueve el trabajo colaborativo en equipos o individual hacia un objetivo común.
+ •    Feedback: retroalimentación constante y en tiempo real que orienta al estudiante sobre su progreso, de manera motivadora y positiva.
+ •    Recolección: implica coleccionar elementos u objetos, lo que estimula el interés y la continuidad.
+ •    Recompensas: incentivos por logros y esfuerzo, esenciales para mantener el compromiso.
+ •    Transacciones: permiten intercambios entre estudiantes, fomentando la interacción.
+ •    Turnos: introducen la espera y la estrategia en juegos por etapas o secuencias.
+ •    Estados ganadores: determinan los objetivos que definen el éxito en el juego.
+
+Estas mecánicas, bien integradas, fortalecen la motivación, la participación activa y el aprendizaje significativo en entornos gamificados. Componentes: los componentes son los elementos más concretos y visibles del juego, los cuales apoyan la implementación de las dinámicas y mecánicas, enriqueciendo la experiencia lúdica del estudiante. Se pueden combinar libremente según los objetivos pedagógicos. Según Herranz y Colomo-Palacios (2012), los principales componentes son:
+     •    Logros: registros visibles de objetivos alcanzados.
+     •    Avatares: representaciones gráficas de los estudiantes en entornos virtuales.
+     •    Insignias (badges): reconocimientos públicos de los logros obtenidos.
+     •    Luchas con el jefe: desafíos complejos o de mayor dificultad.
+     •    Colecciones: objetos que pueden acumularse durante el juego.
+     •    Combate: enfrentamientos breves por objetivos específicos.
+     •    Desbloqueo de contenidos: nuevos niveles o recursos que se activan al lograr  metas.
+     •    Regalos: posibilidad de compartir elementos con otros jugadores.
+     •    Leaderboards (tablas de clasificación): rankings visibles por logros o puntuaciones.
+     •    Niveles: etapas de progresión que representan el avance del estudiante.
+     •    Puntos: recompensas acumulables por retos cumplidos, que pueden canjearse.
+     •    Conquistas: logros significativos acompañados de recompensas.
+     •    Social Graphs: perfiles visibles de los jugadores con sus estadísticas y progresos.
+     •    Equipos: agrupaciones de jugadores que colaboran en los retos.
+     •    Virtual Goods: bienes virtuales que pueden intercambiarse o utilizarse en el juego.
+
+Entre todos ellos, se destacan tres como los más usados, conocidos como la tríada PBL (Werbach y Hunter, 2012):
+     •    Points (Puntos)
+     •    Badges (Insignias)
+     •    Leaderboards (Tablas de clasificación)
+
+Estos tres elementos constituyen la base visual y motivacional más común en experiencias gamificadas.
+
+Características:
+ •       Uso de elementos de juego: puntos, insignias, niveles, misiones y recompensas.
+ •       Narrativa atractiva: se introduce un contexto que estimula la inmersión en el aprendizaje.
+ •       Retroalimentación inmediata: los estudiantes reciben información sobre su desempeño en tiempo real. Retroalimentación constante y dinámica.
+ •       Competencia y cooperación: se fomenta la interacción social a través de desafíos individuales y grupales.
+ •       Libertad para equivocarse: se permite el aprendizaje a partir del error sin consecuencias negativas reales.
+
+Ventajas:
+ •       Aumento en la motivación: los estudiantes se sienten más comprometidos con las actividades.
+ •       Ambiente seguro para aprender: se fomenta la experimentación sin temor al fracaso.
+ •       Mayor retención del conocimiento: la emoción y la dinámica del juego favorecen el aprendizaje a largo plazo.
+ •       Desarrollo de habilidades socioemocionales: se fortalecen la colaboración, el liderazgo y la toma de decisiones.
+ •       Feedback constante: se mejora el aprendizaje mediante correcciones inmediatas.
+
+Ejemplos:
+ •       Utilización de plataformas como Kahoot para evaluar conocimientos mediante juegos.
+ •       Proyectos en los que los estudiantes completan "misiones" para obtener recompensas.
+
+Competencias:
+     •     Pensamiento crítico y reflexivo
+     •     Resolución de problemas.
+     •     Autogestión del aprendizaje y resiliencia.
+     •     Trabajo colaborativo
+     •     Comunicación efectiva.
+     •     Competencias Digitales.
+     •     Toma de decisiones estratégicas
+
+Metodología: A continuación, se detallan las acciones que se deben seguir.
+
+Preparación del Docente
+•       Definir el propósito pedagógico de la gamificación: motivar, mejorar desempeño,   promover habilidades sociales o resolución de problemas.
+•       Conocer el perfil de los estudiantes y sus motivaciones (exploradores, socializadores, triunfadores, etc.).
+•       Diseñar la narrativa o temática del juego: crear un universo atractivo que contextualice los retos o misiones.
+•       Seleccionar dinámicas (restricciones, emociones, narrativa, progresión, relaciones), mecánicas (retos, recompensas, feedback, cooperación, etc.) y componentes (puntos, niveles, insignias, avatares, etc.).
+
+Ejecución
+     Actividades del docente:
+         •     Diseño de la experiencia de juego: el docente crea un sistema de juego con objetivos,  niveles, recompensas y retroalimentación para que los estudiantes se sientan  motivados y comprometidos.
+         •     Selección de herramientas y plataformas: elige herramientas digitales o físicas que  faciliten la implementación de la gamificación, como juegos educativos, plataformas en  línea o materiales manipulables.
+         •     Creación de actividades personalizadas: diseña actividades que se adapten a los  objetivos de aprendizaje y a las características de los estudiantes.
+         •     Implementación y supervisión: introduce la gamificación en el aula, explica las reglas  y supervisa la participación de los estudiantes, brindando apoyo y retroalimentación.
+         •     Análisis y mejora: evalúa el impacto de la gamificación en el aprendizaje y realiza  ajustes en el diseño de la experiencia para optimizar los resultados.
+
+     Actividades del estudiante
+          •    Participación activa: los estudiantes interactúan con las actividades de juego,  completando desafíos, resolviendo problemas y acumulando puntos.
+          •    Exploración y aprendizaje: realizan tareas de forma lúdica, descubriendo conceptos,  habilidades y conocimientos de manera divertida y motivadora.
+          •    Colaboración y comunicación: interactúan con sus compañeros, intercambiando ideas, compartiendo estrategias y trabajando en equipo para alcanzar metas comunes.
+          •    Retroalimentación y reflexión: Reflexionan sobre su progreso en el juego, analizan sus errores y aprenden de sus experiencias.
+          •    Celebración de logros: Celebran sus logros y recompensas, sintiéndose motivados por el progreso alcanzado en la experiencia de gamificación.
+
+Evaluación
+     •    Integrar la evaluación formativa mediante acciones del juego: retos, resolución de problemas, trabajos colaborativos.
+     •    Usar evaluación discreta para no interrumpir la experiencia de juego.
+     •    Evaluar competencias, progreso, toma de decisiones y creatividad desde la interacción con el entorno gamificado.
+     •    Complementar con rúbricas, coevaluaciones, y autoevaluaciones sobre la participación y logros.
+
+M11. Aprendizaje Basado en Retos - Design Thinking
+
+El Aprendizaje Basado en Retos utiliza problemas del mundo real como motor del aprendizaje, aplicando el Design Thinking para fomentar la creatividad y la innovación. Brown (2009) describe este enfoque como uno que utiliza el pensamiento de diseño para abordar problemas complejos, mientras que Luchs et al. (2016) señalan que permite a los estudiantes seguir un proceso iterativo que incluye empatía, definición, ideación, prototipado y pruebas. Esta metodología se centra en la colaboración multidisciplinaria y en la creación de soluciones innovadoras, facilitando un aprendizaje significativo y aplicado.
+
+Características
+ •    Enfoque centrado en el usuario y en la resolución de problemas.
+ •    Colaboración multidisciplinaria.
+ •    Prototipado y retroalimentación continua.
+
+Ventajas
+ •    Desarrollar habilidades críticas y creativas en los estudiantes.
+ •    Promover el trabajo en equipo y la comunicación efectiva.
+ •    Facilitar un aprendizaje significativo, contextualizado y aplicado.
+
+Ejemplos:
+ •     Proyectos donde los estudiantes trabajan en soluciones para problemas comunitarios.  Algunas herramientas tecnológicas que se pueden utilizar en estos proyectos son: Miro,  Trello
+ •     Talleres de Design Thinking en los que los estudiantes desarrollan productos o servicios  innovadores.
+
+Metodología
+Al implementar metodologías activas en el aula, especialmente el Aprendizaje Basado en Retos (ABR) complementado con el enfoque de Design Thinking (DT), ambos métodos promueven el aprendizaje significativo y el desarrollo de competencias clave mediante la resolución de problemáticas reales en contextos educativos. El ABR, al centrarse en desafíos auténticos, y el DT, al facilitar un proceso iterativo de solución creativa, generan un entorno dinámico, colaborativo e interdisciplinar que coloca al estudiante en el centro del proceso de enseñanza-aprendizaje.
+En la metodología de Aprendizaje Basado en Retos (ABR) y Design Thinking, el docente facilita el proceso de aprendizaje y el estudiante se involucra activamente en la solución de un problema real. El docente guía, asesora y proporciona recursos, mientras que el estudiante investiga, crea, prototipa y evalúa sus ideas.
+Durante la ejecución se despliega el proceso de Aprendizaje Basado en Retos, complementado con las etapas del Design Thinking. Este enfoque promueve la empatía, la creatividad, la colaboración y la validación continua mediante prototipado y testeo.
+Las fases son:
+     1. Empatizar: comprender el contexto y a los usuarios involucrados en la problemática.
+     2. Definir: sintetizar los hallazgos en un problema claro.
+     3. Idear: generar múltiples soluciones posibles con pensamiento divergente.
+     4. Prototipar: materializar ideas en soluciones tangibles y factibles.
+     5. Testear: validar las soluciones con usuarios reales y mejorar iterativamente.
+
+El docente actúa como coach, promoviendo la reflexión crítica, facilitando el acceso a recursos y guiando el trabajo en equipo.
+
+Preparación del Docente
+La fase de preparación es clave para el éxito del ABR. En esta etapa, el docente adopta el rol de facilitador del aprendizaje, renunciando al control tradicional del aula para convertirse en un guía que acompaña a los estudiantes en su recorrido. Es crucial que el docente seleccione un reto auténtico, significativo y multidisciplinar, alineado con los objetivos del currículo y con el desarrollo de competencias tanto genéricas como específicas.
+La preparación implica:
+ •   Identificación de una problemática real y contextualizada.
+ •   Definición del tipo de reto (nano, mini, curricular o capital).
+ •   Planificación de la coordinación docente y recursos necesarios.
+ •   Establecimiento de criterios de evaluación claros desde el inicio.
+ •   Sensibilización del alumnado y preparación para el trabajo colaborativo.
+
+Ejecución
+     Actividades del Docente
+      •   Diseño del reto: planificar el reto, definir la pregunta problematizadora y establecer los objetivos de aprendizaje.
+      •   Facilitación: guiar a los estudiantes en el proceso de investigación, brainstorming y
+          solución del reto.
+      •   Asesoramiento: proporcionar apoyo y orientación a los estudiantes, tanto individual como grupalmente.
+      •   Evaluación: evaluar el proceso de aprendizaje y los resultados del reto, considerando tanto los productos como los procesos.
+      •   Creación de un ambiente propicio: fomentar la colaboración, la comunicación y la creatividad en el aula.
+
+     Actividades del Estudiante
+
+      •   Investigación: recopilar información, analizar datos y comprender el problema que se desea resolver.
+      •   Brainstorming y generación de ideas: plantear posibles soluciones al reto, utilizando técnicas de pensamiento creativo.
+      •   Prototipado: crear modelos o versiones preliminares de la solución para probarla y obtener retroalimentación.
+      •   Evaluación y mejora: analizar los resultados de la prueba, identificar áreas de mejora y adaptar la solución.
+      •   Presentación y difusión: compartir los resultados del reto con el resto de la clase o con el público objetivo.
+
+Al aplicar este tipo de metodología el docente se convierte en un facilitador y guía del aprendizaje, mientras que el estudiante se convierte en un actor activo en la resolución de problemas reales, desarrollando habilidades de investigación, pensamiento crítico, creatividad y trabajo colaborativo.
+
+Evaluación
+La evaluación en ABR y DT se basa en un enfoque formativo y sumativo que considera tanto el proceso como el producto final. Es necesario:
+ •       Aplicar rúbricas específicas que valoren competencias y logros del reto.
+ •       Incorporar evaluación continua mediante bitácoras, retroalimentación y coevaluación.
+ •       Fomentar la metacognición y la reflexión individual y grupal.
+ •       Validar la solución implementada en contextos reales y evaluar el impacto.
+
+La evaluación no solo mide resultados, sino que promueve aprendizajes profundos y transversales.
+
+Recursos
+Para implementar estas metodologías se recomienda el uso estratégico de tecnologías y recursos como:
+     •    Herramientas TIC (blogs, wikis, portafolios digitales).
+     •    Plataformas colaborativas (Trello, Miro, Padlet).
+     •    Material de prototipado (papel, cartón, herramientas digitales de diseño).
+     •    Técnicas visuales como mapas mentales, storyboards y mapas de empatía.
+     •    Dinámicas de gamificación y aprendizaje cooperativo.
+
+M12. Aprendizaje basado en preguntas para la comprensión (ABPC). Uso de IA
+
+Para iniciar, el Aprendizaje Basado en Preguntas es un enfoque pedagógico que coloca la
+indagación y la curiosidad en el centro del proceso educativo, donde los estudiantes generan y responden preguntas como eje del aprendizaje. Hmelo-Silver (2004) lo describe como un modelo que promueve la indagación a través de preguntas, mientras que Barrows & Tamblyn (1980) lo definen como una metodología que pone a los estudiantes en el centro del proceso educativo, fomentando su capacidad de investigación y análisis. Este enfoque no solo potencia el pensamiento crítico, sino que también permite a los estudiantes ser protagonistas de su propio aprendizaje.
+El Aprendizaje Basado en Preguntas para la Comprensión (ABPC) es una metodología activa que fomenta un aprendizaje activo y reflexivo mediante la formulación de preguntas significativas. Se centra en estimular la curiosidad y el pensamiento crítico, permitiendo a los estudiantes construir conocimiento a partir de sus propias indagaciones (Sánchez Soto, 2017).
+
+El ABPC es altamente efectivo cuando se combina con herramientas de IA. Según la UNESCO, la IA tiene el potencial de innovar las prácticas de enseñanza y acelerar el progreso educativo, pero su implementación a menudo enfrenta obstáculos como la falta de recursos y capacitación docente (UNESCO, 2023).
+
+Características:
+•   Enfoque en la indagación y la curiosidad.
+•   Promoción de un ambiente colaborativo y participativo.
+•   Evaluación continua a través de preguntas generadas por los estudiantes.
+•   Basado en la generación y exploración de preguntas contextualizadas.
+•   Es adaptable a distintos niveles educativos y disciplinas.
+•   Promueve el trabajo colaborativo y la discusión en el aula.
+•   Enfatiza el rol del docente como facilitador del aprendizaje.
+
+Ventajas
+•   Fomenta el pensamiento crítico y la creatividad en los estudiantes.
+•   Aumenta la motivación y el interés por el aprendizaje.
+•   Permite a los estudiantes ser protagonistas de su proceso educativo.
+•   Mejora la comprensión profunda de los conceptos.
+•   Desarrolla habilidades de análisis, síntesis y aplicación del conocimiento.
+•   Favorece la participación y el aprendizaje significativo.
+•   Permite conectar el aprendizaje con experiencias del mundo real.
+
+Ejemplos
+•   Proyectos de investigación donde los estudiantes formulan preguntas y buscan
+    respuestas con el uso de IA.
+•   Debates y discusiones guiadas por preguntas generadas por los propios estudiantes.
+•   Integración de preguntas sobre IA en las discusiones diarias en clase.
+•   Desarrollo de proyectos donde los estudiantes diseñan modelos de IA para resolver
+    problemas.
+
+Competencias:
+•   Pensamiento crítico y reflexivo.
+•   Habilidad para formular y responder preguntas complejas.
+•   Trabajo en equipo y colaboración.
+•   Capacidad de argumentación y reflexión ética.
+•   Aplicación del conocimiento en contextos reales.
+
+Metodología
+El Aprendizaje Basado en Preguntas para la Comprensión (ABPC) es una metodología activa centrada en el desarrollo del pensamiento crítico y la comprensión profunda a través de la formulación de preguntas significativas. En la era de la Inteligencia Artificial (IA), esta metodología adquiere un nuevo potencial, al permitir que estudiantes y docentes utilicen herramientas digitales para explorar múltiples respuestas, perspectivas y fuentes de información.
+Esta guía tiene un enfoque práctico para docentes interesados en integrar ABPC con herramientas de IA, estructurando el proceso en tres fases: Preparación del docente, Ejecución y Evaluación.
+
+Preparación del Docente
+El docente es el diseñador del entorno de aprendizaje. Esta fase implica seleccionar temáticas relevantes y formular preguntas generativas que estimulen el pensamiento crítico y abran múltiples posibilidades de indagación.
+        Acciones clave:
+•       Identificar objetivos de aprendizaje y competencias a desarrollar.
+•       Formular preguntas generativas abiertas, provocadoras y relevantes.
+•       Seleccionar herramientas de IA (como ChatGPT, Perplexity o Google Bard) para ampliar   las fuentes de información.
+•       Planificar escenarios éticos para discutir los límites del uso de IA.
+•       Preparar material base y recursos digitales para el trabajo autónomo y colaborativo.
+
+Ejecución
+Durante esta etapa se implementa la metodología en el aula, promoviendo una cultura de indagación y reflexión constante. Los estudiantes trabajan en torno a preguntas esenciales y usan herramientas de IA para contrastar información, plantear hipótesis, explorar contextos y formular respuestas con profundidad conceptual.
+Fases sugeridas:
+    •     Activación del conocimiento previo con una pregunta inicial provocadora.
+    •     Indagación guiada usando IA para buscar perspectivas y datos.
+    •     Discusión y análisis crítico de las respuestas obtenidas.
+    •     Sistematización del aprendizaje: elaboración de mapas mentales, ensayos o productos  digitales.
+    •     Revisión ética del uso de la información y la veracidad de las fuentes.
+
+Evaluación
+La evaluación debe valorar tanto el proceso de indagación como la calidad de las respuestas construidas por los estudiantes. El foco se sitúa en la comprensión profunda, la argumentación, la ética digital y la creatividad.
+
+Herramientas sugeridas:
+•       Rúbricas para evaluar la calidad de las preguntas formuladas, el análisis crítico y el uso   responsable de la IA.
+•       Diarios de reflexión o portafolios de aprendizaje.
+•       Coevaluación y autoevaluación.
+•       Evaluaciones orales basadas en preguntas generativas.
+•       Validación de aprendizajes mediante presentaciones o publicaciones digitales.

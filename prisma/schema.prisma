@@ -124,6 +124,33 @@ enum ReviewDecision {
   CHANGES_REQUESTED
 }
 
+enum TeachingPlanReviewStageType {
+  PEER
+  QUALITY
+  DIITEP
+  DIRECTOR
+}
+
+enum TeachingPlanWorkflowStatus {
+  IN_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  CANCELLED
+}
+
+enum TeachingPlanWorkflowStageStatus {
+  WAITING
+  PENDING_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+}
+
+enum TeachingPlanNotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model User {
   id                  String                  @id @default(uuid()) @db.Uuid
   email               String                  @unique
@@ -149,6 +176,15 @@ model User {
   teachingAssignments TeachingAssignment[]
   indicatorVersions   IndicatorVersion[]
   guideReviews        GuideReview[]
+  teachingPlanIndicatorVersions TeachingPlanIndicatorVersion[]
+  teachingPlanReviewerAssignments TeachingPlanReviewerAssignment[] @relation("TeachingPlanReviewer")
+  teachingPlanReviewerAssignmentsCreated TeachingPlanReviewerAssignment[] @relation("TeachingPlanReviewerAssignedBy")
+  careerDirectorAssignments CareerDirectorAssignment[] @relation("CareerDirector")
+  careerDirectorAssignmentsCreated CareerDirectorAssignment[] @relation("CareerDirectorAssignedBy")
+  teachingPlanWorkflowStages TeachingPlanWorkflowStage[] @relation("TeachingPlanWorkflowReviewer")
+  teachingPlanReviews TeachingPlanReview[] @relation("TeachingPlanReviewerUser")
+  teachingPlanNotifications TeachingPlanNotification[] @relation("TeachingPlanNotificationRecipient")
+  teachingPlanReviewProcessUpdates TeachingPlanReviewProcessConfig[] @relation("TeachingPlanReviewProcessUpdatedBy")
   uploadedLegacyDocuments LegacyAcademicDocument[]
   updatedInstitutionalSettings InstitutionalSetting[]
   thirdLevelDegrees   String[]                @default([])
@@ -254,6 +290,7 @@ model Project {
   bibliographyEntries             ProjectBibliographyEntry[]
   legacyDocuments                 LegacyAcademicDocument[]
   adaptationProposals             AdaptationProposal[]
+  teachingPlanReviewerAssignments TeachingPlanReviewerAssignment[]
 
   @@index([ownerId, updatedAt])
   @@index([ownerId, subjectCode])
@@ -399,6 +436,7 @@ model AcademicProgram {
   academicLevel   AcademicLevel      @relation(fields: [academicLevelId], references: [id])
   academicUnit    AcademicUnit       @relation(fields: [academicUnitId], references: [id])
   offerings       AcademicOffering[]
+  directorAssignments CareerDirectorAssignment[]
 
   @@unique([name, academicLevelId, academicUnitId])
   @@index([academicLevelId, academicUnitId])
@@ -810,8 +848,194 @@ model TeachingPlan {
   updatedAt           DateTime @updatedAt
   project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   activities          TeachingPlanActivity[]
+  reviewWorkflow      TeachingPlanReviewWorkflow?
 
   @@index([status, updatedAt])
+}
+
+model TeachingPlanReviewProcessConfig {
+  id          String   @id @default("DEFAULT")
+  enabled     Boolean  @default(false)
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updatedBy   User?    @relation("TeachingPlanReviewProcessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  stages      TeachingPlanReviewStageConfig[]
+}
+
+model TeachingPlanReviewStageConfig {
+  id              String                      @id @default(uuid()) @db.Uuid
+  processConfigId String
+  stage           TeachingPlanReviewStageType
+  enabled         Boolean                     @default(true)
+  sortOrder       Int
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  processConfig   TeachingPlanReviewProcessConfig @relation(fields: [processConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([processConfigId, stage])
+  @@index([processConfigId, enabled, sortOrder])
+}
+
+model TeachingPlanReviewerAssignment {
+  id           String                      @id @default(uuid()) @db.Uuid
+  projectId    String                      @db.Uuid
+  stage        TeachingPlanReviewStageType
+  reviewerId   String                      @db.Uuid
+  assignedById String?                     @db.Uuid
+  active       Boolean                     @default(true)
+  assignedAt   DateTime                    @default(now())
+  endedAt      DateTime?
+  project      Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reviewer     User                        @relation("TeachingPlanReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  assignedBy   User?                       @relation("TeachingPlanReviewerAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([projectId, stage, active])
+  @@index([reviewerId, active])
+}
+
+model CareerDirectorAssignment {
+  id           String          @id @default(uuid()) @db.Uuid
+  programId    String          @db.Uuid
+  directorId   String          @db.Uuid
+  assignedById String?         @db.Uuid
+  active       Boolean         @default(true)
+  assignedAt   DateTime        @default(now())
+  endedAt      DateTime?
+  program      AcademicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  director     User            @relation("CareerDirector", fields: [directorId], references: [id], onDelete: Restrict)
+  assignedBy   User?           @relation("CareerDirectorAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([programId, active])
+  @@index([directorId, active])
+}
+
+model TeachingPlanIndicatorVersion {
+  id          String                  @id @default(uuid()) @db.Uuid
+  version     Int                     @unique
+  title       String
+  status      DocumentStatus          @default(DRAFT)
+  createdById String?                 @db.Uuid
+  createdAt   DateTime                @default(now())
+  activatedAt DateTime?
+  createdBy   User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  indicators  TeachingPlanIndicator[]
+  workflows   TeachingPlanReviewWorkflow[]
+  reviews     TeachingPlanReview[]
+}
+
+model TeachingPlanIndicator {
+  id          String                      @id @default(uuid()) @db.Uuid
+  versionId   String                      @db.Uuid
+  code        String
+  name        String                      @default("")
+  description String
+  stage       TeachingPlanReviewStageType
+  active      Boolean                     @default(true)
+  required    Boolean                     @default(true)
+  sortOrder   Int
+  version     TeachingPlanIndicatorVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  reviewItems TeachingPlanReviewItem[]
+
+  @@unique([versionId, code])
+  @@index([versionId, stage, sortOrder])
+}
+
+model TeachingPlanReviewWorkflow {
+  id                 String                     @id @default(uuid()) @db.Uuid
+  teachingPlanId     String                     @unique @db.Uuid
+  indicatorVersionId String                     @db.Uuid
+  status             TeachingPlanWorkflowStatus @default(IN_REVIEW)
+  startedAt          DateTime                   @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  teachingPlan       TeachingPlan               @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  indicatorVersion   TeachingPlanIndicatorVersion @relation(fields: [indicatorVersionId], references: [id], onDelete: Restrict)
+  stages             TeachingPlanWorkflowStage[]
+  notifications      TeachingPlanNotification[]
+
+  @@index([status, updatedAt])
+}
+
+model TeachingPlanWorkflowStage {
+  id          String                           @id @default(uuid()) @db.Uuid
+  workflowId  String                           @db.Uuid
+  stage       TeachingPlanReviewStageType
+  sortOrder   Int
+  reviewerId  String?                          @db.Uuid
+  status      TeachingPlanWorkflowStageStatus  @default(WAITING)
+  approvedAt  DateTime?
+  createdAt   DateTime                         @default(now())
+  updatedAt   DateTime                         @updatedAt
+  workflow    TeachingPlanReviewWorkflow       @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  reviewer    User?                            @relation("TeachingPlanWorkflowReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviews     TeachingPlanReview[]
+
+  @@unique([workflowId, stage])
+  @@index([reviewerId, status])
+  @@index([workflowId, sortOrder])
+}
+
+model TeachingPlanReview {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  workflowStageId    String                    @db.Uuid
+  indicatorVersionId String                    @db.Uuid
+  attempt            Int
+  teachingPlanVersion Int
+  decision           ReviewDecision            @default(DRAFT)
+  generalObservation String?
+  reviewedById       String?                   @db.Uuid
+  reviewedAt         DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  workflowStage      TeachingPlanWorkflowStage @relation(fields: [workflowStageId], references: [id], onDelete: Cascade)
+  indicatorVersion   TeachingPlanIndicatorVersion @relation(fields: [indicatorVersionId], references: [id], onDelete: Restrict)
+  reviewedBy         User?                     @relation("TeachingPlanReviewerUser", fields: [reviewedById], references: [id], onDelete: SetNull)
+  items              TeachingPlanReviewItem[]
+  notifications      TeachingPlanNotification[]
+
+  @@unique([workflowStageId, attempt])
+  @@index([decision, reviewedAt])
+}
+
+model TeachingPlanReviewItem {
+  id          String                @id @default(uuid()) @db.Uuid
+  reviewId    String                @db.Uuid
+  indicatorId String                @db.Uuid
+  result      ChecklistResult       @default(PENDING)
+  observation String?
+  review      TeachingPlanReview    @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  indicator   TeachingPlanIndicator @relation(fields: [indicatorId], references: [id], onDelete: Restrict)
+
+  @@unique([reviewId, indicatorId])
+}
+
+model TeachingPlanNotification {
+  id              String                         @id @default(uuid()) @db.Uuid
+  workflowId      String                         @db.Uuid
+  reviewId        String?                        @db.Uuid
+  event           String
+  stage           TeachingPlanReviewStageType?
+  recipientUserId String?                        @db.Uuid
+  recipientEmail  String
+  recipientName   String                         @default("")
+  subject         String
+  body            String                         @db.Text
+  status          TeachingPlanNotificationStatus @default(PENDING)
+  attemptCount    Int                            @default(0)
+  lastAttemptAt   DateTime?
+  sentAt          DateTime?
+  errorMessage    String?                        @db.Text
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  workflow        TeachingPlanReviewWorkflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  review          TeachingPlanReview?            @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  recipient       User?                          @relation("TeachingPlanNotificationRecipient", fields: [recipientUserId], references: [id], onDelete: SetNull)
+
+  @@index([workflowId, createdAt])
+  @@index([recipientUserId, status])
+  @@index([status, createdAt])
 }
 
 model TeachingPlanActivity {
