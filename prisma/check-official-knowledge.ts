@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { database } from "../src/db/client.js";
+import { loadKnowledgeGitSnapshot } from "../src/services/knowledge-git-restore.js";
 import {
   inspectFunctionalSpecifications,
   inspectOfficialKnowledgeSources,
@@ -33,6 +34,17 @@ try {
     console.log(`  Git: ${functional.indicatorVersion.gitPath}`);
   }
   console.log(`\nEspecificaciones funcionales ACTIVE: ${functional.specifications.length}${functional.indicatorVersion ? " + configuración activa de indicadores" : ""}`);
+
+  console.log("\nRESPALDO RESTAURABLE DESDE GIT");
+  try {
+    const snapshot = await loadKnowledgeGitSnapshot();
+    console.log(`[OK] ${snapshot.documents.length} documentos institucionales, ${snapshot.generationInstructions.length} especificaciones funcionales${snapshot.indicatorVersion ? " + configuración estructurada de indicadores" : ""}.`);
+    console.log("  Los manifiestos, archivos y checksums permiten reconstruir Conocimiento e IA.");
+  } catch (error) {
+    console.log("[FALTA] El respaldo Git todavía no es autocontenido/restaurable.");
+    console.log(`  ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 2;
+  }
 
   if (missing.length) process.exitCode = 2;
 } finally {

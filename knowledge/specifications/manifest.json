@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "environmentPolicy": "LATEST_ACTIVE_ONLY",
   "description": "Especificaciones funcionales vigentes administradas desde Conocimiento e IA. Incluye las reglas de generación activas y la configuración activa de indicadores de la Guía Didáctica.",
   "specifications": [
@@ -55,7 +55,350 @@
       "subjectTypes": [],
       "processes": [
         "GUIDE_REVIEW"
-      ]
+      ],
+      "guideIndicators": [
+        {
+          "code": "PA-01",
+          "name": "Correspondencia curricular",
+          "description": "Verifica que contenidos, actividades, recursos y evaluaciones respondan a los resultados de aprendizaje y a la planificación microcurricular.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 0
+        },
+        {
+          "code": "PA-02",
+          "name": "Rigor disciplinar",
+          "description": "Comprueba que los contenidos sean correctos, suficientes y conceptualmente sólidos.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 1
+        },
+        {
+          "code": "PA-03",
+          "name": "Actualidad de los contenidos",
+          "description": "Valora que la información y las fuentes estén actualizadas según la naturaleza de la disciplina.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 2
+        },
+        {
+          "code": "PA-04",
+          "name": "Contextualización del aprendizaje",
+          "description": "Explica qué aprenderá el estudiante, cómo lo logrará y en qué contextos podrá aplicar lo aprendido.",
+          "stage": "PEER",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 3
+        },
+        {
+          "code": "PA-05",
+          "name": "Profundidad y progresión",
+          "description": "Comprueba que los contenidos avancen gradualmente desde la comprensión hasta la aplicación o el análisis.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 4
+        },
+        {
+          "code": "PA-06",
+          "name": "Relación entre teoría y práctica",
+          "description": "Verifica la inclusión de casos, ejemplos, problemas o aplicaciones relacionados con situaciones reales o profesionales.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 5
+        },
+        {
+          "code": "PA-07",
+          "name": "Pertinencia de las actividades",
+          "description": "Evalúa si las actividades permiten desarrollar y evidenciar los resultados de aprendizaje.",
+          "stage": "PEER",
+          "score": 4,
+          "active": true,
+          "required": true,
+          "sortOrder": 6
+        },
+        {
+          "code": "PA-08",
+          "name": "Evaluación auténtica",
+          "description": "Comprueba que la evaluación demande aplicación, análisis, argumentación, toma de decisiones o producción propia.",
+          "stage": "PEER",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 7
+        },
+        {
+          "code": "PA-09",
+          "name": "Evaluación formativa y retroalimentación",
+          "description": "Verifica que las autoevaluaciones y retroalimentaciones ayuden a identificar errores y mejorar el aprendizaje.",
+          "stage": "PEER",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 8
+        },
+        {
+          "code": "PA-10",
+          "name": "Validez de las fuentes",
+          "description": "Comprueba que las fuentes sean académicas, confiables, pertinentes y adecuadas para la asignatura.",
+          "stage": "PEER",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 9
+        },
+        {
+          "code": "EC-01",
+          "name": "Correspondencia con la matriz",
+          "description": "Verifica que resultados, unidades, contenidos, semanas y metodología coincidan con la matriz aprobada.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 10
+        },
+        {
+          "code": "EC-02",
+          "name": "Estructura institucional",
+          "description": "Comprueba que la guía incluya los componentes, denominaciones y organización establecidos institucionalmente.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 11
+        },
+        {
+          "code": "EC-03",
+          "name": "Distribución semanal",
+          "description": "Valora que los contenidos y actividades estén distribuidos equilibradamente entre las semanas.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 12
+        },
+        {
+          "code": "EC-04",
+          "name": "Consistencia interna",
+          "description": "Verifica que no existan contradicciones entre contenidos, actividades, recursos, tiempos y evaluaciones.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 13
+        },
+        {
+          "code": "EC-05",
+          "name": "Claridad de las instrucciones",
+          "description": "Comprueba que las consignas expliquen qué hacer, cómo hacerlo, con qué recursos y qué resultado se espera.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 14
+        },
+        {
+          "code": "EC-06",
+          "name": "Diálogo didáctico",
+          "description": "Valora una redacción orientadora, motivadora y adecuada para acompañar el aprendizaje autónomo.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 15
+        },
+        {
+          "code": "EC-07",
+          "name": "Claridad y corrección lingüística",
+          "description": "Comprueba la claridad, cohesión, precisión, ortografía, gramática y puntuación del documento.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 16
+        },
+        {
+          "code": "EC-08",
+          "name": "Citación y referencias",
+          "description": "Verifica el cumplimiento de APA 7 y la correspondencia entre citas y referencias.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 17
+        },
+        {
+          "code": "EC-09",
+          "name": "Integridad de enlaces y elementos",
+          "description": "Comprueba que enlaces, tablas, figuras, títulos, numeración y remisiones estén completos e identificados.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 18
+        },
+        {
+          "code": "EC-10",
+          "name": "Declaración del uso de IA",
+          "description": "Verifica que el empleo de IA esté declarado de acuerdo con las disposiciones institucionales.",
+          "stage": "QUALITY",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 19
+        },
+        {
+          "code": "DT-01",
+          "name": "Pertinencia de la metodología activa",
+          "description": "Verifica que la metodología responda a los resultados, contenidos y características de la modalidad en línea.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 20
+        },
+        {
+          "code": "DT-02",
+          "name": "Implementación de la metodología",
+          "description": "Comprueba que la metodología se evidencie en actividades, recursos, interacción y evaluación.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 21
+        },
+        {
+          "code": "DT-03",
+          "name": "Integración guía–aula virtual",
+          "description": "Valora que la guía oriente hacia los recursos, actividades y evaluaciones disponibles en el LMS.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 22
+        },
+        {
+          "code": "DT-04",
+          "name": "Navegación y secuencia digital",
+          "description": "Comprueba que la ruta de aprendizaje sea clara, ordenada y fácil de seguir.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 23
+        },
+        {
+          "code": "DT-05",
+          "name": "Interacción y presencia docente",
+          "description": "Verifica oportunidades de interacción con el contenido, los docentes y otros estudiantes.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 24
+        },
+        {
+          "code": "DT-06",
+          "name": "Calidad de los recursos digitales y REA",
+          "description": "Evalúa la pertinencia, funcionalidad, actualidad, legalidad y finalidad pedagógica de los recursos.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 25
+        },
+        {
+          "code": "DT-07",
+          "name": "Accesibilidad e inclusión",
+          "description": "Comprueba que contenidos y recursos consideren subtítulos, transcripciones, texto alternativo, contraste y legibilidad.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 26
+        },
+        {
+          "code": "DT-08",
+          "name": "Diversidad de aprendizaje",
+          "description": "Verifica diferentes formas de acceder a la información, participar y demostrar el aprendizaje.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 27
+        },
+        {
+          "code": "DT-09",
+          "name": "Carga de trabajo y factibilidad",
+          "description": "Valora que el tiempo requerido sea razonable y coherente con las horas y créditos de la asignatura.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 28
+        },
+        {
+          "code": "DT-10",
+          "name": "Uso pedagógico de IA",
+          "description": "Comprueba que la IA tenga una finalidad formativa y favorezca el análisis y el pensamiento crítico.",
+          "stage": "DIITEP",
+          "score": 3,
+          "active": true,
+          "required": true,
+          "sortOrder": 29
+        },
+        {
+          "code": "DT-11",
+          "name": "Uso ético y transparente de IA",
+          "description": "Verifica que se definan los usos permitidos, la supervisión humana y la responsabilidad sobre los resultados.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 30
+        },
+        {
+          "code": "DT-12",
+          "name": "Privacidad y protección de datos",
+          "description": "Comprueba que las actividades no exijan ingresar información sensible en herramientas no autorizadas.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 31
+        },
+        {
+          "code": "DT-13",
+          "name": "Integridad académica ante la IA",
+          "description": "Verifica que las actividades permitan evidenciar autoría, razonamiento y proceso de elaboración.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 32
+        },
+        {
+          "code": "DT-14",
+          "name": "Seguimiento mediante analíticas",
+          "description": "Valora el uso responsable de datos del LMS para acompañar al estudiante y mejorar la experiencia.",
+          "stage": "DIITEP",
+          "score": 2,
+          "active": true,
+          "required": true,
+          "sortOrder": 33
+        }
+      ],
+      "structureChecksum": "0fac9753275b52b44a3e736bb4b3b7556046a1fb7d18cb1ec080dc04bbfb7235"
     }
   ]
 }

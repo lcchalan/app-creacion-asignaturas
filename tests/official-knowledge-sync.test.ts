@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildFunctionalSpecificationManifest,
   buildOfficialKnowledgeManifest,
+  guideIndicatorStructureChecksum,
   canonicalFunctionalSpecificationPath,
   canonicalOfficialKnowledgePath,
   missingOfficialKnowledgeMessage,
@@ -75,6 +76,7 @@ test("el manifiesto de especificaciones conserva solo la versión activa y orden
     { ...base, key: "alfa", title: "Alfa", version: 7, gitPath: "knowledge/specifications/alfa.txt", checksum: "a" },
   ]);
   assert.equal(manifest.environmentPolicy, "LATEST_ACTIVE_ONLY");
+  assert.equal(manifest.schemaVersion, 2);
   assert.deepEqual(manifest.specifications.map((item) => item.key), ["alfa", "zeta"]);
   assert.equal(manifest.specifications[0]!.version, 7);
 });
@@ -111,4 +113,15 @@ test("un archivo ACTIVE faltante produce un diagnóstico accionable", () => {
   assert.match(message, /knowledge\/uploads\/MCACES-v1-Modelo\.pdf/);
   assert.match(message, /knowledge\/official\/mcaces\.pdf/);
   assert.match(message, /knowledge:sync-official/);
+});
+
+
+test("el respaldo de indicadores conserva también la estructura necesaria para restaurar PostgreSQL", () => {
+  const indicators = [
+    { code: "PA-01", name: "Currículo", description: "Verifica currículo.", stage: "PEER", score: 4, active: true, required: true, sortOrder: 10 },
+    { code: "EC-01", name: "Calidad", description: "Criterio temporalmente deshabilitado.", stage: "QUALITY", score: 3, active: false, required: false, sortOrder: 20 },
+  ];
+  const checksum = guideIndicatorStructureChecksum(indicators);
+  assert.equal(checksum.length, 64);
+  assert.equal(checksum, guideIndicatorStructureChecksum([...indicators].reverse()));
 });

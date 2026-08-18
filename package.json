@@ -17,7 +17,8 @@
     "knowledge:check-official": "node --import tsx prisma/check-official-knowledge.ts",
     "knowledge:normalize-layout": "node --import tsx prisma/normalize-knowledge-layout.ts",
     "knowledge:sync-git": "node --import tsx prisma/sync-official-knowledge.ts",
-    "knowledge:check-git": "node --import tsx prisma/check-official-knowledge.ts"
+    "knowledge:check-git": "node --import tsx prisma/check-official-knowledge.ts",
+    "knowledge:restore-from-git": "node --import tsx prisma/restore-knowledge-from-git.ts"
   },
   "repository": {
     "type": "git",

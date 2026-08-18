@@ -50,6 +50,17 @@ export type OfficialKnowledgeManifest = {
   documents: OfficialKnowledgeManifestDocument[];
 };
 
+export type GuideIndicatorManifestItem = {
+  code: string;
+  name: string;
+  description: string;
+  stage: string;
+  score: number;
+  active: boolean;
+  required: boolean;
+  sortOrder: number;
+};
+
 export type FunctionalSpecificationManifestItem = {
   sourceType: "GENERATION_INSTRUCTION" | "GUIDE_INDICATOR_VERSION";
   key: string;
@@ -64,10 +75,12 @@ export type FunctionalSpecificationManifestItem = {
   durations: number[];
   subjectTypes: string[];
   processes: string[];
+  guideIndicators?: GuideIndicatorManifestItem[];
+  structureChecksum?: string;
 };
 
 export type FunctionalSpecificationManifest = {
-  schemaVersion: 1;
+  schemaVersion: 2;
   environmentPolicy: "LATEST_ACTIVE_ONLY";
   description: string;
   specifications: FunctionalSpecificationManifestItem[];
@@ -153,6 +166,22 @@ function sha256(content: string | Buffer) {
   return createHash("sha256").update(content).digest("hex");
 }
 
+export function guideIndicatorStructureChecksum(indicators: GuideIndicatorManifestItem[]) {
+  const normalized = [...indicators]
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code, "es"))
+    .map((indicator) => ({
+      code: indicator.code,
+      name: indicator.name,
+      description: indicator.description,
+      stage: indicator.stage,
+      score: Number(indicator.score),
+      active: Boolean(indicator.active),
+      required: Boolean(indicator.required),
+      sortOrder: indicator.sortOrder,
+    }));
+  return sha256(JSON.stringify(normalized));
+}
+
 function manifestDocumentFrom(input: {
   key: string;
   title: string;
@@ -212,7 +241,7 @@ export function buildFunctionalSpecificationManifest(
   specifications: FunctionalSpecificationManifestItem[],
 ): FunctionalSpecificationManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     environmentPolicy: "LATEST_ACTIVE_ONLY",
     description:
       "Especificaciones funcionales vigentes administradas desde Conocimiento e IA. Incluye las reglas de generación activas y la configuración activa de indicadores de la Guía Didáctica.",
@@ -370,7 +399,21 @@ async function syncFunctionalSpecifications() {
   });
   if (indicatorVersion) {
     const gitPath = canonicalFunctionalSpecificationPath(LEGACY_INDICATOR_KEY);
-    const content = renderGuideIndicatorSpecification(indicatorVersion);
+    const guideIndicators: GuideIndicatorManifestItem[] = indicatorVersion.indicators.map((indicator) => ({
+      code: indicator.code,
+      name: indicator.name,
+      description: indicator.description,
+      stage: indicator.stage,
+      score: Number(indicator.score),
+      active: indicator.active,
+      required: indicator.required,
+      sortOrder: indicator.sortOrder,
+    }));
+    const content = renderGuideIndicatorSpecification({
+      version: indicatorVersion.version,
+      title: indicatorVersion.title,
+      indicators: guideIndicators,
+    });
     await writeFile(absoluteProjectPath(gitPath), content, "utf8");
     const checksum = sha256(content);
     currentPaths.add(gitPath);
@@ -389,6 +432,8 @@ async function syncFunctionalSpecifications() {
       durations: [],
       subjectTypes: [],
       processes: ["GUIDE_REVIEW"],
+      guideIndicators,
+      structureChecksum: guideIndicatorStructureChecksum(guideIndicators),
     });
   }
 
