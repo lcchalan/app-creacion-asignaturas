@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
-import { createHash, randomBytes, scryptSync } from "node:crypto";
+import { createHash } from "node:crypto";
+import { assertPasswordComplexity, passwordHash } from "../src/auth/password-security.js";
 import { readFile } from "node:fs/promises";
 import { initialAcademicOffer } from "./academic-catalog-data.js";
 
@@ -35,7 +36,8 @@ async function main() {
   for (const role of [
     { code: "REVIEWER", name: "Par revisor", description: "Revisa y solicita ajustes en las guías." },
     { code: "QUALITY", name: "Equipo de calidad", description: "Realiza la validación institucional." },
-    { code: "DIRECTOR", name: "Director", description: "Consulta y aprueba guías de su carrera." },
+    { code: "DIRECTOR", name: "Director", description: "Consulta, da seguimiento y aprueba documentos académicos de las carreras y modalidades asignadas." },
+    { code: "SECRETARY", name: "Secretaría de carrera", description: "Consulta el seguimiento de Planes Docentes y Guías Didácticas de las carreras y modalidades asignadas." },
     { code: "DIITEP", name: "DIITEP", description: "Realiza la validación tecnopedagógica institucional." },
   ]) {
     await database.role.upsert({
@@ -44,15 +46,15 @@ async function main() {
       create: role,
     });
   }
-  const password = process.env.INITIAL_ADMIN_PASSWORD ?? "Cambiar123!";
-  const salt = randomBytes(16).toString("hex");
+  const password = process.env.INITIAL_ADMIN_PASSWORD ?? "Cambiar1234!";
+  assertPasswordComplexity(password);
   const admin = await database.user.upsert({
     where: { email: process.env.LOCAL_USER_EMAIL ?? "docente.local@utpl.edu.ec" },
     update: {
       firstName: "Administrador",
       lastName: "Local",
       displayName: "Administrador local",
-      passwordHash: `${salt}:${scryptSync(password, salt, 64).toString("hex")}`,
+      passwordHash: passwordHash(password),
       active: true,
     },
     create: {
@@ -60,7 +62,7 @@ async function main() {
       firstName: "Administrador",
       lastName: "Local",
       displayName: "Administrador local",
-      passwordHash: `${salt}:${scryptSync(password, salt, 64).toString("hex")}`,
+      passwordHash: passwordHash(password),
     },
   });
   await database.userRole.upsert({

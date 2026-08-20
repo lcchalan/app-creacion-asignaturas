@@ -1,5 +1,140 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const nativeFetch = window.fetch.bind(window);
+const AI_PENDING_STORAGE_KEY = "ggd-ai-pending-jobs-v1";
+
+function browserManagedAiPath(method, pathname) {
+  if (String(method || "GET").toUpperCase() !== "POST") return false;
+  return pathname === "/api/bibliography/apa-review" ||
+    pathname === "/api/generate-week" ||
+    pathname === "/api/generate-visual" ||
+    pathname === "/api/generate-assisted-resource" ||
+    /^\/api\/projects\/[0-9a-f-]+\/adaptation\/analyze$/i.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/microcurricular-presentation\/generate$/i.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/generate$/i.test(pathname);
+}
+
+function aiRequestSignature(method, pathname, body) {
+  const source = `${method}:${pathname}:${typeof body === "string" ? body : ""}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${method}:${pathname}:${(hash >>> 0).toString(16)}`;
+}
+
+function aiPendingJobs() {
+  try { return JSON.parse(localStorage.getItem(AI_PENDING_STORAGE_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+function saveAiPendingJobs(value) {
+  localStorage.setItem(AI_PENDING_STORAGE_KEY, JSON.stringify(value));
+}
+
+function aiRandomId() {
+  return window.crypto?.randomUUID?.() || `ai-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function showAiJobToast(message, kind = "working") {
+  const toast = document.querySelector("#ai-job-toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.dataset.kind = kind;
+  toast.classList.remove("hidden");
+  if (kind !== "working") {
+    window.clearTimeout(showAiJobToast.timer);
+    showAiJobToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 6500);
+  }
+}
+
+function aiUsageText(usage) {
+  if (!usage) return "";
+  if (usage.unlimited) return "Sin límite institucional de generaciones.";
+  const running = Number(usage.reserved || 0);
+  return running > 0
+    ? `${usage.used} completadas de ${usage.limit}; ${running} en curso para este contenido.`
+    : `${usage.used} de ${usage.limit} generaciones utilizadas para este contenido.`;
+}
+
+async function pollPersistentAiJob(jobId) {
+  while (true) {
+    try {
+      const response = await nativeFetch(`/api/ai/jobs/${encodeURIComponent(jobId)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        const error = new Error(payload.error || "No fue posible consultar el trabajo de IA.");
+        error.status = response.status;
+        throw error;
+      }
+      const job = payload.job;
+      if (job?.terminal) return job;
+      showAiJobToast(`La IA continúa trabajando en segundo plano. ${aiUsageText(job?.usage)}`.trim(), "working");
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+    } catch (error) {
+      if (error?.status === 401 || error?.status === 403 || error?.status === 404) throw error;
+      showAiJobToast("Conexión interrumpida. La solicitud de IA sigue registrada; intentando reconectar…", "working");
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+  }
+}
+
+async function persistentAiFetch(input, init = {}) {
+  const url = new URL(typeof input === "string" ? input : input.url, window.location.origin);
+  const method = String(init.method || (typeof input !== "string" ? input.method : "GET") || "GET").toUpperCase();
+  if (!browserManagedAiPath(method, url.pathname)) return nativeFetch(input, init);
+
+  const signature = aiRequestSignature(method, url.pathname, init.body);
+  const pending = aiPendingJobs();
+  const previous = pending[signature] || null;
+  let idempotencyKey = previous?.idempotencyKey || aiRandomId();
+  const headers = new Headers(init.headers || (typeof input !== "string" ? input.headers : undefined) || {});
+  headers.set("X-AI-Idempotency-Key", idempotencyKey);
+
+  let response;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    try {
+      response = await nativeFetch(input, { ...init, method, headers });
+      break;
+    } catch (error) {
+      pending[signature] = { idempotencyKey, jobId: previous?.jobId || null, updatedAt: new Date().toISOString() };
+      saveAiPendingJobs(pending);
+      showAiJobToast("Sin conexión. La solicitud conserva el mismo identificador y se enviará nuevamente sin duplicar la generación…", "working");
+      if (attempt === 119) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+    }
+  }
+  if (!response || response.status !== 202 || !response.headers.get("X-AI-Job-Id")) return response;
+
+  const queued = await response.clone().json();
+  const jobId = response.headers.get("X-AI-Job-Id") || queued.job?.id;
+  idempotencyKey = queued.job?.idempotencyKey || idempotencyKey;
+  pending[signature] = { idempotencyKey, jobId, updatedAt: new Date().toISOString() };
+  saveAiPendingJobs(pending);
+  showAiJobToast(`Solicitud registrada. Puede perderse la conexión del navegador sin perder el trabajo. ${aiUsageText(queued.job?.usage)}`.trim(), "working");
+
+  const finalJob = await pollPersistentAiJob(jobId);
+  const refreshed = aiPendingJobs();
+  delete refreshed[signature];
+  saveAiPendingJobs(refreshed);
+
+  const status = finalJob.responseStatus || (finalJob.status === "COMPLETED" ? 200 : 503);
+  const payload = finalJob.responsePayload || { error: finalJob.errorMessage || "La generación de IA no pudo completarse." };
+  const completedText = finalJob.status === "COMPLETED"
+    ? `Generación completada. ${aiUsageText(finalJob.usage)}`
+    : `La generación no pudo completarse. ${finalJob.errorMessage || "Revise el detalle e intente nuevamente."}`;
+  showAiJobToast(completedText.trim(), finalJob.status === "COMPLETED" ? "success" : "error");
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+window.fetch = persistentAiFetch;
 let authenticatedUserData = null;
 let currentWorkView = "TEACHER";
 let currentReviewStageId = null;
@@ -446,6 +581,19 @@ const catalogStructuredState = {
 function normalizeStructuredText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
+function normalizedAcademicKey(value) {
+  return normalizeStructuredText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
+}
+function hasDuplicateUnitTitle(title, ignoreIndex = -1) {
+  const key = normalizedAcademicKey(title);
+  return catalogStructuredState.units.some((unit, index) => index !== ignoreIndex && normalizedAcademicKey(unit.title) === key);
+}
+function hasDuplicateContentText(text, ignoreUnit = -1, ignoreContent = -1) {
+  const key = normalizedAcademicKey(text);
+  return catalogStructuredState.units.some((unit, unitIndex) => unit.contents.some((content, contentIndex) =>
+    !(unitIndex === ignoreUnit && contentIndex === ignoreContent) && normalizedAcademicKey(content.text) === key));
+}
+
 
 function syncStructuredStorage() {
   const form = $("#catalog-form");
@@ -1220,6 +1368,8 @@ function renderInstitutionalData() {
   target.innerHTML = `
     <div class="summary">
       <div><small>Oferta</small><strong>${escapeHtml(item.offeringCode || "—")}</strong></div>
+      <div><small>Código SIS</small><strong>${escapeHtml(item.sisCode || "—")}</strong></div>
+      <div><small>URL metacurso</small><strong>${item.metacourseUrl ? `<a href="${escapeHtml(item.metacourseUrl)}" target="_blank" rel="noopener noreferrer">Abrir metacurso</a>` : "—"}</strong></div>
       <div><small>Créditos</small><strong>${item.credits ?? "—"}</strong></div>
       <div><small>Horas ACD / APE / AA</small><strong>${item.acdHours} / ${item.apeHours} / ${item.aaHours}</strong></div>
       <div><small>Semestre</small><strong>${escapeHtml(item.semester || "—")}</strong></div>
@@ -1230,6 +1380,36 @@ function renderInstitutionalData() {
     <h4>Resultados de aprendizaje</h4><ol>${(item.learningOutcomes || []).map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ol>
     <h4>Unidades y contenidos</h4>${renderInstitutionalUnits(item.unitContents || [])}`;
 }
+
+$("#report-institutional-data")?.addEventListener("click", () => {
+  $("#institutional-data-report-panel")?.classList.remove("hidden");
+  $("#institutional-data-report-description")?.focus();
+});
+$("#cancel-institutional-data-report")?.addEventListener("click", () => {
+  $("#institutional-data-report-panel")?.classList.add("hidden");
+});
+$("#send-institutional-data-report")?.addEventListener("click", async () => {
+  const description = String($("#institutional-data-report-description")?.value || "").trim();
+  const status = $("#institutional-data-report-status");
+  if (description.length < 10) return showValidationModal("Describa con un poco más de detalle qué información institucional debe revisarse.", "#institutional-data-report-description");
+  if (!projectId) return showValidationModal("No se encontró el proyecto asociado a esta asignatura.", "#institutional-data-details");
+  const button = $("#send-institutional-data-report");
+  button.disabled = true;
+  if (status) status.textContent = "Registrando reporte…";
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/institutional-data-issues`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ description }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "No fue posible registrar el reporte.");
+    if (status) status.textContent = payload.message || "Reporte registrado.";
+    $("#institutional-data-report-description").value = "";
+  } catch (error) {
+    if (status) status.textContent = error.message || "No fue posible registrar el reporte.";
+  } finally {
+    button.disabled = false;
+  }
+});
 
 function mappingValueAt(values, index) {
   if (!Array.isArray(values) || !values.length) return "";
@@ -1525,7 +1705,12 @@ async function generateMicrocurricularPresentation({ automatic = false } = {}) {
   if (button) { button.disabled = true; button.textContent = "Generando…"; }
   if (status) status.textContent = "Preparando un borrador dirigido al estudiante…";
   try {
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/microcurricular-presentation/generate`, { method: "POST" });
+    const instructions = String($("#microcurricular-presentation-instructions")?.value || "").trim();
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/microcurricular-presentation/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instructions }),
+    });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "No fue posible generar la presentación de la asignatura.");
     field.value = payload.presentation || "";
@@ -3743,7 +3928,13 @@ function fallbackActivityComponent(week, description, evaluatedActivities = []) 
   return nonZero.length === 1 ? nonZero[0][0] : "AA";
 }
 function planWeekActivityDetails(week, evaluatedActivities = []) {
-  if (Array.isArray(week.activityDetails) && week.activityDetails.length) return week.activityDetails;
+  if (Array.isArray(week.activityDetails) && week.activityDetails.length) {
+    return week.activityDetails.map((detail) => {
+      if (!detail.evaluationCode) return detail;
+      const evaluated = evaluatedActivities.find((activity) => Number(activity.week) === Number(week.week) && activity.code === detail.evaluationCode);
+      return evaluated ? { ...detail, description: evaluated.activity } : detail;
+    });
+  }
   const details = (week.activities || []).map((description) => ({
     component: fallbackActivityComponent(week, description, evaluatedActivities),
     description,
@@ -3943,6 +4134,7 @@ function teachingPlanPreviewHtml(viewContext = null, options = {}) {
         </tbody></table></div>
       </section>`).join("")}
     </section>
+    ${readOnly ? "" : '<div id="plan-planning-approval-slot"></div>'}
     <section class="plan-preview-section" id="${sectionId("e")}">
       <div class="plan-preview-band">E. Evaluación de la asignatura</div>
       <h5 class="plan-preview-subtitle">Descripción de las actividades calificadas</h5>
@@ -4010,6 +4202,54 @@ function observePlanPreviewSections() {
   planPreviewSections.forEach(([id]) => { const target = document.getElementById(`plan-preview-${id}`); if (target) planPreviewObserver.observe(target); });
 }
 
+const planPlanningApprovalPanel = $("#plan-planning-approval");
+
+function scrollToTeachingPlanTarget(selector) {
+  const target = $(selector);
+  if (!target || target.classList.contains("hidden")) return;
+  target.scrollIntoView({ behavior: "smooth", block: "start" });
+  target.classList.add("plan-stage-focus");
+  window.setTimeout(() => target.classList.remove("plan-stage-focus"), 1800);
+}
+
+function scrollToTeachingPlanWeek(weekNumber) {
+  const editButton = $(`[data-edit-plan-week="${weekNumber}"]`, $("#teaching-plan-preview"));
+  const target = editButton?.closest("tr") || editButton;
+  if (!target) return;
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList.add("plan-stage-focus");
+  window.setTimeout(() => target.classList.remove("plan-stage-focus"), 1800);
+}
+
+function renderTeachingPlanStageProgress() {
+  const container = $("#teaching-plan-stage-progress");
+  if (!container || !teachingPlanState) return;
+  const presentationReady = Boolean(String($("#microcurricular-presentation")?.value || "").trim());
+  const methodologyApproved = Boolean(teachingPlanState.methodologyApprovedAt);
+  const planningApproved = Boolean(teachingPlanState.planningApprovedAt);
+  const activeStage = !methodologyApproved ? "methodology" : !planningApproved ? "planning" : "evaluation";
+  const states = {
+    presentation: { complete: presentationReady, status: presentationReady ? "Lista" : "Pendiente" },
+    methodology: { complete: methodologyApproved, status: methodologyApproved ? "Aprobada" : "En revisión" },
+    planning: { complete: planningApproved, status: planningApproved ? "Aprobada" : methodologyApproved ? "En revisión" : "Pendiente" },
+    evaluation: { complete: planningApproved, status: planningApproved ? "Habilitada" : "Pendiente" },
+  };
+  $$('[data-plan-stage]', container).forEach((button) => {
+    const state = states[button.dataset.planStage];
+    button.classList.toggle("complete", Boolean(state?.complete));
+    button.classList.toggle("active", button.dataset.planStage === activeStage);
+    button.classList.toggle("locked", button.dataset.planStage === "planning" && !methodologyApproved || button.dataset.planStage === "evaluation" && !planningApproved);
+    const status = button.querySelector("small");
+    if (status && state) status.textContent = state.status;
+  });
+}
+
+$("#teaching-plan-stage-progress")?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-plan-stage-target]");
+  if (!button || button.classList.contains("locked")) return;
+  scrollToTeachingPlanTarget(button.dataset.planStageTarget);
+});
+
 function renderTeachingPlanReview() {
   const preview = $("#teaching-plan-preview");
   const nav = $("#teaching-plan-preview-nav");
@@ -4019,8 +4259,18 @@ function renderTeachingPlanReview() {
   const button = $("#confirm-teaching-plan-review");
   const status = $("#teaching-plan-review-status");
   if (!preview || !nav || !checksContainer || !notes || !confirm || !button || !status) return;
+  if (planPlanningApprovalPanel?.closest("#teaching-plan-preview")) planPlanningApprovalPanel.remove();
   preview.innerHTML = teachingPlanPreviewHtml();
-  nav.innerHTML = planPreviewSections.map(([id, code, label]) => `<button type="button" data-plan-preview-target="plan-preview-${id}" data-label="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${escapeHtml(code)}</button>`).join("");
+  const planningApprovalSlot = $("#plan-planning-approval-slot");
+  if (planPlanningApprovalPanel && planningApprovalSlot) planningApprovalSlot.replaceWith(planPlanningApprovalPanel);
+  const methodologyApproved = Boolean(teachingPlanState?.methodologyApprovedAt);
+  const planningApproved = Boolean(teachingPlanState?.planningApprovedAt);
+  const sectionD = $("#plan-preview-d");
+  const sectionE = $("#plan-preview-e");
+  if (sectionD) sectionD.classList.toggle("hidden", !methodologyApproved);
+  if (sectionE) sectionE.classList.toggle("hidden", !planningApproved);
+  const visiblePlanSections = planPreviewSections.filter(([id]) => id !== "d" || methodologyApproved).filter(([id]) => id !== "e" || planningApproved);
+  nav.innerHTML = visiblePlanSections.map(([id, code, label]) => `<button type="button" data-plan-preview-target="plan-preview-${id}" data-label="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" title="${escapeHtml(label)}">${escapeHtml(code)}</button>`).join("");
   renderTeachingPlanTemplateApplied();
   requestAnimationFrame(observePlanPreviewSections);
   const checks = teachingPlanReviewChecksState();
@@ -4044,7 +4294,7 @@ function renderTeachingPlanReview() {
   if (summaryText) summaryText.textContent = allOk
     ? `${checks.filter((check) => check.ok).length}/${checks.length} validaciones automáticas correctas`
     : `${checks.filter((check) => check.ok).length}/${checks.length} validaciones correctas · revise los pendientes`;
-  button.disabled = Boolean(workflowLocked) || !allOk || !confirm.checked;
+  button.disabled = Boolean(workflowLocked) || !allOk || !confirm.checked || !planningApproved;
   if (workflow?.status === "APPROVED") button.textContent = "Plan aprobado institucionalmente";
   else if (processSuspended && workflow?.status === "IN_REVIEW") button.textContent = "Proceso de revisión suspendido";
   else if (workflow?.status === "IN_REVIEW") button.textContent = `En revisión · ${pendingStage?.label || "etapa institucional"}`;
@@ -4072,7 +4322,14 @@ function renderTeachingPlan() {
   if (!teachingPlanState) {
     $("#plan-methodologies").innerHTML = "";
     const preview = $("#teaching-plan-preview");
+    if (planPlanningApprovalPanel?.closest("#teaching-plan-preview")) planPlanningApprovalPanel.remove();
     if (preview) preview.innerHTML = "";
+    const generatePlanButton = $("#generate-teaching-plan");
+    if (generatePlanButton) {
+      generatePlanButton.classList.remove("hidden");
+      generatePlanButton.disabled = false;
+      generatePlanButton.innerHTML = '<span class="button-label">Generar metodología y TAC con IA</span>';
+    }
     $("#teaching-plan-corrections")?.classList.add("hidden");
     renderAdaptationWorkspaces();
     return;
@@ -4087,10 +4344,34 @@ function renderTeachingPlan() {
     </section>`).join("");
   const saveMethodologies = $("#save-plan-methodologies");
   if (saveMethodologies) { saveMethodologies.disabled = Boolean(institutionalLock); saveMethodologies.title = institutionalLock ? "El Plan Docente está bloqueado mientras se encuentra en revisión institucional o aprobado." : ""; }
+  const regenerateMethodologies = $("#regenerate-plan-methodologies");
+  const approveMethodologies = $("#approve-plan-methodologies");
+  const methodologyApproved = Boolean(teachingPlanState?.methodologyApprovedAt);
+  if (regenerateMethodologies) regenerateMethodologies.disabled = Boolean(institutionalLock);
+  if (approveMethodologies) {
+    approveMethodologies.disabled = Boolean(institutionalLock || methodologyApproved);
+    approveMethodologies.textContent = methodologyApproved ? "Metodología aprobada" : "Aprobar metodología y continuar a planificación";
+  }
+  const methodologyStatus = $("#plan-methodology-workflow-status");
+  if (methodologyStatus) methodologyStatus.textContent = teachingPlanState?.methodologyApprovedAt
+    ? `Metodología y TAC aprobadas. Planificación generada el ${teachingPlanReviewDate(teachingPlanState.methodologyApprovedAt)}.`
+    : "Revise la propuesta, puede editarla o regenerarla con indicaciones. La planificación semanal se generará cuando apruebe metodología y TAC.";
+  const planningPanel = planPlanningApprovalPanel;
+  planningPanel?.classList.toggle("hidden", !teachingPlanState?.methodologyApprovedAt);
+  const planningStatus = planningPanel?.querySelector("#plan-planning-approval-status");
+  if (planningStatus) planningStatus.textContent = teachingPlanState?.planningApprovedAt
+    ? `Planificación aprobada el ${teachingPlanReviewDate(teachingPlanState.planningApprovedAt)}. La sección E está habilitada y refleja las actividades calificadas de las semanas.`
+    : "Revise y ajuste todas las semanas. El botón para continuar está inmediatamente después de la Sección D. Las actividades calificadas se sincronizan con la sección E.";
+  const approvePlanning = planningPanel?.querySelector("#approve-plan-planning");
+  if (approvePlanning) { approvePlanning.disabled = Boolean(institutionalLock || teachingPlanState?.planningApprovedAt); approvePlanning.textContent = teachingPlanState?.planningApprovedAt ? "Planificación aprobada" : "Aprobar planificación y continuar a evaluación"; }
   const generatePlanButton = $("#generate-teaching-plan");
-  if (generatePlanButton && institutionalLock) generatePlanButton.disabled = true;
+  if (generatePlanButton) {
+    generatePlanButton.classList.toggle("hidden", Boolean(teachingPlanState));
+    if (institutionalLock) generatePlanButton.disabled = true;
+  }
   renderTeachingPlanCorrections();
   renderTeachingPlanReview();
+  renderTeachingPlanStageProgress();
   summarize();
   renderAdaptationWorkspaces();
 }
@@ -4144,7 +4425,7 @@ function renderTeachingPlanWeekActivitiesEditor() {
   if (!container || !teachingPlanWeekEditorState) return;
   container.innerHTML = teachingPlanWeekEditorState.activityDetails.map((detail, index) => `<div class="teaching-plan-activity-row" data-activity-index="${index}" data-evaluation-code="${escapeHtml(detail.evaluationCode || "")}">
     <label>Componente<select class="plan-activity-component" ${detail.evaluationCode ? "disabled" : ""}><option value="ACD" ${detail.component === "ACD" ? "selected" : ""}>ACD</option><option value="APE" ${detail.component === "APE" ? "selected" : ""}>APE</option><option value="AA" ${detail.component === "AA" ? "selected" : ""}>AA</option></select></label>
-    <label>Actividad<textarea class="plan-activity-description" maxlength="3000">${escapeHtml(detail.description || "")}</textarea></label>
+    <label>${detail.evaluationCode ? "Actividad evaluada" : "Actividad"}<textarea class="plan-activity-description" maxlength="3000">${escapeHtml(detail.description || "")}</textarea></label>
     <label>Recurso de aprendizaje<textarea class="plan-activity-resource" maxlength="2000" rows="3">${escapeHtml(detail.resource || "")}</textarea></label>
     <label>Horas<input class="plan-activity-hours" type="number" min="0" max="1000" step="1" value="${Number(detail.hours || 0)}"></label>
     ${detail.evaluationCode ? `<span class="evaluation-badge">${escapeHtml(detail.evaluationCode)} · calificada</span>` : `<button class="icon-action plan-remove-activity" type="button" data-index="${index}" aria-label="Eliminar actividad" title="Eliminar actividad">🗑</button>`}
@@ -4306,14 +4587,19 @@ $("#teaching-plan-add-criterion")?.addEventListener("click", () => {
   if (!teachingPlanWeekEditorState?.instrumentConfig) return;
   const current = readInstrumentCriteriaFromEditor();
   current.push(blankInstrumentCriterion(teachingPlanWeekEditorState.instrumentConfig.type));
+  const newCriterionIndex = current.length - 1;
   teachingPlanWeekEditorState.instrumentConfig.criteria = current;
   renderTeachingPlanInstrumentCriteria();
+  const newCriterion = $(`.instrument-criterion-card[data-criterion-index="${newCriterionIndex}"] .instrument-criterion-label`, $("#teaching-plan-instrument-criteria"));
+  newCriterion?.focus();
+  newCriterion?.select();
 });
 $("#teaching-plan-instrument-criteria")?.addEventListener("click", (event) => {
   if (!teachingPlanWeekEditorState?.instrumentConfig) return;
   const removeCriterion = event.target.closest(".instrument-remove-criterion");
   const addLevel = event.target.closest(".instrument-add-level");
   const removeLevel = event.target.closest(".instrument-remove-level");
+  if (!removeCriterion && !addLevel && !removeLevel) return;
   const criteria = readInstrumentCriteriaFromEditor();
   if (removeCriterion) criteria.splice(Number(removeCriterion.dataset.index), 1);
   if (addLevel) criteria[Number(addLevel.dataset.criterion)]?.levels.push({ label: "Nuevo nivel", description: "", score: 0 });
@@ -4339,12 +4625,16 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
     const sums = { ACD: 0, APE: 0, AA: 0 }; activityDetails.forEach((item) => sums[item.component] += item.hours);
     if (sums.ACD !== teachingPlanWeekEditorState.acdHours || sums.APE !== teachingPlanWeekEditorState.apeHours || sums.AA !== teachingPlanWeekEditorState.aaHours) throw new Error(`Horas: la distribución debe coincidir con ACD ${teachingPlanWeekEditorState.acdHours}, APE ${teachingPlanWeekEditorState.apeHours} y AA ${teachingPlanWeekEditorState.aaHours} de la semana.`);
     const resources = activityDetails.map((item) => item.resource);
+    const evaluatedCode = teachingPlanWeekEditorState.evaluatedActivity?.code || null;
+    const linkedEvaluatedDetail = evaluatedCode ? activityDetails.find((item) => item.evaluationCode === evaluatedCode) : null;
+    if (evaluatedCode && !linkedEvaluatedDetail) throw new Error(`Actividad evaluada: conserve la actividad marcada ${evaluatedCode} dentro de la planificación semanal.`);
     const evaluatedActivity = teachingPlanWeekEditorState.evaluatedActivity ? {
       code: teachingPlanWeekEditorState.evaluatedActivity.code,
-      activity: $("#teaching-plan-week-form").elements.evaluatedActivity.value.trim(),
+      activity: linkedEvaluatedDetail?.description || "",
       workStrategies: $("#teaching-plan-week-form").elements.workStrategies.value.trim(),
       instrumentConfig: instrumentConfigFromWeekEditor(),
     } : null;
+    const wasPlanningApproved = Boolean(teachingPlanState.planningApprovedAt);
     const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/weeks/${teachingPlanWeekEditorState.week}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -4376,7 +4666,10 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
     closeTeachingPlanWeekEditor();
     renderTeachingPlan();
     persistProject();
-    showMessage(`Semana ${editedWeek} actualizada. La revisión del Plan Docente quedó pendiente nuevamente.`);
+    window.setTimeout(() => scrollToTeachingPlanWeek(editedWeek), 80);
+    showMessage(wasPlanningApproved
+      ? `Semana ${editedWeek} actualizada. La actividad evaluada quedó sincronizada con la sección E. Revise el cambio y vuelva a aprobar la planificación para habilitar nuevamente la evaluación.`
+      : `Semana ${editedWeek} actualizada. La actividad evaluada quedó sincronizada con la sección E.`);
   } catch (error) {
     showValidationModal(error.message, "#teaching-plan-week-form");
   }
@@ -4481,18 +4774,26 @@ $("#teacher-corrections-confirm")?.addEventListener("change", updateTeacherCorre
 $("#save-teaching-plan-corrections")?.addEventListener("click", () => saveTeachingPlanCorrections().catch((error) => showValidationModal(error.message, "#teaching-plan-corrections")));
 $("#submit-teaching-plan-corrections")?.addEventListener("click", () => submitTeacherPlanReview({ correctionMode: true }).catch(() => {}));
 
-$("#generate-teaching-plan").onclick = async () => {
-  const button = $("#generate-teaching-plan");
-  button.disabled = true;
-  button.classList.add("is-loading");
-  button.innerHTML = '<span class="inline-spinner" aria-hidden="true"></span><span>Generando el plan docente…</span>';
+async function generateTeachingPlanStage(mode = "METHODOLOGY", instructions = "", options = {}) {
+  const button = options.button || $("#generate-teaching-plan");
+  const originalButtonHtml = button?.innerHTML || "";
+  const originalButtonDisabled = Boolean(button?.disabled);
+  if (button) {
+    button.disabled = true;
+    button.classList.add("is-loading");
+    button.innerHTML = `<span class="inline-spinner" aria-hidden="true"></span><span>${mode === "PLANNING" ? "Generando planificación semanal…" : "Generando metodología y TAC…"}</span>`;
+  }
   showMessage();
   try {
     const setupResult = await saveProjectSetup();
     if (workflowModeState === "ADAPTATION_16_TO_8" && setupResult.planPreserved === false) {
       throw new Error("La ficha base del Plan Docente cambió después de aprobar la adaptación. La propuesta anterior quedó invalidada; analice y apruebe una nueva propuesta antes de generar el Plan Docente modular.");
     }
-    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/generate`, { method: "POST" });
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode, instructions }),
+    });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "No fue posible generar el plan docente.");
     teachingPlanState = {
@@ -4510,6 +4811,7 @@ $("#generate-teaching-plan").onclick = async () => {
     guideAdaptationProposalState = null;
     renderTeachingPlan();
     persistProject();
+    return true;
   } catch (error) {
     const focusTarget = /Conocimiento e IA|formato de plan docente|prompt de plan docente|documento institucional/i.test(error.message)
       ? "#projects-list"
@@ -4518,24 +4820,41 @@ $("#generate-teaching-plan").onclick = async () => {
         : /Importancia para el estudiante/i.test(error.message)
           ? "#guide-reference-importance-edit"
           : /La IA propuso|semana .*conten|secuencia única|distribución de horas|actividades calificadas/i.test(error.message)
-            ? "#generate-teaching-plan"
+            ? (mode === "PLANNING" ? "#plan-methodologies-section" : "#generate-teaching-plan")
             : 'textarea[name="guideReference"]';
     showValidationModal(error.message, focusTarget);
+    return false;
   } finally {
-    button.classList.remove("is-loading");
     renderAdaptationWorkspaces();
-    if (workflowModeState !== "ADAPTATION_16_TO_8") {
-      button.disabled = false;
+    if (button) {
       button.classList.remove("is-loading");
-      button.innerHTML = `<span class="button-label">${teachingPlanState ? "Regenerar plan docente con IA" : "Generar plan docente con IA"}</span>`;
+      const institutionalLock = teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status);
+      if (button.id === "generate-teaching-plan") {
+        button.disabled = Boolean(institutionalLock);
+        button.innerHTML = '<span class="button-label">Generar metodología y TAC con IA</span>';
+      } else if (button.id === "approve-plan-methodologies") {
+        const approved = Boolean(teachingPlanState?.methodologyApprovedAt);
+        button.disabled = Boolean(institutionalLock || approved);
+        button.textContent = approved ? "Metodología aprobada" : "Aprobar metodología y continuar a planificación";
+      } else {
+        button.disabled = Boolean(institutionalLock || originalButtonDisabled);
+        button.innerHTML = originalButtonHtml;
+      }
     }
   }
-};
+}
+
+$("#generate-teaching-plan").onclick = (event) => generateTeachingPlanStage("METHODOLOGY", "", { button: event.currentTarget });
+$("#regenerate-plan-methodologies")?.addEventListener("click", (event) => {
+  const instructions = String($("#plan-methodology-instructions")?.value || "").trim();
+  generateTeachingPlanStage("METHODOLOGY", instructions, { button: event.currentTarget }).catch(() => {});
+});
 
 $("#save-plan-methodologies").onclick = async () => {
-  if (!teachingPlanState) return;
+  if (!teachingPlanState) return false;
   if (teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status)) {
-    return showValidationModal("El Plan Docente no puede modificarse mientras se encuentra en revisión institucional o aprobado.", "#teaching-plan-review-status");
+    showValidationModal("El Plan Docente no puede modificarse mientras se encuentra en revisión institucional o aprobado.", "#teaching-plan-review-status");
+    return false;
   }
   const methodologies = teachingPlanState.content.sequences.map((sequence, index) => ({
     learningOutcome: sequence.learningOutcome,
@@ -4564,10 +4883,45 @@ $("#save-plan-methodologies").onclick = async () => {
     renderTeachingPlan();
     persistProject();
     showMessage("Metodologías y TAC guardadas.");
+    return true;
   } catch (error) {
     showMessage(error.message);
+    return false;
   }
 };
+
+$("#approve-plan-methodologies")?.addEventListener("click", async () => {
+  const button = $("#approve-plan-methodologies");
+  try {
+    button.disabled = true;
+    const saved = await $("#save-plan-methodologies").onclick();
+    if (!saved) return;
+    const generated = await generateTeachingPlanStage("PLANNING", "", { button });
+    if (!generated) return;
+    showMessage("Metodología y TAC aprobadas. La planificación semanal fue generada con base en estas decisiones. Revísela a continuación.");
+    window.setTimeout(() => scrollToTeachingPlanTarget("#plan-preview-d"), 80);
+  } finally {
+    const institutionalLock = teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status);
+    button.disabled = Boolean(institutionalLock || teachingPlanState?.methodologyApprovedAt);
+  }
+});
+
+$("#approve-plan-planning")?.addEventListener("click", async () => {
+  const button = $("#approve-plan-planning");
+  try {
+    button.disabled = true;
+    const payload = await authRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/planning/approve`, { method: "POST", body: "{}" });
+    teachingPlanState = { ...teachingPlanState, methodologyApprovedAt: payload.methodologyApprovedAt, planningApprovedAt: payload.planningApprovedAt };
+    renderTeachingPlan();
+    showMessage("Planificación semanal aprobada. La sección E. Evaluación de la asignatura quedó habilitada.");
+    window.setTimeout(() => scrollToTeachingPlanTarget("#plan-preview-e"), 80);
+  } catch (error) {
+    showValidationModal(error.message, "#plan-planning-approval");
+  } finally {
+    const institutionalLock = teachingPlanState?.reviewWorkflow && ["IN_REVIEW", "APPROVED"].includes(teachingPlanState.reviewWorkflow.status);
+    button.disabled = Boolean(institutionalLock || teachingPlanState?.planningApprovedAt);
+  }
+});
 
 $("#generate-microcurricular-presentation")?.addEventListener("click", () => {
   generateMicrocurricularPresentation().catch(() => {});
@@ -4695,6 +5049,8 @@ next.onclick = async () => {
       return;
     }
   } else if (step === 3) {
+    if (!bibliographyEntriesState.some((entry) => entry.type === "COMPLEMENTARY")) return showValidationModal("Registre al menos una bibliografía complementaria antes de continuar.", "#bibliography-complementary-list");
+    if (!bibliographyEntriesState.some((entry) => entry.type === "REA")) return showValidationModal("Registre al menos un recurso educativo abierto (REA) antes de continuar.", "#bibliography-rea-list");
     next.disabled = true;
     try {
       await saveProjectSetup();
@@ -5461,7 +5817,7 @@ const catalogFields = {
   programs: ["code", "name", "academicLevelId", "academicUnitId"],
   "subject-types": ["code", "name", "sortOrder", "planCategory"],
   periods: ["code", "name", "startsAt", "endsAt", "bimestralEvaluationStartAt", "bimestralEvaluationEndAt", "recoveryEvaluationStartAt", "recoveryEvaluationEndAt"],
-  courses: ["code", "name"],
+  courses: ["code", "name", "sisCode", "metacourseUrl"],
   departments: ["code", "name", "sortOrder"],
   offerings: [
     "code", "courseId", "programId", "modalityId", "subjectTypeId", "periodId", "totalWeeks",
@@ -5518,6 +5874,7 @@ function catalogContext(kind, item) {
   }
   if (kind === "offerings") return `${item.code} · ${item.program.academicLevel.name} · ${item.program.academicUnit.name} · ${item.subjectType.name} · ${item.totalWeeks} semanas`;
   if (kind === "subject-types") return item.planCategory ? `Plan: ${item.planCategory}` : "Categoría del plan pendiente";
+  if (kind === "courses") return [item.sisCode ? `SIS: ${item.sisCode}` : "SIS pendiente", item.metacourseUrl ? `Metacurso: ${item.metacourseUrl}` : "Metacurso pendiente"].join(" · ");
   return "";
 }
 
@@ -5910,7 +6267,9 @@ function renderPlanChecklistManager() {
 }
 function renderGuideReport() {
   if (!adminData) return;
-  const query = ($("#guide-report-search").value || "").toLowerCase();
+  const legacyGuideReportSearch = $("#guide-report-search");
+  if (!legacyGuideReportSearch || !$("#guide-summary") || !$("#guide-report-body")) return;
+  const query = (legacyGuideReportSearch.value || "").toLowerCase();
   const projects = adminData.projects.filter((project) =>
     `${project.name} ${project.subjectCode} ${project.subjectName} ${project.professorName} ${project.academicPeriod}`.toLowerCase().includes(query));
   const total = adminData.projects.length;
@@ -5931,6 +6290,35 @@ function renderGuideReport() {
 function institutionalSettingValue(key, fallback = "") {
   return (adminData?.institutionalSettings || []).find((item) => item.key === key)?.value || fallback;
 }
+function renderAiGenerationPolicy() {
+  const field = $("#ai-max-generations-per-content");
+  if (!field) return;
+  field.value = institutionalSettingValue("AI_MAX_GENERATIONS_PER_CONTENT", "3");
+  const status = $("#ai-generation-policy-status");
+  if (status) status.textContent = Number(field.value) === 0
+    ? "Actualmente no existe un límite institucional de generaciones por contenido."
+    : `Actualmente se permiten hasta ${field.value} generaciones exitosas por contenido y profesor.`;
+}
+
+$("#ai-generation-policy-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const field = $("#ai-max-generations-per-content");
+  const value = Number.parseInt(String(field?.value || ""), 10);
+  if (!Number.isInteger(value) || value < 0 || value > 100) {
+    return showValidationModal("Uso de IA: ingrese un número entero entre 0 y 100. Use 0 para no establecer límite.", "#ai-max-generations-per-content");
+  }
+  try {
+    await authRequest("/api/admin/settings/ai-generation", {
+      method: "PATCH",
+      body: JSON.stringify({ maxGenerationsPerContent: value }),
+    });
+    await loadAdminDashboard();
+    showAiJobToast(value === 0 ? "Límite de IA actualizado: sin límite." : `Límite de IA actualizado: ${value} generaciones por contenido.`, "success");
+  } catch (error) {
+    showValidationModal(error.message || "No fue posible guardar el límite de IA.", "#ai-generation-policy-form");
+  }
+});
+
 function renderInstitutionalPlanText() {
   const field = $("#institutional-curricular-adaptations");
   if (!field) return;
@@ -5950,7 +6338,7 @@ function renderAdminRoleSelector(selectedCodes = null) {
   const container = $("#admin-user-roles");
   if (!container) return;
   const selected = new Set(selectedCodes || $$("input[type=checkbox]:checked", container).map((input) => input.value));
-  const preferredOrder = ["TEACHER", "REVIEWER", "QUALITY", "DIITEP", "DIRECTOR", "ADMIN"];
+  const preferredOrder = ["TEACHER", "REVIEWER", "QUALITY", "DIITEP", "DIRECTOR", "SECRETARY", "ADMIN"];
   const roles = [...adminData.roles].sort((a, b) => {
     const ai = preferredOrder.indexOf(a.code); const bi = preferredOrder.indexOf(b.code);
     if (ai >= 0 || bi >= 0) return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
@@ -6001,14 +6389,80 @@ function syncPlanReviewerAssignmentForm() {
   });
 }
 
-function syncCareerDirectorForm() {
-  const programId = $("#career-director-program")?.value;
-  const select = $("#career-director-user");
+async function careerModalitiesForProgram(programId) {
+  if (!programId) return [];
+  const result = await authRequest(`/api/admin/programs/${encodeURIComponent(programId)}/modalities`);
+  return Array.isArray(result.modalities) ? result.modalities : [];
+}
+
+async function populateCareerAuthorityModalities(modalitySelect, programId, previousModality = "") {
+  if (!modalitySelect) return [];
+  if (!programId) {
+    modalitySelect.innerHTML = '<option value="">Seleccione primero una carrera</option>';
+    modalitySelect.disabled = true;
+    return [];
+  }
+  modalitySelect.disabled = true;
+  modalitySelect.innerHTML = '<option value="">Cargando modalidades…</option>';
+  const modalities = await careerModalitiesForProgram(programId);
+  const stillSelectedProgram = modalitySelect.id === "career-director-modality"
+    ? $("#career-director-program")?.value
+    : $("#career-secretary-program")?.value;
+  if (stillSelectedProgram !== programId) return [];
+  if (!modalities.length) {
+    modalitySelect.innerHTML = '<option value="">La carrera no tiene modalidades en la oferta académica</option>';
+    modalitySelect.disabled = true;
+    return [];
+  }
+  modalitySelect.innerHTML = `<option value="">Seleccione una modalidad</option>${modalities.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("")}`;
+  modalitySelect.disabled = false;
+  if (modalities.some((item) => item.id === previousModality)) modalitySelect.value = previousModality;
+  return modalities;
+}
+
+function syncCareerAuthorityUser(select, role) {
   if (!select || !adminData) return;
-  const directors = adminData.users.filter((user) => user.active && adminUserHasRole(user, "DIRECTOR"));
-  setSelectOptions(select, directors);
-  const assignment = (adminData.careerDirectorAssignments || []).find((item) => item.programId === programId && item.active);
-  select.value = assignment?.directorId || "";
+  setSelectOptions(select, adminData.users.filter((user) => user.active && adminUserHasRole(user, role)));
+}
+
+async function syncCareerDirectorForm({ keepModality = true, reloadModalities = true } = {}) {
+  const programId = $("#career-director-program")?.value || "";
+  const modalitySelect = $("#career-director-modality");
+  const select = $("#career-director-user");
+  if (!select || !modalitySelect || !adminData) return;
+  const previousModality = keepModality ? modalitySelect.value : "";
+  syncCareerAuthorityUser(select, "DIRECTOR");
+  try {
+    if (reloadModalities) await populateCareerAuthorityModalities(modalitySelect, programId, previousModality);
+    const modalityId = modalitySelect.value;
+    const assignment = (adminData.careerDirectorAssignments || []).find((item) =>
+      item.programId === programId && item.modalityId === modalityId && item.active);
+    select.value = assignment?.directorId || "";
+  } catch (error) {
+    modalitySelect.innerHTML = '<option value="">No fue posible cargar las modalidades</option>';
+    modalitySelect.disabled = true;
+    showAdminMessage(error.message || "No fue posible consultar las modalidades de la carrera.", true);
+  }
+}
+
+async function syncCareerSecretaryForm({ keepModality = true, reloadModalities = true } = {}) {
+  const programId = $("#career-secretary-program")?.value || "";
+  const modalitySelect = $("#career-secretary-modality");
+  const select = $("#career-secretary-user");
+  if (!select || !modalitySelect || !adminData) return;
+  const previousModality = keepModality ? modalitySelect.value : "";
+  syncCareerAuthorityUser(select, "SECRETARY");
+  try {
+    if (reloadModalities) await populateCareerAuthorityModalities(modalitySelect, programId, previousModality);
+    const modalityId = modalitySelect.value;
+    const assignment = (adminData.careerSecretaryAssignments || []).find((item) =>
+      item.programId === programId && item.modalityId === modalityId && item.active);
+    select.value = assignment?.secretaryId || "";
+  } catch (error) {
+    modalitySelect.innerHTML = '<option value="">No fue posible cargar las modalidades</option>';
+    modalitySelect.disabled = true;
+    showAdminMessage(error.message || "No fue posible consultar las modalidades de la carrera.", true);
+  }
 }
 
 function renderPlanReviewNotifications() {
@@ -6065,11 +6519,19 @@ function renderPlanReviewAdmin() {
     <label>Orden<input type="number" min="1" max="20" value="${item.sortOrder}" data-stage-order></label>
   </article>`).join("");
 
-  const projects = adminData.projects.filter((project) => project.teachingPlan);
-  $("#plan-review-project").innerHTML = `<option value="">Seleccione una asignatura</option>${projects.map((project) => `<option value="${escapeHtml(project.id)}">${escapeHtml(`${project.subjectCode || "Sin código"} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
+  // Los responsables se asignan al Project, por lo que la asignatura debe estar disponible
+  // incluso antes de que el docente genere el TeachingPlan.
+  const projects = adminData.projects;
+  $("#plan-review-project").innerHTML = `<option value="">Seleccione una asignatura</option>${projects.map((project) => {
+    const context = [project.professorName, project.academicOffering?.program?.name, project.academicOffering?.modality?.name].filter(Boolean).join(" · ");
+    return `<option value="${escapeHtml(project.id)}">${escapeHtml(`${project.subjectCode || "Sin código"} — ${project.subjectName}${context ? ` · ${context}` : ""}`)}</option>`;
+  }).join("")}`;
   const programs = adminData.academicPrograms.filter((program) => program.active !== false);
-  $("#career-director-program").innerHTML = `<option value="">Seleccione una carrera</option>${programs.map((program) => `<option value="${escapeHtml(program.id)}">${escapeHtml(`${program.code || ""}${program.code ? " — " : ""}${program.name}`)}</option>`).join("")}`;
+  const programOptions = `<option value="">Seleccione una carrera</option>${programs.map((program) => `<option value="${escapeHtml(program.id)}">${escapeHtml(`${program.code || ""}${program.code ? " — " : ""}${program.name}`)}</option>`).join("")}`;
+  $("#career-director-program").innerHTML = programOptions;
+  $("#career-secretary-program").innerHTML = programOptions;
   setSelectOptions($("#career-director-user"), adminData.users.filter((user) => user.active && adminUserHasRole(user, "DIRECTOR")));
+  setSelectOptions($("#career-secretary-user"), adminData.users.filter((user) => user.active && adminUserHasRole(user, "SECRETARY")));
   [
     ["#plan-review-peer", "REVIEWER"], ["#plan-review-quality", "QUALITY"], ["#plan-review-diitep", "DIITEP"],
   ].forEach(([selector, role]) => setSelectOptions($(selector), adminData.users.filter((user) => user.active && adminUserHasRole(user, role))));
@@ -6083,8 +6545,11 @@ async function loadAdminDashboard() {
   adminData = await authRequest("/api/admin/dashboard");
   renderKnowledgeScopePickers();
   renderAdminRoleSelector();
-  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderPlanReviewAdmin(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderGuideReport();
-  $("#checklist-project").innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
+  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderPlanReviewAdmin(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderAiGenerationPolicy(); renderGuideReport();
+  const checklistProject = $("#checklist-project");
+  if (checklistProject) {
+    checklistProject.innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
+  }
 }
 $("#nav-admin").onclick = async () => {
   activateNavigation($("#nav-admin"));
@@ -6102,7 +6567,10 @@ $$("[data-admin-tab]").forEach((button) => {
   };
 });
 $("#plan-review-project")?.addEventListener("change", syncPlanReviewerAssignmentForm);
-$("#career-director-program")?.addEventListener("change", syncCareerDirectorForm);
+$("#career-director-program")?.addEventListener("change", () => { void syncCareerDirectorForm({ keepModality: false, reloadModalities: true }); });
+$("#career-director-modality")?.addEventListener("change", () => { void syncCareerDirectorForm({ reloadModalities: false }); });
+$("#career-secretary-program")?.addEventListener("change", () => { void syncCareerSecretaryForm({ keepModality: false, reloadModalities: true }); });
+$("#career-secretary-modality")?.addEventListener("change", () => { void syncCareerSecretaryForm({ reloadModalities: false }); });
 
 $("#plan-review-config-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -6161,15 +6629,38 @@ $("#plan-review-assignment-form")?.addEventListener("submit", async (event) => {
 $("#career-director-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const programId = $("#career-director-program").value;
+  const modalityId = $("#career-director-modality").value;
   if (!programId) return showAdminMessage("Seleccione una carrera.", true);
+  if (!modalityId) return showAdminMessage("Seleccione una modalidad para la Dirección.", true);
   try {
     await authRequest(`/api/admin/programs/${encodeURIComponent(programId)}/director`, {
-      method: "PUT", body: JSON.stringify({ directorId: $("#career-director-user").value || null }),
+      method: "PUT", body: JSON.stringify({ modalityId, directorId: $("#career-director-user").value || null }),
     });
-    showAdminMessage("Director/a de carrera actualizado.");
+    showAdminMessage("Director/a de carrera y modalidad actualizado.");
     await loadAdminDashboard();
     $("#career-director-program").value = programId;
+    syncCareerDirectorForm({ keepModality: false });
+    $("#career-director-modality").value = modalityId;
     syncCareerDirectorForm();
+  } catch (error) { showAdminMessage(error.message, true); }
+});
+
+$("#career-secretary-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const programId = $("#career-secretary-program").value;
+  const modalityId = $("#career-secretary-modality").value;
+  if (!programId) return showAdminMessage("Seleccione una carrera.", true);
+  if (!modalityId) return showAdminMessage("Seleccione una modalidad para la Secretaría.", true);
+  try {
+    await authRequest(`/api/admin/programs/${encodeURIComponent(programId)}/secretary`, {
+      method: "PUT", body: JSON.stringify({ modalityId, secretaryId: $("#career-secretary-user").value || null }),
+    });
+    showAdminMessage("Secretaría de carrera y modalidad actualizada.");
+    await loadAdminDashboard();
+    $("#career-secretary-program").value = programId;
+    syncCareerSecretaryForm({ keepModality: false });
+    $("#career-secretary-modality").value = modalityId;
+    syncCareerSecretaryForm();
   } catch (error) { showAdminMessage(error.message, true); }
 });
 
@@ -6224,7 +6715,11 @@ $("#catalog-form").addEventListener("click", (event) => {
   if (editUnit) {
     const index = Number(editUnit.dataset.editUnit);
     const value = window.prompt("Título de la unidad:", catalogStructuredState.units[index].title);
-    if (value !== null && normalizeStructuredText(value)) { catalogStructuredState.units[index].title = normalizeStructuredText(value); renderUnits(); }
+    const normalized = normalizeStructuredText(value);
+    if (value !== null && normalized) {
+      if (hasDuplicateUnitTitle(normalized, index)) return showAdminMessage(`La unidad «${normalized}» ya existe en esta asignatura.`, true);
+      catalogStructuredState.units[index].title = normalized; renderUnits();
+    }
     return;
   }
   const deleteUnit = event.target.closest("[data-delete-unit]");
@@ -6236,7 +6731,10 @@ $("#catalog-form").addEventListener("click", (event) => {
     const unitIndex = Number(addContent.dataset.addContent);
     const input = $(`[data-content-input="${unitIndex}"]`);
     const value = normalizeStructuredText(input.value);
-    if (value) { catalogStructuredState.units[unitIndex].contents.push({ text: value, subcontents: [] }); renderUnits(); }
+    if (value) {
+      if (hasDuplicateContentText(value)) return showAdminMessage(`El tema o contenido «${value}» ya existe en esta asignatura.`, true);
+      catalogStructuredState.units[unitIndex].contents.push({ text: value, subcontents: [] }); renderUnits();
+    }
     return;
   }
   const editContent = event.target.closest("[data-edit-content]");
@@ -6244,7 +6742,11 @@ $("#catalog-form").addEventListener("click", (event) => {
     const [unitIndex, contentIndex] = editContent.dataset.editContent.split(":").map(Number);
     const current = catalogStructuredState.units[unitIndex].contents[contentIndex];
     const value = window.prompt("Modifique el contenido:", current.text);
-    if (value !== null && normalizeStructuredText(value)) { current.text = normalizeStructuredText(value); renderUnits(); }
+    const normalized = normalizeStructuredText(value);
+    if (value !== null && normalized) {
+      if (hasDuplicateContentText(normalized, unitIndex, contentIndex)) return showAdminMessage(`El tema o contenido «${normalized}» ya existe en esta asignatura.`, true);
+      current.text = normalized; renderUnits();
+    }
     return;
   }
   const deleteContent = event.target.closest("[data-delete-content]");
@@ -6293,6 +6795,7 @@ $("#add-unit").onclick = () => {
   const input = $("#unit-title-input");
   const title = normalizeStructuredText(input.value);
   if (!title) return;
+  if (hasDuplicateUnitTitle(title)) return showAdminMessage(`La unidad «${title}» ya existe en esta asignatura.`, true);
   catalogStructuredState.units.push({ title, contents: [] });
   input.value = ""; renderUnits();
 };
@@ -6311,7 +6814,7 @@ function catalogPayload(kind, source, active = source.active) {
       value = Array.isArray(value) ? value : linesFrom(value);
     }
     if (field === "planCategory" && !value) value = null;
-    if (["semester", "description"].includes(field) && !value) value = null;
+    if (["semester", "description", "sisCode", "metacourseUrl"].includes(field) && !value) value = null;
     if (["startsAt", "endsAt", "bimestralEvaluationStartAt", "bimestralEvaluationEndAt", "recoveryEvaluationStartAt", "recoveryEvaluationEndAt"].includes(field) && value) value = String(value).slice(0, 10);
     if (["startsAt", "endsAt", "bimestralEvaluationStartAt", "bimestralEvaluationEndAt", "recoveryEvaluationStartAt", "recoveryEvaluationEndAt"].includes(field) && !value) value = null;
     payload[field] = value;
@@ -6998,3 +7501,258 @@ $("#knowledge-config-form").onsubmit = async (event) => {
     showValidationModal(error.message, "#knowledge-config-form");
   }
 };
+// v32.6 · Organización de responsables del Plan y reportería académica administrativa.
+function setupPlanReviewConfigurationSelectorV326() {
+  const panel = document.querySelector('[data-admin-panel="plan-review"]');
+  if (!panel || panel.dataset.v326SelectorReady === "true") return;
+
+  const configurations = [
+    { value: "DIRECTOR", label: "Director/a por carrera y modalidad", form: document.querySelector("#career-director-form") },
+    { value: "PLAN", label: "Responsables por Plan Docente", form: document.querySelector("#plan-review-assignment-form") },
+    { value: "SECRETARY", label: "Secretaría por carrera y modalidad", form: document.querySelector("#career-secretary-form") },
+  ].filter((item) => item.form);
+  if (!configurations.length) return;
+
+  configurations.forEach((item) => item.form.remove());
+
+  const selectorCard = document.createElement("div");
+  selectorCard.className = "admin-card";
+  selectorCard.innerHTML = `
+    <div class="table-toolbar">
+      <div>
+        <h2>Asignación de responsables</h2>
+        <p class="field-help">Seleccione el tipo de configuración que desea administrar.</p>
+      </div>
+    </div>
+    <label>Configuración
+      <select id="plan-review-responsibility-view">
+        ${configurations.map((item) => `<option value="${item.value}">${escapeHtml(item.label)}</option>`).join("")}
+      </select>
+    </label>`;
+
+  const formHost = document.createElement("div");
+  formHost.id = "plan-review-responsibility-host";
+  configurations.forEach((item) => {
+    item.form.dataset.planReviewResponsibilityForm = item.value;
+    formHost.append(item.form);
+  });
+
+  const processForm = document.querySelector("#plan-review-process-form") || document.querySelector("#plan-review-config-form");
+  const processContainer = processForm?.closest(".admin-grid") || processForm?.closest(".admin-card");
+  if (processContainer) processContainer.classList.add("plan-review-process-full-width");
+  if (processContainer && processContainer.parentElement === panel) {
+    processContainer.insertAdjacentElement("afterend", selectorCard);
+    selectorCard.insertAdjacentElement("afterend", formHost);
+  } else {
+    panel.prepend(formHost);
+    panel.prepend(selectorCard);
+  }
+
+  const progressCard = document.querySelector("#plan-review-progress-body")?.closest(".admin-card");
+  const notificationsCard = document.querySelector("#plan-review-notifications-body")?.closest(".admin-card");
+  if (progressCard) {
+    progressCard.classList.add("plan-review-progress-full-width");
+    if (notificationsCard?.parentElement === panel) panel.insertBefore(progressCard, notificationsCard);
+    else panel.append(progressCard);
+  }
+
+  panel.querySelectorAll(":scope > .admin-grid").forEach((grid) => {
+    if (!grid.querySelector(".admin-card, form")) grid.remove();
+  });
+
+  const selector = selectorCard.querySelector("#plan-review-responsibility-view");
+  const showConfiguration = () => {
+    const selected = selector.value;
+    configurations.forEach((item) => item.form.classList.toggle("hidden", item.value !== selected));
+  };
+  selector.addEventListener("change", showConfiguration);
+  showConfiguration();
+  panel.dataset.v326SelectorReady = "true";
+}
+
+let adminAcademicReportTimerV326 = null;
+let adminAcademicReportReadyV326 = false;
+
+function academicReportDateV326(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("es-EC", { dateStyle: "short", timeStyle: "short" });
+}
+
+function setupAdminAcademicReportsV326() {
+  const panel = document.querySelector('[data-admin-panel="reports"]');
+  if (!panel || panel.dataset.v326ReportsReady === "true") return;
+  const tab = document.querySelector('[data-admin-tab="reports"]');
+  if (tab) tab.textContent = "Reportes";
+
+  panel.innerHTML = `
+    <div class="admin-card">
+      <div class="table-toolbar">
+        <div>
+          <h2>Reportes académicos</h2>
+          <p class="field-help">Consulte el seguimiento del Plan Docente o de la Guía Didáctica y descargue en Excel exactamente los registros filtrados.</p>
+        </div>
+        <button class="button" id="academic-report-download" type="button">Descargar Excel</button>
+      </div>
+      <div class="grid">
+        <label>Documento
+          <select id="academic-report-document">
+            <option value="PLAN">Plan Docente</option>
+            <option value="GUIDE">Guía Didáctica</option>
+          </select>
+        </label>
+        <label>Búsqueda
+          <input id="academic-report-search" type="search" placeholder="Asignatura, código, profesor, carrera…">
+        </label>
+        <label>Periodo<select id="academic-report-period"><option value="">Todos</option></select></label>
+        <label>Carrera<select id="academic-report-career"><option value="">Todas</option></select></label>
+        <label>Modalidad<select id="academic-report-modality"><option value="">Todas</option></select></label>
+        <label>Estado<select id="academic-report-status"><option value="">Todos</option></select></label>
+        <label>Etapa actual<select id="academic-report-stage"><option value="">Todas</option></select></label>
+        <label>Actualizado desde<input id="academic-report-date-from" type="date"></label>
+        <label>Actualizado hasta<input id="academic-report-date-to" type="date"></label>
+      </div>
+      <div class="form-actions">
+        <button class="button secondary" id="academic-report-clear" type="button">Limpiar filtros</button>
+        <button class="button secondary" id="academic-report-refresh" type="button">Actualizar</button>
+      </div>
+    </div>
+    <div id="academic-report-summary" class="report-cards"></div>
+    <div class="admin-card">
+      <div class="table-toolbar">
+        <div>
+          <h2 id="academic-report-table-title">Seguimiento del Plan Docente</h2>
+          <p id="academic-report-result-count" class="field-help"></p>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="admin-table">
+          <thead id="academic-report-head"></thead>
+          <tbody id="academic-report-body"><tr><td>Cargando reporte…</td></tr></tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const ids = ["document", "search", "period", "career", "modality", "status", "stage", "date-from", "date-to"];
+  ids.forEach((suffix) => {
+    const element = document.querySelector(`#academic-report-${suffix}`);
+    if (!element) return;
+    const eventName = suffix === "search" ? "input" : "change";
+    element.addEventListener(eventName, () => {
+      clearTimeout(adminAcademicReportTimerV326);
+      adminAcademicReportTimerV326 = setTimeout(() => loadAdminAcademicReportV326().catch(showAdminAcademicReportErrorV326), suffix === "search" ? 250 : 0);
+    });
+  });
+  document.querySelector("#academic-report-refresh")?.addEventListener("click", () => loadAdminAcademicReportV326().catch(showAdminAcademicReportErrorV326));
+  document.querySelector("#academic-report-clear")?.addEventListener("click", () => {
+    ["search", "period", "career", "modality", "status", "stage", "date-from", "date-to"].forEach((suffix) => {
+      const element = document.querySelector(`#academic-report-${suffix}`);
+      if (element) element.value = "";
+    });
+    loadAdminAcademicReportV326().catch(showAdminAcademicReportErrorV326);
+  });
+  document.querySelector("#academic-report-download")?.addEventListener("click", downloadAdminAcademicReportV326);
+  tab?.addEventListener("click", () => {
+    if (!adminAcademicReportReadyV326) loadAdminAcademicReportV326().catch(showAdminAcademicReportErrorV326);
+  });
+  panel.dataset.v326ReportsReady = "true";
+}
+
+function adminAcademicReportParamsV326() {
+  const params = new URLSearchParams();
+  const fields = {
+    document: "#academic-report-document",
+    search: "#academic-report-search",
+    period: "#academic-report-period",
+    career: "#academic-report-career",
+    modality: "#academic-report-modality",
+    status: "#academic-report-status",
+    stage: "#academic-report-stage",
+    dateFrom: "#academic-report-date-from",
+    dateTo: "#academic-report-date-to",
+  };
+  Object.entries(fields).forEach(([key, selector]) => {
+    const value = document.querySelector(selector)?.value?.trim() || "";
+    if (value) params.set(key, value);
+  });
+  if (!params.has("document")) params.set("document", "PLAN");
+  return params;
+}
+
+function setAcademicReportSelectV326(selector, placeholder, items, valueOf = (item) => item, labelOf = (item) => item) {
+  const select = document.querySelector(selector);
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>${items.map((item) => `<option value="${escapeHtml(String(valueOf(item)))}">${escapeHtml(String(labelOf(item)))}</option>`).join("")}`;
+  if ([...select.options].some((option) => option.value === current)) select.value = current;
+}
+
+function renderAdminAcademicReportOptionsV326(options) {
+  setAcademicReportSelectV326("#academic-report-period", "Todos", options.periods || []);
+  setAcademicReportSelectV326("#academic-report-career", "Todas", options.careers || []);
+  setAcademicReportSelectV326("#academic-report-modality", "Todas", options.modalities || []);
+  setAcademicReportSelectV326("#academic-report-status", "Todos", options.statuses || [], (item) => item.code, (item) => item.label);
+  setAcademicReportSelectV326("#academic-report-stage", "Todas", options.stages || [], (item) => item.code, (item) => item.label);
+}
+
+function renderAdminAcademicReportV326(report) {
+  renderAdminAcademicReportOptionsV326(report.options || {});
+  const summary = document.querySelector("#academic-report-summary");
+  const cards = [{ label: "Total", count: report.summary?.total || 0 }, ...(report.summary?.byStatus || []).slice(0, 5).map((item) => ({ label: item.label, count: item.count }))];
+  summary.innerHTML = cards.map((item) => `<article><strong>${item.count}</strong><span>${escapeHtml(item.label)}</span></article>`).join("");
+
+  const isPlan = report.document === "PLAN";
+  document.querySelector("#academic-report-table-title").textContent = isPlan ? "Seguimiento del Plan Docente" : "Seguimiento de la Guía Didáctica";
+  document.querySelector("#academic-report-result-count").textContent = `${report.rows.length} registro${report.rows.length === 1 ? "" : "s"} según los filtros aplicados.`;
+  const head = document.querySelector("#academic-report-head");
+  head.innerHTML = isPlan
+    ? "<tr><th>Asignatura</th><th>Profesor</th><th>Carrera / modalidad</th><th>Periodo</th><th>Estado</th><th>Etapa actual</th><th>Última revisión</th><th>Aprobación</th><th>Días</th></tr>"
+    : "<tr><th>Asignatura</th><th>Profesor</th><th>Carrera / modalidad</th><th>Periodo</th><th>Progreso</th><th>Estado</th><th>Etapa actual</th><th>Última revisión</th><th>Aprobación</th><th>Días</th></tr>";
+
+  const body = document.querySelector("#academic-report-body");
+  if (!report.rows.length) {
+    body.innerHTML = `<tr><td colspan="${isPlan ? 9 : 10}">No existen registros para los filtros seleccionados.</td></tr>`;
+    return;
+  }
+  body.innerHTML = report.rows.map((row) => {
+    const subject = `<strong>${escapeHtml(row.subjectName)}</strong><small>${escapeHtml(row.subjectCode || "Sin código")}</small>`;
+    const scope = `<strong>${escapeHtml(row.career || "—")}</strong><small>${escapeHtml(row.modality || "—")}</small>`;
+    const stage = row.stageLabel ? `<strong>${escapeHtml(row.stageLabel)}</strong><small>${escapeHtml(row.reviewerName || "Sin responsable")}</small>` : "—";
+    if (isPlan) {
+      return `<tr><td>${subject}</td><td>${escapeHtml(row.professorName || "—")}</td><td>${scope}</td><td>${escapeHtml(row.academicPeriod || "—")}</td><td>${escapeHtml(row.statusLabel)}</td><td>${stage}</td><td>${academicReportDateV326(row.lastReviewAt)}</td><td>${academicReportDateV326(row.approvedAt)}</td><td>${row.daysInState}</td></tr>`;
+    }
+    return `<tr><td>${subject}</td><td>${escapeHtml(row.professorName || "—")}</td><td>${scope}</td><td>${escapeHtml(row.academicPeriod || "—")}</td><td>${row.approvedWeeks || 0} de ${row.totalWeeks || 0}<small>${Number(row.progressPercent || 0).toFixed(1)} %</small></td><td>${escapeHtml(row.statusLabel)}<small>${escapeHtml(row.preparationStatus || "")}</small></td><td>${stage}</td><td>${academicReportDateV326(row.lastReviewAt)}</td><td>${academicReportDateV326(row.approvedAt)}</td><td>${row.daysInState}</td></tr>`;
+  }).join("");
+}
+
+async function loadAdminAcademicReportV326() {
+  const body = document.querySelector("#academic-report-body");
+  if (body) body.innerHTML = "<tr><td>Cargando reporte…</td></tr>";
+  const report = await authRequest(`/api/admin/reports?${adminAcademicReportParamsV326().toString()}`);
+  renderAdminAcademicReportV326(report);
+  adminAcademicReportReadyV326 = true;
+}
+
+function showAdminAcademicReportErrorV326(error) {
+  console.error(error);
+  const body = document.querySelector("#academic-report-body");
+  if (body) body.innerHTML = `<tr><td class="error">${escapeHtml(error.message || "No fue posible cargar el reporte.")}</td></tr>`;
+}
+
+function downloadAdminAcademicReportV326() {
+  const params = adminAcademicReportParamsV326();
+  const link = document.createElement("a");
+  link.href = `/api/admin/reports.xlsx?${params.toString()}`;
+  link.download = "";
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+function initializeAdminV326Enhancements() {
+  setupPlanReviewConfigurationSelectorV326();
+  setupAdminAcademicReportsV326();
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initializeAdminV326Enhancements, { once: true });
+else initializeAdminV326Enhancements();

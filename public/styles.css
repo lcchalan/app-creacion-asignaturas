@@ -528,3 +528,95 @@ input[readonly]{background:#f1f4f7;color:#405269;cursor:not-allowed}.academic-pr
 /* v32.4 · administración de listas de cotejo */
 .admin-section-heading{margin-bottom:18px}.checklist-manager-selector-card{margin-bottom:18px}.checklist-manager-selector-card label{display:grid;gap:7px;max-width:520px;color:var(--navy);font-size:13px;font-weight:750}.checklist-manager-selector-card .field-help{margin:8px 0 0}.checklist-admin-grid{grid-template-columns:1fr;align-items:start}.checklist-admin-view{min-width:0}.checklist-version-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.checklist-version-header h2{margin:0 0 4px}.checklist-version-header p{margin:0;color:var(--muted);font-size:.82rem;line-height:1.45}.checklist-admin-grid .admin-table td small,#plan-review-progress-body td small{display:block;margin-top:4px;color:var(--muted);font-size:.72rem;line-height:1.35}.checklist-admin-grid .indicator-editor{margin-top:16px}.checklist-admin-grid .knowledge-options{margin:10px 0 0}
 @media(max-width:980px){.checklist-version-header{align-items:stretch;flex-direction:column}.checklist-version-header .button{align-self:flex-start}}
+/* v32.6.1 · Flujo de revisión del Plan Docente a ancho completo */
+[data-admin-panel="plan-review"] .plan-review-process-full-width {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+[data-admin-panel="plan-review"] .plan-review-process-full-width > #plan-review-process-form {
+  width: 100%;
+  max-width: none;
+}
+
+/* v32.6.2 · flujo del Plan Docente a ancho completo real */
+[data-admin-panel="plan-review"] > .plan-review-process-grid {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+[data-admin-panel="plan-review"] > .plan-review-process-grid > #plan-review-config-form,
+[data-admin-panel="plan-review"] > .plan-review-process-grid > #plan-review-process-form {
+  width: 100%;
+  max-width: none;
+}
+
+.ai-job-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 2500;
+  max-width: min(460px, calc(100vw - 48px));
+  padding: 14px 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .18);
+  color: #25364d;
+  font-size: .92rem;
+  line-height: 1.45;
+}
+.ai-job-toast[data-kind="working"] { border-left: 4px solid #2563eb; }
+.ai-job-toast[data-kind="success"] { border-left: 4px solid #15803d; }
+.ai-job-toast[data-kind="error"] { border-left: 4px solid #b91c1c; }
+
+.institutional-data-report-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.institutional-data-report {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-color, #d8dee8);
+  border-radius: 12px;
+  background: var(--surface-soft, #f8fafc);
+}
+.institutional-data-report textarea {
+  min-height: 110px;
+}
+
+/* v32.8.2 · flujo secuencial del Plan Docente */
+.plan-methodology-actions,
+.plan-planning-approval {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.plan-planning-approval {
+  justify-content: space-between;
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #d7dde5);
+  border-radius: 12px;
+  background: var(--surface-soft, #f8fafc);
+}
+.plan-planning-approval p { margin: 0.25rem 0 0; }
+
+
+/* v32.8.3 · flujo contextual del Plan Docente */
+.teaching-plan-stage-progress{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 18px;padding:12px;border:1px solid #c8d4df;border-radius:12px;background:#f8fafc}
+.teaching-plan-stage-progress button{display:grid;grid-template-columns:34px minmax(0,1fr);gap:9px;align-items:center;text-align:left;border:1px solid #d5dee7;border-radius:10px;background:#fff;padding:10px;color:#40566d;cursor:pointer;font:inherit}
+.teaching-plan-stage-progress button:hover:not(.locked),.teaching-plan-stage-progress button:focus-visible:not(.locked){border-color:#0d66c2;outline:0;box-shadow:0 0 0 3px rgba(13,102,194,.1)}
+.teaching-plan-stage-progress .stage-number{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#e9eef3;color:#31516f;font-weight:900}
+.teaching-plan-stage-progress strong,.teaching-plan-stage-progress small{display:block}.teaching-plan-stage-progress strong{font-size:.8rem;color:#17324f}.teaching-plan-stage-progress small{margin-top:2px;font-size:.7rem;color:#6c7e90}
+.teaching-plan-stage-progress button.complete .stage-number{background:#e5f5eb;color:#13703a}.teaching-plan-stage-progress button.complete small{color:#13703a;font-weight:800}
+.teaching-plan-stage-progress button.active{border-color:#0d66c2;background:#f4f9ff}.teaching-plan-stage-progress button.active .stage-number{background:#0d66c2;color:#fff}.teaching-plan-stage-progress button.active small{color:#0d66c2;font-weight:800}
+.teaching-plan-stage-progress button.locked{cursor:default;opacity:.65}
+.teaching-plan-document .plan-planning-approval{margin:18px 0 26px;border-color:#9fc0df;background:#f5f9fd}
+.plan-stage-focus{animation:plan-stage-focus-pulse 1.8s ease-out}
+@keyframes plan-stage-focus-pulse{0%{box-shadow:0 0 0 0 rgba(13,102,194,.32)}45%{box-shadow:0 0 0 8px rgba(13,102,194,.10)}100%{box-shadow:0 0 0 0 rgba(13,102,194,0)}}
+.evaluated-activity-source-note{margin-bottom:12px}
+@media(max-width:900px){.teaching-plan-stage-progress{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.teaching-plan-stage-progress{grid-template-columns:1fr}}

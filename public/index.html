@@ -27,7 +27,7 @@
         <button class="auth-text-button" id="forgot-password-back" type="button">Volver a iniciar sesión</button>
       </form>
       <form id="reset-password-form" class="auth-form hidden">
-        <p class="auth-help">Cree una nueva contraseña. El enlace puede utilizarse una sola vez y vence 30 minutos después de su solicitud.</p>
+        <p class="auth-help">Cree una nueva contraseña de al menos 12 caracteres, con mayúscula, minúscula, número y carácter especial. El enlace puede utilizarse una sola vez y vence 30 minutos después de su solicitud.</p>
         <input name="token" type="hidden">
         <label>Nueva contraseña<input name="newPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></label>
         <label>Confirmar nueva contraseña<input name="confirmPassword" type="password" minlength="12" maxlength="200" autocomplete="new-password" required></label>
@@ -144,7 +144,7 @@
               <label>Correo<input name="email" type="email" required></label>
             </div>
             <fieldset class="admin-role-selector"><legend>Roles del usuario</legend><p class="field-help">Una misma cuenta puede tener varias responsabilidades institucionales.</p><div id="admin-user-roles" class="role-checkbox-grid"></div></fieldset>
-            <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="8" placeholder="El sistema puede generarla"></label>
+            <label>Contraseña temporal (opcional)<input name="temporaryPassword" type="password" minlength="12" maxlength="200" placeholder="El sistema puede generarla"><small>Si la ingresa manualmente: mínimo 12 caracteres, con mayúscula, minúscula, número y carácter especial.</small></label>
             <div class="form-actions"><button class="button" id="admin-user-submit" type="submit">Crear usuario</button><button class="button secondary hidden" id="admin-user-cancel" type="button">Cancelar edición</button></div>
           </form>
           <form class="admin-card" id="bulk-user-form">
@@ -186,6 +186,8 @@
             <div class="grid">
               <label data-catalog-field="code">Código<input name="code" maxlength="80"></label>
               <label data-catalog-field="name">Nombre<input name="name" maxlength="250"></label>
+              <label data-catalog-field="sisCode">Código SIS<input name="sisCode" maxlength="120" placeholder="Código SIS de la asignatura"></label>
+              <label data-catalog-field="metacourseUrl">URL metacurso<input name="metacourseUrl" type="url" maxlength="2000" placeholder="https://..."></label>
               <label data-catalog-field="sortOrder">Orden<input name="sortOrder" type="number" min="1" max="9999" value="100"></label>
               <label data-catalog-field="academicLevelId">Nivel académico<select name="academicLevelId"></select></label>
               <label data-catalog-field="academicUnitId">Unidad académica<select name="academicUnitId"></select></label>
@@ -285,7 +287,7 @@
       </section>
 
       <section class="admin-panel" data-admin-panel="plan-review">
-        <div class="admin-grid">
+        <div class="admin-grid plan-review-process-grid">
           <form class="admin-card" id="plan-review-config-form">
             <h2>Flujo de revisión del Plan Docente</h2>
             <p>Active únicamente las etapas que la institución requiera. Los cambios de configuración se aplican a nuevos procesos; los procesos ya iniciados conservan sus responsables y etapas.</p>
@@ -294,17 +296,26 @@
             <button class="button" type="submit">Guardar configuración</button>
           </form>
           <form class="admin-card" id="career-director-form">
-            <h2>Director/a por carrera</h2>
-            <p>Cada carrera puede tener un solo director activo. La persona seleccionada debe tener el rol Director.</p>
+            <h2>Director/a por carrera y modalidad</h2>
+            <p>Configure una Dirección activa para cada combinación de carrera y modalidad. Una misma persona puede dirigir varias modalidades.</p>
             <label>Carrera<select id="career-director-program" required></select></label>
+            <label>Modalidad<select id="career-director-modality" required><option value="">Seleccione una modalidad</option></select></label>
             <label>Director/a<select id="career-director-user"><option value="">Sin asignar</option></select></label>
             <button class="button" type="submit">Guardar director/a</button>
+          </form>
+          <form class="admin-card" id="career-secretary-form">
+            <h2>Secretaría por carrera y modalidad</h2>
+            <p>La Secretaría tendrá acceso de seguimiento y reportería únicamente a las carreras y modalidades asignadas. No puede emitir decisiones académicas.</p>
+            <label>Carrera<select id="career-secretary-program" required></select></label>
+            <label>Modalidad<select id="career-secretary-modality" required><option value="">Seleccione una modalidad</option></select></label>
+            <label>Secretaría<select id="career-secretary-user"><option value="">Sin asignar</option></select></label>
+            <button class="button" type="submit">Guardar secretaría</button>
           </form>
         </div>
         <div class="admin-grid">
           <form class="admin-card" id="plan-review-assignment-form">
             <h2>Responsables por Plan Docente</h2>
-            <p>Asigne Par académico, Equipo de calidad y DIITEP. La Dirección de carrera se obtiene automáticamente de la carrera.</p>
+            <p>Asigne Par académico, Equipo de calidad y DIITEP. La Dirección se obtiene automáticamente de la carrera y modalidad de la oferta académica.</p>
             <label>Asignatura<select id="plan-review-project" required></select></label>
             <label>Par académico<select id="plan-review-peer"><option value="">Sin asignar</option></select></label>
             <label>Equipo de calidad<select id="plan-review-quality"><option value="">Sin asignar</option></select></label>
@@ -512,6 +523,24 @@
           </fieldset>
           <div class="inline-actions"><button class="button" type="submit">Guardar formatos de la Guía</button></div>
         </form>
+        <form class="admin-card" id="ai-generation-policy-form">
+          <div class="knowledge-config-header">
+            <div>
+              <h2>Uso de inteligencia artificial</h2>
+              <p>Defina cuántas generaciones exitosas puede solicitar cada profesor para un mismo contenido.</p>
+            </div>
+          </div>
+          <label>Máximo de generaciones por contenido
+            <input id="ai-max-generations-per-content" name="maxGenerationsPerContent" type="number" min="0" max="100" step="1" value="3" required>
+            <small>Use 0 para no establecer límite. El cupo se calcula de forma independiente para Plan Docente, adaptación, presentación, cada semana de la Guía y cada recurso generado.</small>
+          </label>
+          <div class="knowledge-context-note">
+            <strong>Cola persistente</strong>
+            <span>Una pérdida de conexión del navegador no cancela la generación. Los reintentos técnicos pertenecen al mismo trabajo y no consumen generaciones adicionales.</span>
+          </div>
+          <div class="inline-actions"><button class="button" type="submit">Guardar límite de IA</button></div>
+          <p id="ai-generation-policy-status" class="field-help" aria-live="polite"></p>
+        </form>
         <div class="admin-card"><h2>Recursos registrados</h2><p class="field-help">Se muestra la versión vigente o más reciente de cada recurso. Use «Ver versiones» para consultar el historial.</p><div id="ai-version-list" class="knowledge-resource-list"></div></div>
       </section>
 
@@ -547,7 +576,7 @@
       <p id="password-change-description">Ingrese su contraseña actual y establezca una nueva.</p>
       <form id="password-change-form" class="auth-form">
         <label>Contraseña actual<input name="currentPassword" type="password" autocomplete="current-password" required></label>
-        <label>Nueva contraseña<input name="newPassword" type="password" autocomplete="new-password" minlength="12" required><small>Mínimo 12 caracteres.</small></label>
+        <label>Nueva contraseña<input name="newPassword" type="password" autocomplete="new-password" minlength="12" required><small>Mínimo 12 caracteres, con mayúscula, minúscula, número y carácter especial.</small></label>
         <label>Confirmar nueva contraseña<input name="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
         <p id="password-change-message" class="auth-message hidden" role="alert"></p>
         <div class="form-actions">
@@ -674,6 +703,15 @@
           </div>
           <div class="institutional-data-details" id="institutional-data-details"></div>
           <label class="confirm"><input type="checkbox" id="institutional-data-reviewed"> Confirmo que revisé los datos institucionales asignados.</label>
+          <div class="institutional-data-report-actions">
+            <button class="button secondary" id="report-institutional-data" type="button">Reportar información institucional incorrecta</button>
+            <span class="field-help">Si detecta un dato incorrecto, repórtelo antes de confirmar para que Administración pueda ajustarlo.</span>
+          </div>
+          <section class="institutional-data-report hidden" id="institutional-data-report-panel">
+            <label>Detalle del problema<textarea id="institutional-data-report-description" maxlength="4000" placeholder="Indique qué dato considera incorrecto y cuál debería revisarse."></textarea></label>
+            <div class="inline-actions"><button class="button" id="send-institutional-data-report" type="button">Enviar reporte</button><button class="button secondary" id="cancel-institutional-data-report" type="button">Cancelar</button></div>
+            <p class="field-help" id="institutional-data-report-status" aria-live="polite"></p>
+          </section>
         </section>
 
         <section class="panel" data-step="2">
@@ -687,7 +725,10 @@
               <button class="button secondary" id="generate-microcurricular-presentation" type="button">Generar borrador con IA</button>
             </div>
             <textarea id="microcurricular-presentation" name="microcurricularPresentation" required minlength="80" maxlength="3000" rows="6" placeholder="Genere el borrador y edítelo si es necesario antes de continuar."></textarea>
-            <small id="microcurricular-presentation-status" class="field-help">El texto aprobado por el profesor se utilizará literalmente en el Plan Docente.</small>
+            <label>Indicaciones para volver a generar
+              <textarea id="microcurricular-presentation-instructions" rows="3" maxlength="3000" placeholder="Ej.: enfatice la aplicación profesional, use un tono más cercano al estudiante y evite repetir la descripción microcurricular."></textarea>
+            </label>
+            <small id="microcurricular-presentation-status" class="field-help">El texto aprobado por el profesor se utilizará literalmente en el Plan Docente. Las indicaciones solo se usan para generar una nueva propuesta.</small>
           </section>
           <div class="outcome-mapping-toolbar">
             <button class="button secondary" id="add-outcome-mapping" type="button">+ Agregar relación</button>
@@ -724,11 +765,11 @@
               <div class="bibliography-entry-list" id="bibliography-basic-list"></div>
             </section>
             <section class="bibliography-section wide" data-bibliography-type="COMPLEMENTARY">
-              <div class="bibliography-section-header"><div><h4>Bibliografía complementaria</h4><p>Opcional. Agregue cada referencia por separado.</p></div><button class="button secondary bibliography-add" type="button" data-type="COMPLEMENTARY">+ Agregar referencia</button></div>
+              <div class="bibliography-section-header"><div><h4>Bibliografía complementaria</h4><p>Obligatoria. Registre al menos una referencia.</p></div><button class="button secondary bibliography-add" type="button" data-type="COMPLEMENTARY">+ Agregar referencia</button></div>
               <div class="bibliography-entry-list" id="bibliography-complementary-list"></div>
             </section>
             <section class="bibliography-section wide" data-bibliography-type="REA">
-              <div class="bibliography-section-header"><div><h4>Recursos educativos abiertos (REA)</h4><p>Opcional. Registre título y enlace de cada recurso.</p></div><button class="button secondary bibliography-add" type="button" data-type="REA">+ Agregar REA</button></div>
+              <div class="bibliography-section-header"><div><h4>Recursos educativos abiertos (REA)</h4><p>Obligatorio. Registre al menos un REA con título y enlace.</p></div><button class="button secondary bibliography-add" type="button" data-type="REA">+ Agregar REA</button></div>
               <div class="bibliography-entry-list" id="bibliography-rea-list"></div>
             </section>
           </div>
@@ -751,9 +792,15 @@
           </section>
           <div class="summary" id="project-summary"></div>
           <div class="plan-actions">
-            <button class="button" id="generate-teaching-plan" type="button"><span class="button-label">Generar plan docente con IA</span></button>
+            <button class="button" id="generate-teaching-plan" type="button"><span class="button-label">Generar metodología y TAC con IA</span></button>
           </div>
           <div id="teaching-plan-result" class="hidden">
+            <section class="teaching-plan-stage-progress" id="teaching-plan-stage-progress" aria-label="Progreso de elaboración del Plan Docente">
+              <button type="button" data-plan-stage="presentation" data-plan-stage-target="#microcurricular-presentation"><span class="stage-number">1</span><span><strong>Presentación</strong><small id="plan-stage-presentation-status">Lista</small></span></button>
+              <button type="button" data-plan-stage="methodology" data-plan-stage-target="#plan-methodologies-section"><span class="stage-number">2</span><span><strong>Metodología y TAC</strong><small id="plan-stage-methodology-status">En revisión</small></span></button>
+              <button type="button" data-plan-stage="planning" data-plan-stage-target="#plan-preview-d"><span class="stage-number">3</span><span><strong>Planificación</strong><small id="plan-stage-planning-status">Pendiente</small></span></button>
+              <button type="button" data-plan-stage="evaluation" data-plan-stage-target="#plan-preview-e"><span class="stage-number">4</span><span><strong>Evaluación</strong><small id="plan-stage-evaluation-status">Pendiente</small></span></button>
+            </section>
             <section class="teaching-plan-preview-section" aria-labelledby="teaching-plan-preview-title">
               <div class="teaching-plan-preview-heading">
                 <div>
@@ -796,12 +843,24 @@
                   <div><h4>Metodologías activas y TAC</h4><p>Revise y edite estos campos aquí antes de validar el Plan Docente.</p></div>
                 </div>
                 <div id="plan-methodologies"></div>
-                <button class="button secondary" id="save-plan-methodologies" type="button">Guardar ajustes metodológicos</button>
+                <label>Indicaciones para volver a generar metodología y TAC
+                  <textarea id="plan-methodology-instructions" rows="3" maxlength="3000" placeholder="Ej.: priorice aprendizaje basado en proyectos, actividades colaborativas y herramientas TAC de fácil acceso."></textarea>
+                </label>
+                <div class="plan-methodology-actions">
+                  <button class="button secondary" id="regenerate-plan-methodologies" type="button">Regenerar metodología y TAC con IA</button>
+                  <button class="button secondary" id="save-plan-methodologies" type="button">Guardar ajustes metodológicos</button>
+                  <button class="button approve" id="approve-plan-methodologies" type="button">Aprobar metodología y continuar a planificación</button>
+                </div>
+                <p class="field-help" id="plan-methodology-workflow-status"></p>
               </section>
               <div class="teaching-plan-preview-layout">
                 <nav class="teaching-plan-preview-nav" id="teaching-plan-preview-nav" aria-label="Secciones del Plan Docente"></nav>
                 <article class="teaching-plan-document" id="teaching-plan-preview"></article>
               </div>
+              <section class="plan-planning-approval hidden" id="plan-planning-approval">
+                <div><strong>Planificación semanal</strong><p id="plan-planning-approval-status">Revise y ajuste las semanas antes de continuar con la evaluación.</p></div>
+                <button class="button approve" id="approve-plan-planning" type="button">Aprobar planificación y continuar a evaluación</button>
+              </section>
               <div class="teaching-plan-validation-summary teaching-plan-validation-summary-bottom">
                 <div><strong id="teaching-plan-validation-summary-text">Validación automática</strong><span>Las comprobaciones automáticas no sustituyen la revisión pedagógica del profesor.</span></div>
                 <button class="button secondary" id="toggle-teaching-plan-validation" type="button" aria-expanded="false">Ver validación</button>
@@ -944,7 +1003,8 @@
         <section id="teaching-plan-evaluated-editor" class="teaching-plan-evaluated-editor hidden">
           <h4>Actividad calificada <span id="teaching-plan-evaluation-code"></span></h4>
           <p class="notice compact">El instrumento se configura sobre 10 puntos para EVA. La calificación real de la actividad se calcula mediante regla de tres.</p>
-          <label>Actividad evaluada *<textarea name="evaluatedActivity" rows="3" maxlength="3000"></textarea></label>
+          <p class="notice compact evaluated-activity-source-note">La descripción de la actividad evaluada se edita arriba, en la fila marcada como calificada. Ese texto es la fuente única y se refleja automáticamente en la sección E.</p>
+          <input type="hidden" name="evaluatedActivity">
           <label>Estrategias de trabajo · un ítem por línea *<textarea name="workStrategies" rows="4" maxlength="5000" placeholder="Una estrategia por línea"></textarea></label>
           <div class="two-cols">
             <label>Tipo de instrumento *<select name="instrumentType"><option value="QUESTIONNAIRE">Cuestionario</option><option value="RUBRIC">Rúbrica</option><option value="CHECKLIST">Lista de cotejo</option><option value="RATING_SCALE">Escala de valoración</option><option value="OTHER">Otro</option></select></label>
@@ -1020,5 +1080,6 @@
     </section>
   </div>
   <script src="/app.js" defer></script>
+  <div id="ai-job-toast" class="ai-job-toast hidden" role="status" aria-live="polite"></div>
 </body>
 </html>

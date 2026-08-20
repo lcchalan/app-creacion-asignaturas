@@ -1,5 +1,16 @@
 import "dotenv/config";
 import OpenAI from "openai";
+import { wrapPersistentOpenAI } from "./ai/persistent-openai.js";
+import {
+  aiJobStatusForUser,
+  enterAiJobExecution,
+  internalAiJobIdFromRequest,
+  maybeQueueManagedAiRequest,
+  recentAiJobsForAdmin,
+  resolveInternalAiUser,
+  saveAiGenerationLimit,
+  startAiGenerationWorker,
+} from "./ai/persistent-ai-jobs.js";
 import { zodTextFormat } from "openai/helpers/zod";
 import { mkdir, mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
@@ -45,10 +56,12 @@ import { parseMatrix, requiredColumns } from "./services/matrix-service.js";
 import { database, checkDatabaseConnection } from "./db/client.js";
 import {
   assertPasswordChange,
+  assertPasswordComplexity,
   assertPasswordResetChange,
   assertTemporaryPasswordTarget,
   otherSessionsWhere,
   PASSWORD_RESET_TTL_MINUTES,
+  generateStrongTemporaryPassword,
   passwordHash,
   passwordMatches,
   passwordResetTokenHash,
@@ -87,7 +100,7 @@ import {
   type TeachingPlanContent,
 } from "./academic/teaching-plan-policy.js";
 import { buildTeachingPlanWord, extractTemplateLogo } from "./teaching-plan-word.js";
-import { sendPasswordResetEmail } from "./services/smtp-mailer.js";
+import { sendPasswordResetEmail, sendPlainTextEmail } from "./services/smtp-mailer.js";
 import {
   buildTeachingPlanWorkflowMail,
   sendTeachingPlanWorkflowEmail,
@@ -124,6 +137,8 @@ import {
   userCanActOnTeachingPlanStage,
   type TeachingPlanReviewStage,
 } from "./academic/teaching-plan-review-workflow.js";
+import { activeCareerAuthorityScopeWhere } from "./academic/career-authority-policy.js";
+import { assertUniqueOfferingUnitsAndContents, missingRequiredBibliographyTypes } from "./academic/academic-data-quality.js";
 import {
   adaptationDecisionSchema,
   adaptationProposalCanBeApproved,
@@ -138,6 +153,13 @@ import {
   resolvedAdaptationContent,
   type AdaptationProposalOutput,
 } from "./academic/adaptation-policy.js";
+
+import {
+  adminAcademicReportFilename,
+  buildAdminAcademicReportWorkbook,
+  loadAdminAcademicReport,
+  parseAdminAcademicReportFilters,
+} from "./services/admin-academic-report.js";
 
 const port = Number.parseInt(process.env.PORT ?? "3000", 10);
 const serverName =
@@ -223,6 +245,8 @@ const openaiImageModel =
 const curricularAdaptationsSettingKey = "TEACHING_PLAN_CURRICULAR_ADAPTATIONS";
 const teachingPlanDownloadFormatsSettingKey = "TEACHING_PLAN_DOWNLOAD_FORMATS";
 const guideDownloadFormatsSettingKey = "GUIDE_DOWNLOAD_FORMATS";
+const academicDataIssueEmailSettingKey = "ACADEMIC_DATA_ISSUE_EMAIL";
+const defaultAcademicDataIssueEmail = "lcchalan@hotmail.com";
 const defaultTeachingPlanDownloadFormats = ["PDF"] as const;
 const defaultGuideDownloadFormats = ["PDF"] as const;
 const defaultCurricularAdaptations = "Para garantizar una educación de calidad acorde a las características del modelo educativo de la Universidad Técnica Particular de Loja, al principio de igualdad de oportunidades y a las necesidades educativas especiales asociadas o no a la discapacidad, se desarrollan adaptaciones curriculares no significativas o de grado dos que siguen una trayectoria de menor a mayor significación, considerando el aspecto metodológico, actividades de aprendizaje y el estilo individual de aprendizaje en cuanto a las estrategias a desarrollar. Estas adaptaciones se realizan en función de la identificación de las necesidades educativas en las primeras semanas de trabajo académico, con la finalidad de dar respuesta a la dificultad de aprendizaje y apoyar al desarrollo de las competencias del estudiante.";
@@ -243,6 +267,12 @@ async function guideDownloadFormats() {
   const setting = await database.institutionalSetting.findUnique({ where: { key: guideDownloadFormatsSettingKey } });
   const values = String(setting?.value || "PDF").split(",").map((item) => item.trim().toUpperCase()).filter((item) => ["PDF", "WORD", "JSON"].includes(item));
   return values.length ? values : [...defaultGuideDownloadFormats];
+}
+
+async function academicDataIssueRecipient() {
+  const setting = await database.institutionalSetting.findUnique({ where: { key: academicDataIssueEmailSettingKey } });
+  const value = setting?.value?.trim() || defaultAcademicDataIssueEmail;
+  return z.string().email().parse(value);
 }
 
 function listItems(value: string | null | undefined) {
@@ -273,9 +303,9 @@ function fallbackMicrocurricularPresentation(input: { subjectName: string; descr
 }
 
 const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({
+  ? wrapPersistentOpenAI(new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
-    })
+    }))
   : undefined;
 const matrixRowSchema = z.object({
   Semana: z.string().trim().min(1),
@@ -470,6 +500,8 @@ function cookieValue(request: IncomingMessage, name: string) {
 }
 
 async function authenticatedUser(request: IncomingMessage) {
+  const internalAiUser = await resolveInternalAiUser(request);
+  if (internalAiUser) return internalAiUser;
   const token = cookieValue(request, "ggd_session");
   if (!token) return null;
   const session = await database.userSession.findUnique({
@@ -573,12 +605,13 @@ function teachingPlanReviewLink(projectId: string, stage: TeachingPlanReviewStag
 async function resolveTeachingPlanStageReviewer(input: {
   projectId: string;
   programId: string;
+  modalityId: string;
   ownerId: string;
   stage: TeachingPlanReviewStage;
 }) {
   const reviewer = input.stage === "DIRECTOR"
     ? (await database.careerDirectorAssignment.findFirst({
-        where: { programId: input.programId, active: true },
+        where: activeCareerAuthorityScopeWhere({ programId: input.programId, modalityId: input.modalityId }),
         orderBy: { assignedAt: "desc" },
         include: { director: { include: { roles: { include: { role: true } } } } },
       }))?.director
@@ -602,7 +635,7 @@ async function resolveTeachingPlanStageReviewer(input: {
 async function prepareNewTeachingPlanReviewWorkflow(project: {
   id: string;
   ownerId: string;
-  academicOffering: { programId: string };
+  academicOffering: { programId: string; modalityId: string };
 }) {
   const config = await ensureTeachingPlanReviewProcessConfig();
   if (!config.enabled) return null;
@@ -628,7 +661,7 @@ async function prepareNewTeachingPlanReviewWorkflow(project: {
   const resolvedStages = [];
   for (const stage of stages) {
     const reviewer = await resolveTeachingPlanStageReviewer({
-      projectId: project.id, programId: project.academicOffering.programId, ownerId: project.ownerId, stage: stage.stage,
+      projectId: project.id, programId: project.academicOffering.programId, modalityId: project.academicOffering.modalityId, ownerId: project.ownerId, stage: stage.stage,
     });
     resolvedStages.push({ ...stage, reviewer });
   }
@@ -906,6 +939,11 @@ const catalogIdentitySchema = z.object({
   sortOrder: z.number().int().min(1).max(9999).default(100),
 });
 
+const courseSchema = catalogIdentitySchema.omit({ sortOrder: true }).extend({
+  sisCode: z.string().trim().min(1).max(120).nullable().optional(),
+  metacourseUrl: z.string().trim().url().max(2000).refine((value) => ["http:", "https:"].includes(new URL(value).protocol), "La URL metacurso debe utilizar http:// o https://.").nullable().optional(),
+});
+
 const academicProgramSchema = catalogIdentitySchema.omit({ sortOrder: true }).extend({
   academicLevelId: z.string().uuid(),
   academicUnitId: z.string().uuid(),
@@ -1066,6 +1104,10 @@ const projectSetupSchema = z.object({
     basic: z.string().trim().max(20_000).default(""),
     complementary: z.string().trim().max(20_000).default(""),
     rea: z.string().trim().max(20_000).default(""),
+  }).superRefine((bibliography, context) => {
+    const missing = missingRequiredBibliographyTypes(bibliography.entries);
+    if (missing.includes("COMPLEMENTARY")) context.addIssue({ code: "custom", path: ["entries"], message: "Registre al menos una bibliografía complementaria." });
+    if (missing.includes("REA")) context.addIssue({ code: "custom", path: ["entries"], message: "Registre al menos un recurso educativo abierto (REA)." });
   }),
 });
 
@@ -1162,6 +1204,15 @@ const teachingPlanMethodologiesSchema = z.object({
     methodology: z.string().trim().min(3).max(4000),
     tac: z.array(z.string().trim().min(1).max(1000)).min(1).max(20),
   })).min(1).max(100),
+});
+
+const teachingPlanGenerateOptionsSchema = z.object({
+  mode: z.enum(["METHODOLOGY", "PLANNING"]).optional().default("METHODOLOGY"),
+  instructions: z.string().trim().max(3000).optional().default(""),
+});
+
+const microcurricularPresentationGenerateSchema = z.object({
+  instructions: z.string().trim().max(3000).optional().default(""),
 });
 
 const teachingPlanReviewSchema = z.object({
@@ -1356,8 +1407,10 @@ function normalizedTeachingPlanContent(plan: TeachingPlanContent): TeachingPlanC
           const base = Math.floor(total / count);
           const remainder = total % count;
           const fallbackHours = base + ((componentSeen[component] ?? 0) <= remainder ? 1 : 0);
+          const linkedEvaluation = detail.evaluationCode ? evaluatedByCode.get(detail.evaluationCode) : null;
           return {
             ...detail,
+            description: linkedEvaluation?.week === week.week ? linkedEvaluation.activity : detail.description,
             resource: String(detail.resource || week.resources[index] || week.resources[0] || "").trim(),
             hours: Number(detail.hours || 0) > 0 ? Number(detail.hours) : fallbackHours,
           };
@@ -1577,6 +1630,7 @@ async function replaceOfferingCurricularRelations(
   academicOfferingId: string,
   body: AcademicOfferingWrite,
 ) {
+  assertUniqueOfferingUnitsAndContents(body.unitContents);
   const units = structuredUnitsFromFlatContents(body.unitContents);
   const genericCatalog = await transaction.utplGenericCompetency.findMany({
     where: { name: { in: body.utplGenericCompetencies } },
@@ -3163,7 +3217,8 @@ function academicOfferTemplateBytes() {
   append("OFERTAS", [{
     id_oferta: "OF-001", periodo_codigo: "2026-2", periodo_nombre: "Octubre 2026 - Abril 2027",
     fecha_inicio: "2026-10-01", fecha_fin: "2027-04-30", asignatura_codigo: "ASG-001",
-    asignatura_nombre: "Nombre de la asignatura", tipo_asignatura_codigo: "TEORICA",
+    asignatura_nombre: "Nombre de la asignatura", codigo_sis: "SIS-001", url_metacurso: "https://ejemplo.edu/metacurso/ASG-001",
+    tipo_asignatura_codigo: "TEORICA",
     numero_semanas: 8, creditos: 4, horas_acd: 16, horas_ape: 16, horas_aa: 64,
     nivel_codigo: "GRADO", nivel_nombre: "Grado", modalidad_codigo: "EN-LINEA",
     modalidad_nombre: "En línea", facultad_codigo: "FAC-001", facultad_nombre: "Facultad",
@@ -3326,6 +3381,8 @@ function createMcpServer(): McpServer {
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+  const cachedRequest = request as IncomingMessage & { __jsonBodyLoaded?: boolean; __jsonBody?: unknown };
+  if (cachedRequest.__jsonBodyLoaded) return cachedRequest.__jsonBody;
   const chunks: Buffer[] = [];
   let size = 0;
   const maximumSize = 26_000_000;
@@ -3342,10 +3399,15 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 
   if (chunks.length === 0) {
+    cachedRequest.__jsonBodyLoaded = true;
+    cachedRequest.__jsonBody = undefined;
     return undefined;
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  cachedRequest.__jsonBodyLoaded = true;
+  cachedRequest.__jsonBody = parsed;
+  return parsed;
 }
 
 async function catalogReferenceCount(kind: CatalogKind, id: string) {
@@ -3458,8 +3520,19 @@ async function applyAcademicOfferImport(
       });
       const course = await transaction.course.upsert({
         where: { code: item.courseCode },
-        update: { name: item.courseName, active: true },
-        create: { code: item.courseCode, name: item.courseName, active: true },
+        update: {
+          name: item.courseName,
+          sisCode: item.sisCode ?? undefined,
+          metacourseUrl: item.metacourseUrl ?? undefined,
+          active: true,
+        },
+        create: {
+          code: item.courseCode,
+          name: item.courseName,
+          sisCode: item.sisCode,
+          metacourseUrl: item.metacourseUrl,
+          active: true,
+        },
       });
       const subjectType = subjectTypes.get(item.subjectTypeCode)!;
       const existing = await transaction.academicOffering.findUnique({
@@ -3550,7 +3623,7 @@ async function applyAcademicOfferImport(
           },
         });
       } else {
-        const temporaryPassword = `${randomBytes(15).toString("base64url")}Aa1!`;
+        const temporaryPassword = generateStrongTemporaryPassword();
         teacher = await transaction.user.create({
           data: {
             firstName: item.firstName, lastName: item.lastName, nationalId: item.nationalId,
@@ -3629,6 +3702,47 @@ const httpServer = createServer(async (request, response) => {
       request.url ?? "/",
       `http://${request.headers.host ?? "localhost"}`,
     );
+    const internalAiJobId = internalAiJobIdFromRequest(request);
+    if (internalAiJobId) enterAiJobExecution(internalAiJobId);
+
+    const aiIngress = openai ? await maybeQueueManagedAiRequest({
+      request,
+      pathname: requestUrl.pathname,
+      readBody: () => readJsonBody(request),
+      requireUser: () => requireUser(request),
+    }) : null;
+    if (aiIngress) {
+      json(response, aiIngress.status, aiIngress.body, aiIngress.headers);
+      return;
+    }
+
+    const aiJobStatusMatch = requestUrl.pathname.match(/^\/api\/ai\/jobs\/([0-9a-f-]+)$/i);
+    if (request.method === "GET" && aiJobStatusMatch) {
+      const user = await requireUser(request);
+      const aiJobId = aiJobStatusMatch[1];
+      if (!aiJobId) { json(response, 400, { error: "Identificador de trabajo de IA no válido." }); return; }
+      const job = await aiJobStatusForUser(aiJobId, user.id, isAdmin(user));
+      json(response, 200, { ok: true, job });
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/api/admin/ai-jobs") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const take = Number.parseInt(requestUrl.searchParams.get("take") || "50", 10);
+      json(response, 200, { ok: true, jobs: await recentAiJobsForAdmin(take) });
+      return;
+    }
+
+    if (request.method === "PATCH" && requestUrl.pathname === "/api/admin/settings/ai-generation") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const body = z.object({ maxGenerationsPerContent: z.number().int().min(0).max(100) }).parse(await readJsonBody(request));
+      const setting = await saveAiGenerationLimit({ value: body.maxGenerationsPerContent, updatedById: admin.id });
+      json(response, 200, { ok: true, maxGenerationsPerContent: Number(setting.value) });
+      return;
+    }
+
     if (
       request.method === "GET" &&
       requestUrl.pathname === "/health/database"
@@ -3899,6 +4013,25 @@ URL adicional: ${body.url || "No indicada"}`,
       json(response, 200, { offer, subjectTypes, periods, departments });
       return;
     }
+    if (request.method === "GET" && ["/api/admin/reports", "/api/admin/reports.xlsx"].includes(requestUrl.pathname)) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const filters = parseAdminAcademicReportFilters(requestUrl.searchParams);
+      const report = await loadAdminAcademicReport(filters);
+      if (requestUrl.pathname.endsWith(".xlsx")) {
+        const bytes = buildAdminAcademicReportWorkbook(report);
+        response.writeHead(200, {
+          "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "Content-Disposition": `attachment; filename=${adminAcademicReportFilename(report.document)}`,
+          "Content-Length": String(bytes.length),
+          "Cache-Control": "no-store",
+        });
+        response.end(bytes);
+        return;
+      }
+      json(response, 200, report);
+      return;
+    }
     if (request.method === "GET" && requestUrl.pathname === "/api/admin/dashboard") {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
@@ -3907,7 +4040,7 @@ URL adicional: ${body.url || "No indicada"}`,
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
         subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
-        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
+        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, careerSecretaryAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       ] = await Promise.all([
         database.user.findMany({
           orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
@@ -3934,7 +4067,11 @@ URL adicional: ${body.url || "No indicada"}`,
             professorName: true, academicPeriod: true, status: true,
             totalWeeks: true, updatedAt: true, ownerId: true,
             weeks: { select: { status: true } },
-            academicOffering: { select: { programId: true, program: { select: { id: true, name: true } } } },
+            academicOffering: { select: {
+              programId: true, modalityId: true,
+              program: { select: { id: true, name: true } },
+              modality: { select: { id: true, name: true } },
+            } },
             teachingPlan: { select: {
               id: true, version: true, teacherReviewedAt: true,
               reviewWorkflow: { select: {
@@ -3988,6 +4125,15 @@ URL adicional: ${body.url || "No indicada"}`,
           include: {
             director: { select: { id: true, displayName: true, email: true } },
             program: { select: { id: true, code: true, name: true } },
+            modality: { select: { id: true, code: true, name: true } },
+          },
+        }),
+        database.careerSecretaryAssignment.findMany({
+          where: { active: true }, orderBy: { assignedAt: "desc" },
+          include: {
+            secretary: { select: { id: true, displayName: true, email: true } },
+            program: { select: { id: true, code: true, name: true } },
+            modality: { select: { id: true, code: true, name: true } },
           },
         }),
         database.teachingPlanIndicatorVersion.findMany({
@@ -4004,7 +4150,7 @@ URL adicional: ${body.url || "No indicada"}`,
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
         subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
-        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
+        teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, careerSecretaryAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       });
       return;
     }
@@ -4072,13 +4218,14 @@ URL adicional: ${body.url || "No indicada"}`,
         email: z.string().trim().email().transform((value) => value.toLowerCase()),
         roleCodes: z.array(z.string().trim().min(1)).min(1).max(10).optional(),
         roleCode: z.string().trim().min(1).optional(),
-        temporaryPassword: z.string().min(8).max(200).optional(),
+        temporaryPassword: z.string().min(12).max(200).optional(),
       }).refine((value) => value.roleCodes?.length || value.roleCode, { message: "Seleccione al menos un rol." })
         .parse(await readJsonBody(request));
       const roleCodes = [...new Set(body.roleCodes?.length ? body.roleCodes : [body.roleCode!])];
       const selectedRoles = await database.role.findMany({ where: { code: { in: roleCodes } } });
       if (selectedRoles.length !== roleCodes.length) throw new Error("Uno o más roles seleccionados no existen.");
-      const temporaryPassword = body.temporaryPassword || randomBytes(9).toString("base64url");
+      const temporaryPassword = body.temporaryPassword || generateStrongTemporaryPassword();
+      assertPasswordComplexity(temporaryPassword);
       const user = await database.user.create({
         data: {
           firstName: body.firstName, lastName: body.lastName, nationalId: body.nationalId,
@@ -4139,8 +4286,9 @@ URL adicional: ${body.url || "No indicada"}`,
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
       const userId = z.string().uuid().parse(passwordAdminMatch[1]);
       assertTemporaryPasswordTarget(admin.id, userId);
-      const body = z.object({ password: z.string().min(8).max(200).optional() }).parse(await readJsonBody(request));
-      const temporaryPassword = body.password || randomBytes(9).toString("base64url");
+      const body = z.object({ password: z.string().min(12).max(200).optional() }).parse(await readJsonBody(request));
+      const temporaryPassword = body.password || generateStrongTemporaryPassword();
+      assertPasswordComplexity(temporaryPassword);
       await database.user.update({
         where: { id: userId },
         data: { passwordHash: passwordHash(temporaryPassword), mustChangePassword: true, active: true },
@@ -4381,38 +4529,115 @@ URL adicional: ${body.url || "No indicada"}`,
       return;
     }
 
+    const careerProgramModalitiesMatch = requestUrl.pathname.match(/^\/api\/admin\/programs\/([0-9a-f-]+)\/modalities$/i);
+    if (request.method === "GET" && careerProgramModalitiesMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const programId = z.string().uuid().parse(careerProgramModalitiesMatch[1]);
+      const program = await database.academicProgram.findUnique({ where: { id: programId }, select: { id: true } });
+      if (!program) { json(response, 404, { error: "La carrera o programa no existe." }); return; }
+      const offerings = await database.academicOffering.findMany({
+        where: { programId },
+        select: {
+          modalityId: true,
+          modality: { select: { id: true, code: true, name: true, active: true, sortOrder: true } },
+        },
+      });
+      const byId = new Map();
+      for (const offering of offerings) {
+        if (offering.modality.active !== false) byId.set(offering.modalityId, offering.modality);
+      }
+      const modalities = [...byId.values()]
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, "es"))
+        .map(({ sortOrder: _sortOrder, ...modality }) => modality);
+      json(response, 200, { modalities });
+      return;
+    }
+
     const careerDirectorMatch = requestUrl.pathname.match(/^\/api\/admin\/programs\/([0-9a-f-]+)\/director$/i);
     if (request.method === "PUT" && careerDirectorMatch) {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
       const programId = z.string().uuid().parse(careerDirectorMatch[1]);
-      const body = z.object({ directorId: z.string().uuid().nullable() }).parse(await readJsonBody(request));
-      const program = await database.academicProgram.findUnique({ where: { id: programId } });
+      const body = z.object({ modalityId: z.string().uuid(), directorId: z.string().uuid().nullable() }).parse(await readJsonBody(request));
+      const [program, modality, offering] = await Promise.all([
+        database.academicProgram.findUnique({ where: { id: programId } }),
+        database.modality.findUnique({ where: { id: body.modalityId } }),
+        database.academicOffering.findFirst({ where: { programId, modalityId: body.modalityId }, select: { id: true } }),
+      ]);
       if (!program) { json(response, 404, { error: "La carrera o programa no existe." }); return; }
+      if (!modality) { json(response, 404, { error: "La modalidad no existe." }); return; }
+      if (!offering) throw new Error("La carrera seleccionada no tiene oferta académica registrada para esta modalidad.");
       if (body.directorId) {
         const director = await database.user.findUnique({
           where: { id: body.directorId }, include: { roles: { include: { role: true } } },
         });
         if (!director?.active || !hasRole(director, "DIRECTOR")) throw new Error("El responsable debe ser un usuario activo con rol Director.");
       }
+      const scope = activeCareerAuthorityScopeWhere({ programId, modalityId: body.modalityId });
       const now = new Date();
       await database.$transaction(async (transaction) => {
         const current = await transaction.careerDirectorAssignment.findFirst({
-          where: { programId, active: true }, orderBy: { assignedAt: "desc" },
+          where: scope, orderBy: { assignedAt: "desc" },
         });
         if (current?.directorId !== body.directorId) {
           await transaction.careerDirectorAssignment.updateMany({
-            where: { programId, active: true }, data: { active: false, endedAt: now },
+            where: scope, data: { active: false, endedAt: now },
           });
           if (body.directorId) {
             await transaction.careerDirectorAssignment.create({
-              data: { programId, directorId: body.directorId, assignedById: admin.id },
+              data: { programId, modalityId: body.modalityId, directorId: body.directorId, assignedById: admin.id },
             });
           }
         }
         await transaction.auditLog.create({ data: {
           userId: admin.id, action: "CAREER_DIRECTOR_ASSIGNED", entityType: "AcademicProgram", entityId: programId,
-          details: { directorId: body.directorId },
+          details: { modalityId: body.modalityId, directorId: body.directorId },
+        } });
+      });
+      json(response, 200, { ok: true });
+      return;
+    }
+
+    const careerSecretaryMatch = requestUrl.pathname.match(/^\/api\/admin\/programs\/([0-9a-f-]+)\/secretary$/i);
+    if (request.method === "PUT" && careerSecretaryMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const programId = z.string().uuid().parse(careerSecretaryMatch[1]);
+      const body = z.object({ modalityId: z.string().uuid(), secretaryId: z.string().uuid().nullable() }).parse(await readJsonBody(request));
+      const [program, modality, offering] = await Promise.all([
+        database.academicProgram.findUnique({ where: { id: programId } }),
+        database.modality.findUnique({ where: { id: body.modalityId } }),
+        database.academicOffering.findFirst({ where: { programId, modalityId: body.modalityId }, select: { id: true } }),
+      ]);
+      if (!program) { json(response, 404, { error: "La carrera o programa no existe." }); return; }
+      if (!modality) { json(response, 404, { error: "La modalidad no existe." }); return; }
+      if (!offering) throw new Error("La carrera seleccionada no tiene oferta académica registrada para esta modalidad.");
+      if (body.secretaryId) {
+        const secretary = await database.user.findUnique({
+          where: { id: body.secretaryId }, include: { roles: { include: { role: true } } },
+        });
+        if (!secretary?.active || !hasRole(secretary, "SECRETARY")) throw new Error("El responsable debe ser un usuario activo con rol Secretaría de carrera.");
+      }
+      const scope = activeCareerAuthorityScopeWhere({ programId, modalityId: body.modalityId });
+      const now = new Date();
+      await database.$transaction(async (transaction) => {
+        const current = await transaction.careerSecretaryAssignment.findFirst({
+          where: scope, orderBy: { assignedAt: "desc" },
+        });
+        if (current?.secretaryId !== body.secretaryId) {
+          await transaction.careerSecretaryAssignment.updateMany({
+            where: scope, data: { active: false, endedAt: now },
+          });
+          if (body.secretaryId) {
+            await transaction.careerSecretaryAssignment.create({
+              data: { programId, modalityId: body.modalityId, secretaryId: body.secretaryId, assignedById: admin.id },
+            });
+          }
+        }
+        await transaction.auditLog.create({ data: {
+          userId: admin.id, action: "CAREER_SECRETARY_ASSIGNED", entityType: "AcademicProgram", entityId: programId,
+          details: { modalityId: body.modalityId, secretaryId: body.secretaryId },
         } });
       });
       json(response, 200, { ok: true });
@@ -5060,7 +5285,7 @@ URL adicional: ${body.url || "No indicada"}`,
       const temporaryPasswords: Array<{ email: string; temporaryPassword: string }> = [];
       await database.$transaction(async (transaction) => {
         for (const entry of body.users) {
-          const temporaryPassword = randomBytes(9).toString("base64url");
+          const temporaryPassword = generateStrongTemporaryPassword();
           const user = await transaction.user.upsert({
             where: { email: entry.email },
             update: {
@@ -5121,7 +5346,7 @@ URL adicional: ${body.url || "No indicada"}`,
           const roleCodes = roleCodesFromText(entry.role);
           const selectedRoles = roleCodes.map((code) => roleByCode.get(code));
           if (!roleCodes.length || selectedRoles.some((role) => !role)) throw new Error(`Uno o más roles no existen en: ${entry.role}.`);
-          const temporaryPassword = randomBytes(9).toString("base64url");
+          const temporaryPassword = generateStrongTemporaryPassword();
           const user = await transaction.user.upsert({
             where: { email: entry.email },
             update: {
@@ -5181,8 +5406,8 @@ URL adicional: ${body.url || "No indicada"}`,
           break;
         }
         case "courses": {
-          const body = catalogIdentitySchema.parse(rawBody);
-          item = await database.course.create({ data: { code: body.code, name: body.name, active: body.active } });
+          const body = courseSchema.parse(rawBody);
+          item = await database.course.create({ data: { code: body.code, name: body.name, sisCode: body.sisCode || null, metacourseUrl: body.metacourseUrl || null, active: body.active } });
           break;
         }
         case "departments":
@@ -5259,9 +5484,9 @@ URL adicional: ${body.url || "No indicada"}`,
           break;
         }
         case "courses": {
-          const body = catalogIdentitySchema.parse(rawBody);
+          const body = courseSchema.parse(rawBody);
           item = await database.course.update({
-            where: { id }, data: { code: body.code, name: body.name, active: body.active },
+            where: { id }, data: { code: body.code, name: body.name, sisCode: body.sisCode || null, metacourseUrl: body.metacourseUrl || null, active: body.active },
           });
           break;
         }
@@ -6230,6 +6455,7 @@ ${planContext.instructions}`,
     );
     if (request.method === "POST" && presentationDraftMatch) {
       const user = await requireUser(request);
+      const body = microcurricularPresentationGenerateSchema.parse(await readJsonBody(request).catch(() => ({})));
       const project = await database.project.findFirst({
         where: { id: presentationDraftMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: { academicOffering: { include: academicOfferingInclude } },
@@ -6243,7 +6469,10 @@ Asignatura: ${project.subjectName}
 Carrera: ${project.career}
 Descripción microcurricular: ${offering.description || "No informada"}
 Resultados de aprendizaje: ${JSON.stringify(offering.learningOutcomes)}
-Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
+Unidades y contenidos: ${JSON.stringify(offering.unitContents)}${body.instructions ? `
+
+Indicaciones adicionales del profesor para esta nueva propuesta:
+${body.instructions}` : ""}`;
       let presentation: string;
       if (openai) {
         const ai = await openai.responses.parse({
@@ -6262,6 +6491,69 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
       }
       await database.project.update({ where: { id: project.id }, data: { microcurricularPresentation: presentation } });
       json(response, 200, { ok: true, presentation });
+      return;
+    }
+
+    const institutionalDataIssueMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/institutional-data-issues$/i,
+    );
+    if (request.method === "POST" && institutionalDataIssueMatch) {
+      const user = await requireUser(request);
+      const body = z.object({ description: z.string().trim().min(10).max(4000) }).parse(await readJsonBody(request));
+      const project = await database.project.findFirst({
+        where: { id: institutionalDataIssueMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
+        include: { academicOffering: { include: academicOfferingInclude } },
+      });
+      if (!project) { json(response, 404, { error: "La asignatura no existe o no pertenece al usuario." }); return; }
+      const recipient = await academicDataIssueRecipient();
+      const issue = await database.institutionalDataIssue.create({
+        data: { projectId: project.id, reporterId: user.id, description: body.description, emailRecipient: recipient },
+      });
+      let emailStatus: "SENT" | "FAILED" = "SENT";
+      let emailError = "";
+      try {
+        await sendPlainTextEmail({
+          to: recipient,
+          subject: `Datos institucionales por revisar - ${project.subjectCode} ${project.subjectName}`,
+          body: [
+            "Se reportó una posible inconsistencia en los datos institucionales del Sistema de Gestión Guía didáctica.",
+            "",
+            `Profesor: ${user.displayName} (${user.email})`,
+            `Asignatura: ${project.subjectCode} — ${project.subjectName}`,
+            `Código SIS: ${project.academicOffering.course.sisCode || "No registrado"}`,
+            `URL metacurso: ${project.academicOffering.course.metacourseUrl || "No registrada"}`,
+            `Carrera: ${project.career}`,
+            `Modalidad: ${project.modality}`,
+            `Periodo: ${project.academicPeriod}`,
+            `Oferta: ${project.academicOffering.code}`,
+            "",
+            "Detalle reportado por el profesor:",
+            body.description,
+            "",
+            `Identificador del reporte: ${issue.id}`,
+          ].join("\n"),
+        });
+      } catch (error) {
+        emailStatus = "FAILED";
+        emailError = error instanceof Error ? error.message : "No fue posible enviar el correo.";
+      }
+      await database.$transaction([
+        database.institutionalDataIssue.update({
+          where: { id: issue.id },
+          data: { emailStatus, emailError: emailError || null },
+        }),
+        database.auditLog.create({
+          data: { userId: user.id, action: "INSTITUTIONAL_DATA_ISSUE_REPORTED", entityType: "InstitutionalDataIssue", entityId: issue.id, details: { projectId: project.id, emailStatus } },
+        }),
+      ]);
+      json(response, 201, {
+        ok: true,
+        issueId: issue.id,
+        emailStatus,
+        message: emailStatus === "SENT"
+          ? "El reporte fue registrado y enviado a Administración."
+          : "El reporte fue registrado. El correo no pudo enviarse y queda constancia para seguimiento administrativo.",
+      });
       return;
     }
 
@@ -6391,6 +6683,7 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
     );
     if (request.method === "POST" && teachingPlanGenerateMatch) {
       const user = await requireUser(request);
+      const generationOptions = teachingPlanGenerateOptionsSchema.parse(await readJsonBody(request).catch(() => ({})));
       if (!openai) {
         json(response, 503, { error: "La variable OPENAI_API_KEY no está configurada." });
         return;
@@ -6399,7 +6692,7 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         where: { id: teachingPlanGenerateMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: {
           academicOffering: { include: academicOfferingInclude },
-          teachingPlan: { select: { id: true } },
+          teachingPlan: true,
           weeks: { select: { status: true, draftContent: true, approvedContent: true } },
         },
       });
@@ -6451,6 +6744,12 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         );
         assertCurrentAdaptationWeeklyStructure(adaptationProposal.weeklyStructure);
       }
+      const currentPlanForPlanning = generationOptions.mode === "PLANNING"
+        ? project.teachingPlan ? teachingPlanContentSchema.parse(project.teachingPlan.content) : null
+        : null;
+      if (generationOptions.mode === "PLANNING" && !currentPlanForPlanning) {
+        throw new Error("Genere primero la propuesta de metodología y TAC antes de generar la planificación semanal.");
+      }
       const generationText = buildTeachingPlanGenerationInput({
         project: {
           subjectCode: project.subjectCode, subjectName: project.subjectName,
@@ -6462,7 +6761,11 @@ Unidades y contenidos: ${JSON.stringify(offering.unitContents)}`;
         offering,
         mappings,
         teacherProfile,
-      });
+      }) + (generationOptions.mode === "PLANNING" && currentPlanForPlanning
+        ? `\n\nMETODOLOGÍA Y TAC APROBADAS POR EL PROFESOR. La planificación semanal debe alinearse estrictamente con estas decisiones y conservarlas literalmente:\n${currentPlanForPlanning.sequences.map((sequence) => `- ${sequence.learningOutcome}\n  Metodología: ${sequence.methodology}\n  TAC: ${sequence.tac.join("; ")}`).join("\n")}`
+        : generationOptions.instructions
+          ? `\n\nINDICACIONES ADICIONALES DEL PROFESOR PARA REGENERAR METODOLOGÍA Y TAC:\n${generationOptions.instructions}`
+          : "");
       const generationContent: Array<Record<string, string>> = [
         {
           type: "input_text",
@@ -6498,10 +6801,19 @@ ${planContext.instructions}`,
         presentation: project.microcurricularPresentation,
         curricularAdaptations,
       }, offering.unitContents));
-      const generated = adaptationProposal
+      const generatedBase = generationOptions.mode === "PLANNING" && currentPlanForPlanning
         ? {
             ...normalizedGenerated,
-            sequences: [...normalizedGenerated.sequences]
+            sequences: normalizedGenerated.sequences.map((sequence) => {
+              const approved = currentPlanForPlanning.sequences.find((item) => normalizedAcademicValue(item.learningOutcome) === normalizedAcademicValue(sequence.learningOutcome));
+              return approved ? { ...sequence, methodology: approved.methodology, tac: approved.tac } : sequence;
+            }),
+          }
+        : normalizedGenerated;
+      const generated = adaptationProposal
+        ? {
+            ...generatedBase,
+            sequences: [...generatedBase.sequences]
               .map((sequence) => ({
                 ...sequence,
                 weeks: [...sequence.weeks].sort((left, right) => left.week - right.week),
@@ -6510,7 +6822,7 @@ ${planContext.instructions}`,
                 Math.min(...left.weeks.map((week) => week.week)) -
                 Math.min(...right.weeks.map((week) => week.week))),
           }
-        : normalizedGenerated;
+        : generatedBase;
       const planConsistencyInput = projectPlanConsistencyInput(offering);
       assertTeachingPlanConsistency(generated, planConsistencyInput);
       if (adaptationProposal) {
@@ -6539,6 +6851,8 @@ ${planContext.instructions}`,
             specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
             teacherReviewedAt: null,
             teacherReviewNotes: null,
+            methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
+            planningApprovedAt: null,
           },
           create: {
             projectId: project.id, content: generated as unknown as Prisma.InputJsonValue,
@@ -6546,6 +6860,8 @@ ${planContext.instructions}`,
             promptSnapshotId: planContext.prompt.id,
             documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
             specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
+            methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
+            planningApprovedAt: null,
           },
         });
         await replaceTeachingPlanEvaActivities(transaction, plan.id, generated);
@@ -6582,7 +6898,10 @@ ${planContext.instructions}`,
       json(response, 201, {
         ok: true, teachingPlan: {
           content: generated, version: savedPlan.version, status: savedPlan.status,
-          reviewedAt: null, reviewNotes: "", reviewChecks, templateProfile: planContext.templateProfile,
+          reviewedAt: null, reviewNotes: "", reviewChecks,
+          methodologyApprovedAt: savedPlan.methodologyApprovedAt?.toISOString() || null,
+          planningApprovedAt: savedPlan.planningApprovedAt?.toISOString() || null,
+          templateProfile: planContext.templateProfile,
           templateSnapshot: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
           activeTemplate: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
           templateOutdated: false,
@@ -6647,6 +6966,8 @@ ${planContext.instructions}`,
             version: { increment: 1 },
             teacherReviewedAt: null,
             teacherReviewNotes: null,
+            methodologyApprovedAt: null,
+            planningApprovedAt: null,
           },
         });
         await replaceTeachingPlanEvaActivities(transaction, project.teachingPlan!.id, updated);
@@ -6680,6 +7001,7 @@ ${planContext.instructions}`,
         teachingPlan: {
           content: updated, version: project.teachingPlan.version + 1, status: project.teachingPlan.status,
           reviewedAt: null, reviewNotes: "", reviewChecks,
+          methodologyApprovedAt: null, planningApprovedAt: null,
         },
         matrixRows: rows,
       });
@@ -6721,6 +7043,7 @@ ${planContext.instructions}`,
       const weekIndex = sequence.weeks.findIndex((week) => week.week === weekNumber);
       if (weekIndex < 0) throw new Error(`La semana ${weekNumber} no pertenece a esta secuencia didáctica.`);
       const fixedEvaluation = plan.evaluatedActivities.find((activity) => activity.week === weekNumber);
+      let linkedEvaluationDetail: (typeof body.activityDetails)[number] | null = null;
       if (fixedEvaluation) {
         if (!body.evaluatedActivity || body.evaluatedActivity.code !== fixedEvaluation.code) {
           throw new Error(`${fixedEvaluation.code} es obligatoria en la semana ${weekNumber}; conserve su configuración institucional.`);
@@ -6729,6 +7052,7 @@ ${planContext.instructions}`,
         if (linked.length !== 1 || linked[0]?.component !== fixedEvaluation.component) {
           throw new Error(`${fixedEvaluation.code} debe estar vinculada a una única actividad ${fixedEvaluation.component}.`);
         }
+        linkedEvaluationDetail = linked[0]!;
       } else if (body.evaluatedActivity) {
         throw new Error(`La semana ${weekNumber} no contiene una actividad calificada institucional.`);
       }
@@ -6749,7 +7073,7 @@ ${planContext.instructions}`,
           if (!body.evaluatedActivity || activity.code !== body.evaluatedActivity.code) return activity;
           return {
             ...activity,
-            activity: body.evaluatedActivity.activity,
+            activity: linkedEvaluationDetail?.description || body.evaluatedActivity.activity,
             workStrategies: body.evaluatedActivity.workStrategies,
             instrument: body.evaluatedActivity.instrumentConfig.title,
             instrumentConfig: body.evaluatedActivity.instrumentConfig,
@@ -6768,6 +7092,7 @@ ${planContext.instructions}`,
             version: { increment: 1 },
             teacherReviewedAt: null,
             teacherReviewNotes: null,
+            planningApprovedAt: null,
           },
         });
         await replaceTeachingPlanEvaActivities(transaction, project.teachingPlan!.id, updated);
@@ -6793,9 +7118,42 @@ ${planContext.instructions}`,
           reviewedAt: null,
           reviewNotes: "",
           reviewChecks,
+          methodologyApprovedAt: project.teachingPlan.methodologyApprovedAt?.toISOString() || null,
+          planningApprovedAt: null,
         },
         matrixRows: rows,
       });
+      return;
+    }
+
+    const teachingPlanPlanningApproveMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/planning\/approve$/i,
+    );
+    if (request.method === "POST" && teachingPlanPlanningApproveMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: { id: teachingPlanPlanningApproveMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
+        include: { teachingPlan: true, academicOffering: { include: academicOfferingInclude } },
+      });
+      if (!project?.teachingPlan) {
+        json(response, 404, { error: "El plan docente todavía no ha sido generado." });
+        return;
+      }
+      await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
+      if (!project.teachingPlan.methodologyApprovedAt) {
+        throw new Error("Apruebe primero la metodología y las TAC para habilitar la aprobación de la planificación semanal.");
+      }
+      const plan = teachingPlanContentSchema.parse(project.teachingPlan.content);
+      assertTeachingPlanConsistency(plan, projectPlanConsistencyInput(project.academicOffering));
+      const approvedAt = new Date();
+      const saved = await database.teachingPlan.update({
+        where: { id: project.teachingPlan.id },
+        data: { planningApprovedAt: approvedAt, teacherReviewedAt: null, teacherReviewNotes: null },
+      });
+      await database.auditLog.create({ data: {
+        userId: user.id, action: "TEACHING_PLAN_PLANNING_APPROVED", entityType: "TeachingPlan", entityId: project.teachingPlan.id,
+      } });
+      json(response, 200, { ok: true, methodologyApprovedAt: saved.methodologyApprovedAt?.toISOString() || null, planningApprovedAt: approvedAt.toISOString() });
       return;
     }
 
@@ -6961,6 +7319,10 @@ ${planContext.instructions}`,
         json(response, 409, {
           error: "El plan docente cambió después de abrir la vista previa. Recargue la asignatura y revise la versión vigente.",
         });
+        return;
+      }
+      if (!project.teachingPlan.methodologyApprovedAt || !project.teachingPlan.planningApprovedAt) {
+        json(response, 409, { error: "Apruebe primero la metodología/TAC y la planificación semanal antes de confirmar la revisión del Plan Docente." });
         return;
       }
       const templateContext = {
@@ -7273,7 +7635,7 @@ ${planContext.instructions}`,
             academicPeriod: project.academicPeriod, weeks: project.totalWeeks,
           },
           institutionalData: {
-            offeringCode: offering.code, credits: offering.credits === null ? null : Number(offering.credits),
+            offeringCode: offering.code, sisCode: offering.course.sisCode, metacourseUrl: offering.course.metacourseUrl, credits: offering.credits === null ? null : Number(offering.credits),
             acdHours: offering.acdHours, apeHours: offering.apeHours, aaHours: offering.aaHours, semester: offering.semester,
             description: offering.description, prerequisites: offering.prerequisites, learningOutcomes: offering.learningOutcomes,
             professionalProfileCompetencies: offering.professionalProfileCompetencies, graduateProfileResults: offering.graduateProfileResults,
@@ -7849,6 +8211,8 @@ ${planContext.instructions}`,
           })),
           institutionalData: {
             offeringCode: project.academicOffering.code,
+            sisCode: project.academicOffering.course.sisCode,
+            metacourseUrl: project.academicOffering.course.metacourseUrl,
             credits: project.academicOffering.credits === null ? null : Number(project.academicOffering.credits),
             acdHours: project.academicOffering.acdHours,
             apeHours: project.academicOffering.apeHours,
@@ -7894,6 +8258,8 @@ ${planContext.instructions}`,
             generatedAt: project.teachingPlan.generatedAt.toISOString(),
             reviewedAt: project.teachingPlan.teacherReviewedAt?.toISOString() ?? null,
             reviewNotes: project.teachingPlan.teacherReviewNotes ?? "",
+            methodologyApprovedAt: project.teachingPlan.methodologyApprovedAt?.toISOString() ?? null,
+            planningApprovedAt: project.teachingPlan.planningApprovedAt?.toISOString() ?? null,
             reviewChecks: currentTeachingPlanChecks,
             reviewWorkflow: project.teachingPlan.reviewWorkflow ? teachingPlanWorkflowApiView(project.teachingPlan.reviewWorkflow) : null,
             reviewProcessEnabled: Boolean(teachingPlanReviewProcess?.enabled),
@@ -8874,6 +9240,8 @@ ${bibliographyContext}`,
 });
 
 httpServer.listen(port, "0.0.0.0", () => {
+  void startAiGenerationWorker({ baseUrl: `http://127.0.0.1:${port}` })
+    .catch((error) => console.error("No fue posible iniciar la cola persistente de IA:", error));
   console.log(`Servidor disponible en http://localhost:${port}`);
   console.log(`Verificación: http://localhost:${port}/health`);
   console.log(`MCP: http://localhost:${port}/mcp`);

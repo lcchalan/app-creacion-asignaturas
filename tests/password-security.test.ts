@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertPasswordChange,
+  assertPasswordComplexity,
   assertPasswordResetChange,
   assertTemporaryPasswordTarget,
+  generateStrongTemporaryPassword,
   MINIMUM_PASSWORD_LENGTH,
   otherSessionsWhere,
   passwordHash,
@@ -34,8 +36,8 @@ test("exige contraseña actual, confirmación y una contraseña nueva distinta",
   const stored = passwordHash("Contraseña anterior");
   const valid = {
     currentPassword: "Contraseña anterior",
-    newPassword: "Contraseña nueva 2026",
-    confirmPassword: "Contraseña nueva 2026",
+    newPassword: "Contraseña nueva 2026!",
+    confirmPassword: "Contraseña nueva 2026!",
   };
 
   assert.doesNotThrow(() => assertPasswordChange(valid, stored));
@@ -79,15 +81,30 @@ test("acepta únicamente enlaces de restablecimiento vigentes y no utilizados", 
 test("el restablecimiento exige una contraseña nueva válida y confirmada", () => {
   const stored = passwordHash("Contraseña anterior");
   assert.doesNotThrow(() => assertPasswordResetChange({
-    newPassword: "Nueva contraseña segura 2026",
-    confirmPassword: "Nueva contraseña segura 2026",
+    newPassword: "Nueva contraseña segura 2026!",
+    confirmPassword: "Nueva contraseña segura 2026!",
   }, stored));
   assert.throws(() => assertPasswordResetChange({
-    newPassword: "Nueva contraseña segura 2026",
+    newPassword: "Nueva contraseña segura 2026!",
     confirmPassword: "otra contraseña",
   }, stored), /confirmación no coincide/);
   assert.throws(() => assertPasswordResetChange({
     newPassword: "Contraseña anterior",
     confirmPassword: "Contraseña anterior",
   }, stored), /debe ser diferente/);
+});
+
+
+test("exige mayúscula, minúscula, número y carácter especial", () => {
+  assert.doesNotThrow(() => assertPasswordComplexity("Clave segura 2026!"));
+  assert.throws(() => assertPasswordComplexity("clave segura 2026!"), /mayúscula/);
+  assert.throws(() => assertPasswordComplexity("CLAVE SEGURA 2026!"), /minúscula/);
+  assert.throws(() => assertPasswordComplexity("Clave segura especial!"), /número/);
+  assert.throws(() => assertPasswordComplexity("Clave segura 2026"), /carácter especial/);
+});
+
+test("genera contraseñas temporales que cumplen la política completa", () => {
+  for (let index = 0; index < 20; index += 1) {
+    assert.doesNotThrow(() => assertPasswordComplexity(generateStrongTemporaryPassword()));
+  }
 });

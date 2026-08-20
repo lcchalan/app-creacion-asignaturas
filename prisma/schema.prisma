@@ -151,52 +151,61 @@ enum TeachingPlanNotificationStatus {
   FAILED
 }
 
-model User {
-  id                  String                  @id @default(uuid()) @db.Uuid
-  email               String                  @unique
-  firstName           String                  @default("")
-  lastName            String                  @default("")
-  nationalId          String?                 @unique
-  displayName         String
-  passwordHash        String?
-  mustChangePassword  Boolean                 @default(false)
-  active              Boolean                 @default(true)
-  createdAt           DateTime                @default(now())
-  updatedAt           DateTime                @updatedAt
-  roles               UserRole[]
-  projects            Project[]               @relation("ProjectOwner")
-  weekVersions        WeekVersion[]
-  instructions        GenerationInstruction[]
-  documents           KnowledgeDocument[]
-  retiredInstructions GenerationInstruction[] @relation("GenerationInstructionRetiredBy")
-  retiredDocuments    KnowledgeDocument[]      @relation("KnowledgeDocumentRetiredBy")
-  auditLogs           AuditLog[]
-  sessions            UserSession[]
-  passwordResetTokens PasswordResetToken[]
-  teachingAssignments TeachingAssignment[]
-  indicatorVersions   IndicatorVersion[]
-  guideReviews        GuideReview[]
-  teachingPlanIndicatorVersions TeachingPlanIndicatorVersion[]
-  teachingPlanReviewerAssignments TeachingPlanReviewerAssignment[] @relation("TeachingPlanReviewer")
-  teachingPlanReviewerAssignmentsCreated TeachingPlanReviewerAssignment[] @relation("TeachingPlanReviewerAssignedBy")
-  careerDirectorAssignments CareerDirectorAssignment[] @relation("CareerDirector")
-  careerDirectorAssignmentsCreated CareerDirectorAssignment[] @relation("CareerDirectorAssignedBy")
-  teachingPlanWorkflowStages TeachingPlanWorkflowStage[] @relation("TeachingPlanWorkflowReviewer")
-  teachingPlanReviews TeachingPlanReview[] @relation("TeachingPlanReviewerUser")
-  teachingPlanNotifications TeachingPlanNotification[] @relation("TeachingPlanNotificationRecipient")
-  teachingPlanReviewProcessUpdates TeachingPlanReviewProcessConfig[] @relation("TeachingPlanReviewProcessUpdatedBy")
-  uploadedLegacyDocuments LegacyAcademicDocument[]
-  updatedInstitutionalSettings InstitutionalSetting[]
-  thirdLevelDegrees   String[]                @default([])
-  fourthLevelDegrees  String[]                @default([])
-  teacherFaculty      String?
-  teacherDepartment   String?
-  teacherDepartmentId String?                  @db.Uuid
-  department          TeacherDepartment?       @relation(fields: [teacherDepartmentId], references: [id])
-  phone               String?
-  shortCv             String?
+enum InstitutionalDataIssueEmailStatus {
+  PENDING
+  SENT
+  FAILED
 }
 
+model User {
+  id                                     String                            @id @default(uuid()) @db.Uuid
+  email                                  String                            @unique
+  firstName                              String                            @default("")
+  lastName                               String                            @default("")
+  nationalId                             String?                           @unique
+  displayName                            String
+  passwordHash                           String?
+  mustChangePassword                     Boolean                           @default(false)
+  active                                 Boolean                           @default(true)
+  createdAt                              DateTime                          @default(now())
+  updatedAt                              DateTime                          @updatedAt
+  roles                                  UserRole[]
+  projects                               Project[]                         @relation("ProjectOwner")
+  weekVersions                           WeekVersion[]
+  instructions                           GenerationInstruction[]
+  documents                              KnowledgeDocument[]
+  retiredInstructions                    GenerationInstruction[]           @relation("GenerationInstructionRetiredBy")
+  retiredDocuments                       KnowledgeDocument[]               @relation("KnowledgeDocumentRetiredBy")
+  auditLogs                              AuditLog[]
+  sessions                               UserSession[]
+  passwordResetTokens                    PasswordResetToken[]
+  teachingAssignments                    TeachingAssignment[]
+  indicatorVersions                      IndicatorVersion[]
+  guideReviews                           GuideReview[]
+  teachingPlanIndicatorVersions          TeachingPlanIndicatorVersion[]
+  teachingPlanReviewerAssignments        TeachingPlanReviewerAssignment[]  @relation("TeachingPlanReviewer")
+  teachingPlanReviewerAssignmentsCreated TeachingPlanReviewerAssignment[]  @relation("TeachingPlanReviewerAssignedBy")
+  careerDirectorAssignments              CareerDirectorAssignment[]        @relation("CareerDirector")
+  careerDirectorAssignmentsCreated       CareerDirectorAssignment[]        @relation("CareerDirectorAssignedBy")
+  careerSecretaryAssignments             CareerSecretaryAssignment[]       @relation("CareerSecretary")
+  careerSecretaryAssignmentsCreated      CareerSecretaryAssignment[]       @relation("CareerSecretaryAssignedBy")
+  teachingPlanWorkflowStages             TeachingPlanWorkflowStage[]       @relation("TeachingPlanWorkflowReviewer")
+  teachingPlanReviews                    TeachingPlanReview[]              @relation("TeachingPlanReviewerUser")
+  teachingPlanNotifications              TeachingPlanNotification[]        @relation("TeachingPlanNotificationRecipient")
+  teachingPlanReviewProcessUpdates       TeachingPlanReviewProcessConfig[] @relation("TeachingPlanReviewProcessUpdatedBy")
+  uploadedLegacyDocuments                LegacyAcademicDocument[]
+  updatedInstitutionalSettings           InstitutionalSetting[]
+  thirdLevelDegrees                      String[]                          @default([])
+  fourthLevelDegrees                     String[]                          @default([])
+  teacherFaculty                         String?
+  teacherDepartment                      String?
+  teacherDepartmentId                    String?                           @db.Uuid
+  department                             TeacherDepartment?                @relation(fields: [teacherDepartmentId], references: [id])
+  phone                                  String?
+  shortCv                                String?
+  aiGenerationJobs                       AiGenerationJob[]                 @relation("AiGenerationRequestedBy")
+  institutionalDataIssues                InstitutionalDataIssue[]          @relation("InstitutionalDataIssueReporter")
+}
 
 model InstitutionalSetting {
   key         String   @id
@@ -236,50 +245,50 @@ model UserRole {
 }
 
 model Project {
-  id                              String                  @id @default(uuid()) @db.Uuid
-  ownerId                         String                  @db.Uuid
+  id                              String                           @id @default(uuid()) @db.Uuid
+  ownerId                         String                           @db.Uuid
   name                            String
   level                           String
   faculty                         String
   career                          String
-  professorName                   String                  @default("")
-  subjectCode                     String                  @default("")
+  professorName                   String                           @default("")
+  subjectCode                     String                           @default("")
   subjectName                     String
   modality                        String
-  subjectType                     String                  @default("GENERAL")
-  specificationSnapshotIds        String[]                @default([])
-  documentSnapshotIds             String[]                @default([])
-  indicatorVersionSnapshotId      String?                 @db.Uuid
+  subjectType                     String                           @default("GENERAL")
+  specificationSnapshotIds        String[]                         @default([])
+  documentSnapshotIds             String[]                         @default([])
+  indicatorVersionSnapshotId      String?                          @db.Uuid
   academicPeriod                  String
   totalWeeks                      Int
-  currentWeek                     Int                     @default(1)
-  currentStep                     Int                     @default(1)
+  currentWeek                     Int                              @default(1)
+  currentStep                     Int                              @default(1)
   workflowMode                    ProjectWorkflowMode?
   adaptationPlanApprovedAt        DateTime?
   adaptationGuideApprovedAt       DateTime?
-  guideReference                  String                  @default("")
-  microcurricularPresentation     String                  @default("")
-  guideReferenceImportance        String                  @default("")
+  guideReference                  String                           @default("")
+  microcurricularPresentation     String                           @default("")
+  guideReferenceImportance        String                           @default("")
   basicBib                        String
   complementaryBib                String
   reaBib                          String?
-  professionalProfileCompetencies String[]                @default([])
-  graduateProfileResults          String[]                @default([])
-  utplGenericCompetencies         String[]                @default([])
-  status                          ProjectStatus           @default(DRAFT)
-  createdAt                       DateTime                @default(now())
-  updatedAt                       DateTime                @updatedAt
-  owner                           User                    @relation("ProjectOwner", fields: [ownerId], references: [id])
+  professionalProfileCompetencies String[]                         @default([])
+  graduateProfileResults          String[]                         @default([])
+  utplGenericCompetencies         String[]                         @default([])
+  status                          ProjectStatus                    @default(DRAFT)
+  createdAt                       DateTime                         @default(now())
+  updatedAt                       DateTime                         @updatedAt
+  owner                           User                             @relation("ProjectOwner", fields: [ownerId], references: [id])
   matrix                          Matrix?
   weeks                           ProjectWeek[]
   attachments                     Attachment[]
-  academicOfferingId              String                  @unique @db.Uuid
-  teachingAssignmentId            String?                 @db.Uuid
-  sourceProjectId                 String?                 @db.Uuid
-  academicOffering                AcademicOffering        @relation(fields: [academicOfferingId], references: [id])
-  teachingAssignment              TeachingAssignment?     @relation(fields: [teachingAssignmentId], references: [id])
-  sourceProject                   Project?                @relation("ProjectLineage", fields: [sourceProjectId], references: [id])
-  derivedProjects                 Project[]               @relation("ProjectLineage")
+  academicOfferingId              String                           @unique @db.Uuid
+  teachingAssignmentId            String?                          @db.Uuid
+  sourceProjectId                 String?                          @db.Uuid
+  academicOffering                AcademicOffering                 @relation(fields: [academicOfferingId], references: [id])
+  teachingAssignment              TeachingAssignment?              @relation(fields: [teachingAssignmentId], references: [id])
+  sourceProject                   Project?                         @relation("ProjectLineage", fields: [sourceProjectId], references: [id])
+  derivedProjects                 Project[]                        @relation("ProjectLineage")
   guideReviews                    GuideReview[]
   generatedImages                 GeneratedImage[]
   canonicalGuide                  CanonicalGuideDocument?
@@ -291,15 +300,35 @@ model Project {
   legacyDocuments                 LegacyAcademicDocument[]
   adaptationProposals             AdaptationProposal[]
   teachingPlanReviewerAssignments TeachingPlanReviewerAssignment[]
+  aiGenerationJobs                AiGenerationJob[]
+  institutionalDataIssues         InstitutionalDataIssue[]
 
   @@index([ownerId, updatedAt])
   @@index([ownerId, subjectCode])
 }
 
+model InstitutionalDataIssue {
+  id             String                            @id @default(uuid()) @db.Uuid
+  projectId      String                            @db.Uuid
+  reporterId     String                            @db.Uuid
+  description    String                            @db.Text
+  status         String                            @default("OPEN")
+  emailRecipient String
+  emailStatus    InstitutionalDataIssueEmailStatus @default(PENDING)
+  emailError     String?                           @db.Text
+  createdAt      DateTime                          @default(now())
+  updatedAt      DateTime                          @updatedAt
+  project        Project                           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter       User                              @relation("InstitutionalDataIssueReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+
+  @@index([projectId, createdAt])
+  @@index([reporterId, createdAt])
+  @@index([status, createdAt])
+}
 
 model LegacyAcademicDocument {
-  id             String             @id @default(uuid()) @db.Uuid
-  projectId      String             @db.Uuid
+  id             String               @id @default(uuid()) @db.Uuid
+  projectId      String               @db.Uuid
   type           LegacyDocumentType
   originalName   String
   storagePath    String
@@ -308,12 +337,12 @@ model LegacyAcademicDocument {
   checksum       String
   academicPeriod String?
   versionLabel   String?
-  active         Boolean            @default(true)
-  uploadedById   String?            @db.Uuid
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy     User?              @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  active         Boolean              @default(true)
+  uploadedById   String?              @db.Uuid
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  project        Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy     User?                @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   proposals      AdaptationProposal[]
 
   @@index([projectId, type, active])
@@ -321,55 +350,55 @@ model LegacyAcademicDocument {
 }
 
 model AdaptationProposal {
-  id                  String                     @id @default(uuid()) @db.Uuid
-  projectId           String                     @db.Uuid
-  sourceDocumentId    String                     @db.Uuid
-  target              AdaptationTarget
-  status              AdaptationProposalStatus   @default(DRAFT)
-  sourceWeeks         Int                        @default(16)
-  targetWeeks         Int                        @default(8)
-  title               String
-  overview            String
-  weeklyStructure     Json
-  templateSnapshotId  String?                    @db.Uuid
-  promptSnapshotId    String?                    @db.Uuid
-  documentSnapshotIds String[]                   @default([])
-  specificationSnapshotIds String[]              @default([])
-  generatedAt         DateTime                   @default(now())
-  approvedAt          DateTime?
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
-  project             Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sourceDocument      LegacyAcademicDocument     @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
-  changes             AdaptationChange[]
+  id                       String                   @id @default(uuid()) @db.Uuid
+  projectId                String                   @db.Uuid
+  sourceDocumentId         String                   @db.Uuid
+  target                   AdaptationTarget
+  status                   AdaptationProposalStatus @default(DRAFT)
+  sourceWeeks              Int                      @default(16)
+  targetWeeks              Int                      @default(8)
+  title                    String
+  overview                 String
+  weeklyStructure          Json
+  templateSnapshotId       String?                  @db.Uuid
+  promptSnapshotId         String?                  @db.Uuid
+  documentSnapshotIds      String[]                 @default([])
+  specificationSnapshotIds String[]                 @default([])
+  generatedAt              DateTime                 @default(now())
+  approvedAt               DateTime?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  project                  Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sourceDocument           LegacyAcademicDocument   @relation(fields: [sourceDocumentId], references: [id], onDelete: Restrict)
+  changes                  AdaptationChange[]
 
   @@index([projectId, target, status])
   @@index([sourceDocumentId, generatedAt])
 }
 
 model AdaptationChange {
-  id                    String               @id @default(uuid()) @db.Uuid
-  proposalId            String               @db.Uuid
+  id                    String             @id @default(uuid()) @db.Uuid
+  proposalId            String             @db.Uuid
   sortOrder             Int
   action                AdaptationAction
-  sourceWeeks           Int[]                @default([])
+  sourceWeeks           Int[]              @default([])
   sourceContent         String
   sourceWeekBreakdown   Json?
-  proposedWeeks         Int[]                @default([])
+  proposedWeeks         Int[]              @default([])
   proposedContent       String
   proposedWeekBreakdown Json?
   rationale             String
-  learningOutcomes      String[]             @default([])
+  learningOutcomes      String[]           @default([])
   hoursImpact           String
   evaluationImpact      String
-  institutionalSources  String[]             @default([])
-  decision              AdaptationDecision   @default(PENDING)
+  institutionalSources  String[]           @default([])
+  decision              AdaptationDecision @default(PENDING)
   teacherEditedContent  String?
   teacherComment        String?
   decidedAt             DateTime?
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
-  proposal              AdaptationProposal   @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  proposal              AdaptationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
   @@unique([proposalId, sortOrder])
   @@index([proposalId, decision])
@@ -403,14 +432,16 @@ model AcademicLevel {
 }
 
 model Modality {
-  id        String             @id @default(uuid()) @db.Uuid
-  code      String             @unique
-  name      String             @unique
-  active    Boolean            @default(true)
-  sortOrder Int                @default(100)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  offerings AcademicOffering[]
+  id                   String                      @id @default(uuid()) @db.Uuid
+  code                 String                      @unique
+  name                 String                      @unique
+  active               Boolean                     @default(true)
+  sortOrder            Int                         @default(100)
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  offerings            AcademicOffering[]
+  directorAssignments  CareerDirectorAssignment[]
+  secretaryAssignments CareerSecretaryAssignment[]
 }
 
 model AcademicUnit {
@@ -425,18 +456,19 @@ model AcademicUnit {
 }
 
 model AcademicProgram {
-  id              String             @id @default(uuid()) @db.Uuid
-  code            String             @unique
-  name            String
-  academicLevelId String             @db.Uuid
-  academicUnitId  String             @db.Uuid
-  active          Boolean            @default(true)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  academicLevel   AcademicLevel      @relation(fields: [academicLevelId], references: [id])
-  academicUnit    AcademicUnit       @relation(fields: [academicUnitId], references: [id])
-  offerings       AcademicOffering[]
-  directorAssignments CareerDirectorAssignment[]
+  id                   String                      @id @default(uuid()) @db.Uuid
+  code                 String                      @unique
+  name                 String
+  academicLevelId      String                      @db.Uuid
+  academicUnitId       String                      @db.Uuid
+  active               Boolean                     @default(true)
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  academicLevel        AcademicLevel               @relation(fields: [academicLevelId], references: [id])
+  academicUnit         AcademicUnit                @relation(fields: [academicUnitId], references: [id])
+  offerings            AcademicOffering[]
+  directorAssignments  CareerDirectorAssignment[]
+  secretaryAssignments CareerSecretaryAssignment[]
 
   @@unique([name, academicLevelId, academicUnitId])
   @@index([academicLevelId, academicUnitId])
@@ -455,61 +487,63 @@ model SubjectType {
 }
 
 model AcademicPeriod {
-  id        String             @id @default(uuid()) @db.Uuid
-  code      String             @unique
-  name      String             @unique
-  startsAt                     DateTime?
-  endsAt                       DateTime?
-  bimestralEvaluationAt        DateTime? // Compatibilidad histórica: inicio del intervalo bimestral
-  bimestralEvaluationStartAt   DateTime?
-  bimestralEvaluationEndAt     DateTime?
-  recoveryEvaluationStartAt    DateTime?
-  recoveryEvaluationEndAt      DateTime?
-  active                       Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  offerings AcademicOffering[]
+  id                         String             @id @default(uuid()) @db.Uuid
+  code                       String             @unique
+  name                       String             @unique
+  startsAt                   DateTime?
+  endsAt                     DateTime?
+  bimestralEvaluationAt      DateTime? // Compatibilidad histórica: inicio del intervalo bimestral
+  bimestralEvaluationStartAt DateTime?
+  bimestralEvaluationEndAt   DateTime?
+  recoveryEvaluationStartAt  DateTime?
+  recoveryEvaluationEndAt    DateTime?
+  active                     Boolean            @default(true)
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime           @updatedAt
+  offerings                  AcademicOffering[]
 }
 
 model Course {
-  id        String             @id @default(uuid()) @db.Uuid
-  code      String             @unique
-  name      String
-  active    Boolean            @default(true)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  offerings AcademicOffering[]
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique
+  sisCode       String?            @unique
+  metacourseUrl String?            @unique
+  name          String
+  active        Boolean            @default(true)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  offerings     AcademicOffering[]
 }
 
 model AcademicOffering {
-  id                              String               @id @default(uuid()) @db.Uuid
-  code                            String               @unique
-  courseId                        String               @db.Uuid
-  programId                       String               @db.Uuid
-  modalityId                      String               @db.Uuid
-  subjectTypeId                   String               @db.Uuid
-  periodId                        String               @db.Uuid
-  totalWeeks                      Int                  @default(8)
-  credits                         Decimal?             @db.Decimal(6, 2)
-  acdHours                        Int                  @default(0)
-  apeHours                        Int                  @default(0)
-  aaHours                         Int                  @default(0)
+  id                              String                                   @id @default(uuid()) @db.Uuid
+  code                            String                                   @unique
+  courseId                        String                                   @db.Uuid
+  programId                       String                                   @db.Uuid
+  modalityId                      String                                   @db.Uuid
+  subjectTypeId                   String                                   @db.Uuid
+  periodId                        String                                   @db.Uuid
+  totalWeeks                      Int                                      @default(8)
+  credits                         Decimal?                                 @db.Decimal(6, 2)
+  acdHours                        Int                                      @default(0)
+  apeHours                        Int                                      @default(0)
+  aaHours                         Int                                      @default(0)
   semester                        String?
   description                     String?
-  prerequisites                   String[]             @default([])
-  learningOutcomes                String[]             @default([])
-  professionalProfileCompetencies String[]             @default([])
-  graduateProfileResults          String[]             @default([])
-  utplGenericCompetencies         String[]             @default([])
-  unitContents                    String[]             @default([])
-  active                          Boolean              @default(true)
-  createdAt                       DateTime             @default(now())
-  updatedAt                       DateTime             @updatedAt
-  course                          Course               @relation(fields: [courseId], references: [id])
-  program                         AcademicProgram      @relation(fields: [programId], references: [id])
-  modality                        Modality             @relation(fields: [modalityId], references: [id])
-  subjectType                     SubjectType          @relation(fields: [subjectTypeId], references: [id])
-  period                          AcademicPeriod       @relation(fields: [periodId], references: [id])
+  prerequisites                   String[]                                 @default([])
+  learningOutcomes                String[]                                 @default([])
+  professionalProfileCompetencies String[]                                 @default([])
+  graduateProfileResults          String[]                                 @default([])
+  utplGenericCompetencies         String[]                                 @default([])
+  unitContents                    String[]                                 @default([])
+  active                          Boolean                                  @default(true)
+  createdAt                       DateTime                                 @default(now())
+  updatedAt                       DateTime                                 @updatedAt
+  course                          Course                                   @relation(fields: [courseId], references: [id])
+  program                         AcademicProgram                          @relation(fields: [programId], references: [id])
+  modality                        Modality                                 @relation(fields: [modalityId], references: [id])
+  subjectType                     SubjectType                              @relation(fields: [subjectTypeId], references: [id])
+  period                          AcademicPeriod                           @relation(fields: [periodId], references: [id])
   assignments                     TeachingAssignment[]
   projects                        Project[]
   learningOutcomeItems            AcademicOfferingLearningOutcome[]
@@ -522,7 +556,6 @@ model AcademicOffering {
   @@index([programId, periodId, active])
   @@index([courseId, periodId])
 }
-
 
 model UtplGenericCompetency {
   id            String                              @id @default(uuid()) @db.Uuid
@@ -602,12 +635,12 @@ model AcademicOfferingUnit {
 }
 
 model AcademicOfferingUnitContent {
-  id        String               @id @default(uuid()) @db.Uuid
-  unitId    String               @db.Uuid
-  text      String
-  sortOrder Int
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  id          String                           @id @default(uuid()) @db.Uuid
+  unitId      String                           @db.Uuid
+  text        String
+  sortOrder   Int
+  createdAt   DateTime                         @default(now())
+  updatedAt   DateTime                         @updatedAt
   unit        AcademicOfferingUnit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
   subcontents AcademicOfferingUnitSubcontent[]
 
@@ -831,46 +864,48 @@ model KnowledgeDocument {
 }
 
 model TeachingPlan {
-  id                  String   @id @default(uuid()) @db.Uuid
-  projectId           String   @unique @db.Uuid
-  schemaVersion       String   @default("1.0.0")
-  status              String   @default("DRAFT")
-  content             Json
-  version             Int      @default(1)
-  templateSnapshotId  String?  @db.Uuid
-  promptSnapshotId    String?  @db.Uuid
-  documentSnapshotIds String[] @default([])
-  specificationSnapshotIds String[] @default([])
-  teacherReviewedAt   DateTime?
-  teacherReviewNotes  String?
-  generatedAt         DateTime @default(now())
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  activities          TeachingPlanActivity[]
-  reviewWorkflow      TeachingPlanReviewWorkflow?
+  id                       String                      @id @default(uuid()) @db.Uuid
+  projectId                String                      @unique @db.Uuid
+  schemaVersion            String                      @default("1.0.0")
+  status                   String                      @default("DRAFT")
+  content                  Json
+  version                  Int                         @default(1)
+  templateSnapshotId       String?                     @db.Uuid
+  promptSnapshotId         String?                     @db.Uuid
+  documentSnapshotIds      String[]                    @default([])
+  specificationSnapshotIds String[]                    @default([])
+  teacherReviewedAt        DateTime?
+  teacherReviewNotes       String?
+  methodologyApprovedAt    DateTime?
+  planningApprovedAt       DateTime?
+  generatedAt              DateTime                    @default(now())
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  project                  Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  activities               TeachingPlanActivity[]
+  reviewWorkflow           TeachingPlanReviewWorkflow?
 
   @@index([status, updatedAt])
 }
 
 model TeachingPlanReviewProcessConfig {
-  id          String   @id @default("DEFAULT")
-  enabled     Boolean  @default(false)
-  updatedById String?  @db.Uuid
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  updatedBy   User?    @relation("TeachingPlanReviewProcessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  id          String                          @id @default("DEFAULT")
+  enabled     Boolean                         @default(false)
+  updatedById String?                         @db.Uuid
+  createdAt   DateTime                        @default(now())
+  updatedAt   DateTime                        @updatedAt
+  updatedBy   User?                           @relation("TeachingPlanReviewProcessUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   stages      TeachingPlanReviewStageConfig[]
 }
 
 model TeachingPlanReviewStageConfig {
-  id              String                      @id @default(uuid()) @db.Uuid
+  id              String                          @id @default(uuid()) @db.Uuid
   processConfigId String
   stage           TeachingPlanReviewStageType
-  enabled         Boolean                     @default(true)
+  enabled         Boolean                         @default(true)
   sortOrder       Int
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
+  createdAt       DateTime                        @default(now())
+  updatedAt       DateTime                        @updatedAt
   processConfig   TeachingPlanReviewProcessConfig @relation(fields: [processConfigId], references: [id], onDelete: Cascade)
 
   @@unique([processConfigId, stage])
@@ -897,42 +932,62 @@ model TeachingPlanReviewerAssignment {
 model CareerDirectorAssignment {
   id           String          @id @default(uuid()) @db.Uuid
   programId    String          @db.Uuid
+  modalityId   String?         @db.Uuid
   directorId   String          @db.Uuid
   assignedById String?         @db.Uuid
   active       Boolean         @default(true)
   assignedAt   DateTime        @default(now())
   endedAt      DateTime?
   program      AcademicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  modality     Modality?       @relation(fields: [modalityId], references: [id], onDelete: Restrict)
   director     User            @relation("CareerDirector", fields: [directorId], references: [id], onDelete: Restrict)
   assignedBy   User?           @relation("CareerDirectorAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
 
-  @@index([programId, active])
+  @@index([programId, modalityId, active])
   @@index([directorId, active])
 }
 
+model CareerSecretaryAssignment {
+  id           String          @id @default(uuid()) @db.Uuid
+  programId    String          @db.Uuid
+  modalityId   String          @db.Uuid
+  secretaryId  String          @db.Uuid
+  assignedById String?         @db.Uuid
+  active       Boolean         @default(true)
+  assignedAt   DateTime        @default(now())
+  endedAt      DateTime?
+  program      AcademicProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  modality     Modality        @relation(fields: [modalityId], references: [id], onDelete: Restrict)
+  secretary    User            @relation("CareerSecretary", fields: [secretaryId], references: [id], onDelete: Restrict)
+  assignedBy   User?           @relation("CareerSecretaryAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@index([programId, modalityId, active])
+  @@index([secretaryId, active])
+}
+
 model TeachingPlanIndicatorVersion {
-  id          String                  @id @default(uuid()) @db.Uuid
-  version     Int                     @unique
+  id          String                       @id @default(uuid()) @db.Uuid
+  version     Int                          @unique
   title       String
-  status      DocumentStatus          @default(DRAFT)
-  createdById String?                 @db.Uuid
-  createdAt   DateTime                @default(now())
+  status      DocumentStatus               @default(DRAFT)
+  createdById String?                      @db.Uuid
+  createdAt   DateTime                     @default(now())
   activatedAt DateTime?
-  createdBy   User?                   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?                        @relation(fields: [createdById], references: [id], onDelete: SetNull)
   indicators  TeachingPlanIndicator[]
   workflows   TeachingPlanReviewWorkflow[]
   reviews     TeachingPlanReview[]
 }
 
 model TeachingPlanIndicator {
-  id          String                      @id @default(uuid()) @db.Uuid
-  versionId   String                      @db.Uuid
+  id          String                       @id @default(uuid()) @db.Uuid
+  versionId   String                       @db.Uuid
   code        String
-  name        String                      @default("")
+  name        String                       @default("")
   description String
   stage       TeachingPlanReviewStageType
-  active      Boolean                     @default(true)
-  required    Boolean                     @default(true)
+  active      Boolean                      @default(true)
+  required    Boolean                      @default(true)
   sortOrder   Int
   version     TeachingPlanIndicatorVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   reviewItems TeachingPlanReviewItem[]
@@ -942,15 +997,15 @@ model TeachingPlanIndicator {
 }
 
 model TeachingPlanReviewWorkflow {
-  id                 String                     @id @default(uuid()) @db.Uuid
-  teachingPlanId     String                     @unique @db.Uuid
-  indicatorVersionId String                     @db.Uuid
-  status             TeachingPlanWorkflowStatus @default(IN_REVIEW)
-  startedAt          DateTime                   @default(now())
+  id                 String                       @id @default(uuid()) @db.Uuid
+  teachingPlanId     String                       @unique @db.Uuid
+  indicatorVersionId String                       @db.Uuid
+  status             TeachingPlanWorkflowStatus   @default(IN_REVIEW)
+  startedAt          DateTime                     @default(now())
   completedAt        DateTime?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
-  teachingPlan       TeachingPlan               @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  teachingPlan       TeachingPlan                 @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
   indicatorVersion   TeachingPlanIndicatorVersion @relation(fields: [indicatorVersionId], references: [id], onDelete: Restrict)
   stages             TeachingPlanWorkflowStage[]
   notifications      TeachingPlanNotification[]
@@ -959,18 +1014,18 @@ model TeachingPlanReviewWorkflow {
 }
 
 model TeachingPlanWorkflowStage {
-  id          String                           @id @default(uuid()) @db.Uuid
-  workflowId  String                           @db.Uuid
-  stage       TeachingPlanReviewStageType
-  sortOrder   Int
-  reviewerId  String?                          @db.Uuid
-  status      TeachingPlanWorkflowStageStatus  @default(WAITING)
-  approvedAt  DateTime?
-  createdAt   DateTime                         @default(now())
-  updatedAt   DateTime                         @updatedAt
-  workflow    TeachingPlanReviewWorkflow       @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  reviewer    User?                            @relation("TeachingPlanWorkflowReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
-  reviews     TeachingPlanReview[]
+  id         String                          @id @default(uuid()) @db.Uuid
+  workflowId String                          @db.Uuid
+  stage      TeachingPlanReviewStageType
+  sortOrder  Int
+  reviewerId String?                         @db.Uuid
+  status     TeachingPlanWorkflowStageStatus @default(WAITING)
+  approvedAt DateTime?
+  createdAt  DateTime                        @default(now())
+  updatedAt  DateTime                        @updatedAt
+  workflow   TeachingPlanReviewWorkflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  reviewer   User?                           @relation("TeachingPlanWorkflowReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  reviews    TeachingPlanReview[]
 
   @@unique([workflowId, stage])
   @@index([reviewerId, status])
@@ -1045,30 +1100,30 @@ model TeachingPlanNotification {
 }
 
 model TeachingPlanActivity {
-  id              String                    @id @default(uuid()) @db.Uuid
-  teachingPlanId  String                    @db.Uuid
-  sequenceOrder   Int
-  learningOutcome String
-  weekNumber      Int
-  sortOrder       Int
-  component       TeachingActivityComponent
-  description     String
-  unitContents    String[]                  @default([])
-  resources       String[]                  @default([])
-  resource        String?
-  hours           Int                       @default(0)
-  weekAcdHours    Int                       @default(0)
-  weekApeHours    Int                       @default(0)
-  weekAaHours     Int                       @default(0)
-  evaluatedCode   String?
-  actualGrade     Float?
-  weight          Int?
-  workStrategies  String?
-  workStrategyItems String[]                 @default([])
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  teachingPlan    TeachingPlan              @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
-  instrument      TeachingPlanInstrument?
+  id                String                    @id @default(uuid()) @db.Uuid
+  teachingPlanId    String                    @db.Uuid
+  sequenceOrder     Int
+  learningOutcome   String
+  weekNumber        Int
+  sortOrder         Int
+  component         TeachingActivityComponent
+  description       String
+  unitContents      String[]                  @default([])
+  resources         String[]                  @default([])
+  resource          String?
+  hours             Int                       @default(0)
+  weekAcdHours      Int                       @default(0)
+  weekApeHours      Int                       @default(0)
+  weekAaHours       Int                       @default(0)
+  evaluatedCode     String?
+  actualGrade       Float?
+  weight            Int?
+  workStrategies    String?
+  workStrategyItems String[]                  @default([])
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  teachingPlan      TeachingPlan              @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  instrument        TeachingPlanInstrument?
 
   @@unique([teachingPlanId, sequenceOrder, weekNumber, sortOrder])
   @@index([teachingPlanId, weekNumber])
@@ -1076,30 +1131,30 @@ model TeachingPlanActivity {
 }
 
 model TeachingPlanInstrument {
-  id                           String                       @id @default(uuid()) @db.Uuid
-  activityId                   String                       @unique @db.Uuid
-  type                         TeachingPlanInstrumentType
-  title                        String
-  maximumScore                 Float                        @default(10)
-  questionnaireGradingMode     QuestionnaireGradingMode?
-  questionnaireQuestionCount   Int?
-  questionnaireTimeMinutes     Int?
-  createdAt                    DateTime                     @default(now())
-  updatedAt                    DateTime                     @updatedAt
-  activity                     TeachingPlanActivity         @relation(fields: [activityId], references: [id], onDelete: Cascade)
-  criteria                     TeachingPlanInstrumentCriterion[]
+  id                         String                            @id @default(uuid()) @db.Uuid
+  activityId                 String                            @unique @db.Uuid
+  type                       TeachingPlanInstrumentType
+  title                      String
+  maximumScore               Float                             @default(10)
+  questionnaireGradingMode   QuestionnaireGradingMode?
+  questionnaireQuestionCount Int?
+  questionnaireTimeMinutes   Int?
+  createdAt                  DateTime                          @default(now())
+  updatedAt                  DateTime                          @updatedAt
+  activity                   TeachingPlanActivity              @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  criteria                   TeachingPlanInstrumentCriterion[]
 
   @@index([type])
 }
 
 model TeachingPlanInstrumentCriterion {
-  id           String                         @id @default(uuid()) @db.Uuid
-  instrumentId String                         @db.Uuid
+  id           String                        @id @default(uuid()) @db.Uuid
+  instrumentId String                        @db.Uuid
   sortOrder    Int
   label        String
-  createdAt    DateTime                       @default(now())
-  updatedAt    DateTime                       @updatedAt
-  instrument   TeachingPlanInstrument         @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                      @default(now())
+  updatedAt    DateTime                      @updatedAt
+  instrument   TeachingPlanInstrument        @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
   levels       TeachingPlanInstrumentLevel[]
 
   @@unique([instrumentId, sortOrder])
@@ -1215,4 +1270,61 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+model AiGenerationJob {
+  id                  String                   @id @default(uuid()) @db.Uuid
+  requestedById       String                   @db.Uuid
+  projectId           String?                  @db.Uuid
+  operation           String
+  targetKey           String
+  activeTargetKey     String?
+  idempotencyKey      String
+  requestHash         String
+  requestMethod       String
+  requestPath         String
+  requestPayload      Json?
+  status              String                   @default("QUEUED")
+  responseStatus      Int?
+  responsePayload     Json?
+  errorMessage        String?
+  quotaReserved       Boolean                  @default(true)
+  countsTowardLimit   Boolean                  @default(false)
+  technicalRetryCount Int                      @default(0)
+  nextRetryAt         DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  lastHeartbeatAt     DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  requestedBy         User                     @relation("AiGenerationRequestedBy", fields: [requestedById], references: [id], onDelete: Cascade)
+  project             Project?                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  remoteCalls         AiGenerationRemoteCall[]
+
+  @@unique([requestedById, idempotencyKey])
+  @@unique([requestedById, activeTargetKey])
+  @@index([status, nextRetryAt, createdAt])
+  @@index([requestedById, targetKey, countsTowardLimit])
+  @@index([projectId, createdAt])
+}
+
+model AiGenerationRemoteCall {
+  id                 String          @id @default(uuid()) @db.Uuid
+  jobId              String          @db.Uuid
+  stepKey            String
+  kind               String
+  requestHash        String
+  providerResponseId String?
+  status             String          @default("PENDING")
+  attemptCount       Int             @default(0)
+  responsePayload    Json?
+  outputText         String?
+  errorMessage       String?
+  completedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  job                AiGenerationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, stepKey])
+  @@index([providerResponseId])
 }

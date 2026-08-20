@@ -7,6 +7,21 @@ function publicAuthError(message: string, statusCode = 400) {
   return Object.assign(new Error(message), { statusCode });
 }
 
+
+export function assertPasswordComplexity(password: string) {
+  if (password.length < MINIMUM_PASSWORD_LENGTH) {
+    throw publicAuthError(`La contraseña debe tener al menos ${MINIMUM_PASSWORD_LENGTH} caracteres.`);
+  }
+  if (!/\p{Lu}/u.test(password)) throw publicAuthError("La contraseña debe incluir al menos una letra mayúscula.");
+  if (!/\p{Ll}/u.test(password)) throw publicAuthError("La contraseña debe incluir al menos una letra minúscula.");
+  if (!/\p{N}/u.test(password)) throw publicAuthError("La contraseña debe incluir al menos un número.");
+  if (!/[^\p{L}\p{N}\s]/u.test(password)) throw publicAuthError("La contraseña debe incluir al menos un carácter especial.");
+}
+
+export function generateStrongTemporaryPassword() {
+  return `${randomBytes(12).toString("base64url")}Aa1!`;
+}
+
 export function passwordHash(password: string) {
   const salt = randomBytes(16).toString("hex");
   return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`;
@@ -28,14 +43,12 @@ export function assertPasswordChange(
   if (!passwordMatches(input.currentPassword, storedHash)) {
     throw publicAuthError("La contraseña actual es incorrecta.");
   }
-  if (input.newPassword.length < MINIMUM_PASSWORD_LENGTH) {
-    throw publicAuthError(`La nueva contraseña debe tener al menos ${MINIMUM_PASSWORD_LENGTH} caracteres.`);
-  }
-  if (input.newPassword !== input.confirmPassword) {
-    throw publicAuthError("La confirmación no coincide con la nueva contraseña.");
-  }
   if (passwordMatches(input.newPassword, storedHash)) {
     throw publicAuthError("La nueva contraseña debe ser diferente de la contraseña actual.");
+  }
+  assertPasswordComplexity(input.newPassword);
+  if (input.newPassword !== input.confirmPassword) {
+    throw publicAuthError("La confirmación no coincide con la nueva contraseña.");
   }
 }
 
@@ -47,14 +60,12 @@ export function assertPasswordResetChange(
   input: { newPassword: string; confirmPassword: string },
   storedHash: string | null,
 ) {
-  if (input.newPassword.length < MINIMUM_PASSWORD_LENGTH) {
-    throw publicAuthError(`La nueva contraseña debe tener al menos ${MINIMUM_PASSWORD_LENGTH} caracteres.`);
-  }
-  if (input.newPassword !== input.confirmPassword) {
-    throw publicAuthError("La confirmación no coincide con la nueva contraseña.");
-  }
   if (passwordMatches(input.newPassword, storedHash)) {
     throw publicAuthError("La nueva contraseña debe ser diferente de la contraseña actual.");
+  }
+  assertPasswordComplexity(input.newPassword);
+  if (input.newPassword !== input.confirmPassword) {
+    throw publicAuthError("La confirmación no coincide con la nueva contraseña.");
   }
 }
 

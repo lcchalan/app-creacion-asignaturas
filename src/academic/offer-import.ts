@@ -29,6 +29,8 @@ export type AcademicOfferImport = {
     endsAt: string | null;
     courseCode: string;
     courseName: string;
+    sisCode: string | null;
+    metacourseUrl: string | null;
     subjectTypeCode: string;
     totalWeeks: number;
     credits: number | null;
@@ -171,6 +173,8 @@ export function parseAcademicOfferWorkbook(fileName: string, contentBase64: stri
       endsAt: dateValue(row, "fecha_fin", "OFERTAS", rowNumber),
       courseCode: text(row, "asignatura_codigo", "OFERTAS", rowNumber).toUpperCase(),
       courseName: text(row, "asignatura_nombre", "OFERTAS", rowNumber),
+      sisCode: text(row, "codigo_sis", "OFERTAS", rowNumber, false) || null,
+      metacourseUrl: text(row, "url_metacurso", "OFERTAS", rowNumber, false) || null,
       subjectTypeCode: text(row, "tipo_asignatura_codigo", "OFERTAS", rowNumber).toUpperCase(),
       totalWeeks: numberValue(row, "numero_semanas", "OFERTAS", rowNumber, { integer: true, min: 1 }) as number,
       credits: numberValue(row, "creditos", "OFERTAS", rowNumber, { min: 0, required: false }),
@@ -213,6 +217,35 @@ export function parseAcademicOfferWorkbook(fileName: string, contentBase64: stri
     }
     return offering;
   });
+
+  const courseMetadata = new Map<string, { sisCode: string | null; metacourseUrl: string | null }>();
+  const sisCodes = new Map<string, string>();
+  const metacourseUrls = new Map<string, string>();
+  for (const offering of offerings) {
+    if (offering.metacourseUrl) {
+      try {
+        const parsedUrl = new URL(offering.metacourseUrl);
+        if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new Error("protocol");
+      } catch {
+        throw new Error(`La asignatura «${offering.courseCode}» contiene una URL de metacurso no válida; utilice http:// o https://.`);
+      }
+    }
+    if (offering.sisCode) {
+      const owner = sisCodes.get(offering.sisCode);
+      if (owner && owner !== offering.courseCode) throw new Error(`El Código SIS «${offering.sisCode}» está asignado a más de una asignatura (${owner} y ${offering.courseCode}).`);
+      sisCodes.set(offering.sisCode, offering.courseCode);
+    }
+    if (offering.metacourseUrl) {
+      const owner = metacourseUrls.get(offering.metacourseUrl);
+      if (owner && owner !== offering.courseCode) throw new Error(`La URL metacurso «${offering.metacourseUrl}» está asignada a más de una asignatura (${owner} y ${offering.courseCode}).`);
+      metacourseUrls.set(offering.metacourseUrl, offering.courseCode);
+    }
+    const previous = courseMetadata.get(offering.courseCode);
+    if (previous && (previous.sisCode !== offering.sisCode || previous.metacourseUrl !== offering.metacourseUrl)) {
+      throw new Error(`La asignatura «${offering.courseCode}» aparece con Código SIS o URL metacurso diferentes entre ofertas.`);
+    }
+    courseMetadata.set(offering.courseCode, { sisCode: offering.sisCode, metacourseUrl: offering.metacourseUrl });
+  }
 
   const teachers = sheetRows(workbook, "DOCENTES").map((row, index) => {
     const rowNumber = index + 2;

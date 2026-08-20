@@ -279,7 +279,8 @@ test("interpreta la oferta académica normalizada en varias hojas", () => {
   addSheet(workbook, "OFERTAS", [{
     id_oferta: "OF-001", periodo_codigo: "2026-2", periodo_nombre: "Octubre 2026 - Abril 2027",
     fecha_inicio: "2026-10-01", fecha_fin: "2027-04-30", asignatura_codigo: "EDU-101",
-    asignatura_nombre: "Diseño curricular", tipo_asignatura_codigo: "TEORICA", numero_semanas: 8,
+    asignatura_nombre: "Diseño curricular", codigo_sis: "SIS-EDU-101", url_metacurso: "https://campus.example.edu/meta/EDU-101",
+    tipo_asignatura_codigo: "TEORICA", numero_semanas: 8,
     creditos: 4, horas_acd: 8, horas_ape: 8, horas_aa: 16, nivel_codigo: "GRADO",
     nivel_nombre: "Grado", modalidad_codigo: "EN-LINEA", modalidad_nombre: "En línea",
     facultad_codigo: "FAC-EDU", facultad_nombre: "Facultad de Educación", carrera_codigo: "PRG-EDU",
@@ -304,6 +305,8 @@ test("interpreta la oferta académica normalizada en varias hojas", () => {
   const bytes = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
   const parsed = parseAcademicOfferWorkbook("oferta.xlsx", bytes.toString("base64"));
   assert.equal(parsed.offerings[0]?.learningOutcomes.length, 2);
+  assert.equal(parsed.offerings[0]?.sisCode, "SIS-EDU-101");
+  assert.equal(parsed.offerings[0]?.metacourseUrl, "https://campus.example.edu/meta/EDU-101");
   assert.equal(parsed.assignments[0]?.offeringCode, "OF-001");
 });
 
