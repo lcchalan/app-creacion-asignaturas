@@ -35,11 +35,19 @@ import {
   canonicalGuideDocumentSchema,
 } from "./canonical-guide.js";
 import {
+  buildCanonicalTeachingPlan,
+  canonicalTeachingPlanDocumentSchema,
+  canonicalTeachingPlanToWordInput,
+  CANONICAL_TEACHING_PLAN_SCHEMA_VERSION,
+} from "./canonical-teaching-plan.js";
+import {
   assembleGuideWeekMarkdown,
   buildGuideWeekOutline,
   bloomLevelSchema,
+  audiovisualEducationalResourceSchema,
   educationalResourceSchema,
   educationalResourceToMarkdown,
+  interactiveEducationalResourceSchema,
   educationalResourceTypeSchema,
   guideAiWeekResponseSchema,
   guideOutlineInstructions,
@@ -81,7 +89,7 @@ import {
   assertContributionCoverage,
   assertTeachingPlanConsistency,
   canonicalizeTeachingPlanUnitContents,
-  evaluationRulesFor,
+  evaluationRulesSchema,
   outcomeMappingsSchema,
   planCategorySchema,
   planMatrixRows,
@@ -94,11 +102,26 @@ import {
   teachingPlanActivityDetailSchema,
   teachingPlanInstrumentConfigSchema,
   scaleInstrumentScoreToActivityGrade,
+  type EvaluationRule,
   type OutcomeMapping,
   type PlanCategory,
   type TeacherProfile,
   type TeachingPlanContent,
 } from "./academic/teaching-plan-policy.js";
+import {
+  DEFAULT_QUESTION_BANK_MINIMUM,
+  MAX_QUESTION_BANK_SIZE,
+  QUESTION_BANK_MINIMUM_SETTING_KEY,
+  defaultQuestionTypeConfiguration,
+  normalizeQuestionBankMinimum,
+  questionTypeConfigurationSchema,
+  questionTypeSchema,
+  requiredQuestionBankSize,
+  structuredQuestionSchema,
+  validateQuestionBankConfiguration,
+  validateQuestionBankQuestions,
+  validateStructuredQuestion,
+} from "./academic/question-bank.js";
 import { buildTeachingPlanWord, extractTemplateLogo } from "./teaching-plan-word.js";
 import { sendPasswordResetEmail, sendPlainTextEmail } from "./services/smtp-mailer.js";
 import {
@@ -130,6 +153,7 @@ import {
   previouslyApprovedTeachingPlanStages,
   teachingPlanIndicatorPreviewSection,
   teachingPlanReviewItemNeedsCorrection,
+  teachingPlanReviewResultCanCarryForward,
   teachingPlanReviewWorkflowIsSuspended,
   teachingPlanReviewStageLabel,
   teachingPlanReviewStageRole,
@@ -222,6 +246,10 @@ const canonicalGuideV3SchemaFileUrl = new URL(
   "../schemas/guide-canonical-v3.schema.json",
   import.meta.url,
 );
+const canonicalTeachingPlanV1SchemaFileUrl = new URL(
+  "../schemas/teaching-plan-canonical-v1.schema.json",
+  import.meta.url,
+);
 const knowledgeDirectoryUrl = new URL("../knowledge/", import.meta.url);
 
 async function readKnowledgeFile(fileName: string): Promise<string> {
@@ -275,6 +303,58 @@ async function academicDataIssueRecipient() {
   return z.string().email().parse(value);
 }
 
+const teachingPlanEvaluationCategoryLabels: Record<PlanCategory, string> = {
+  CONCEPTUAL: "Conceptual",
+  ACTIVE: "Activa",
+  INTEGRATING: "Integradora",
+};
+
+function teachingPlanEvaluationPolicyApiView(policy: {
+  id: string; category: string; version: number; title: string; status: string; rules: unknown;
+  createdById?: string | null; createdAt: Date; activatedAt?: Date | null;
+}) {
+  const category = planCategorySchema.parse(policy.category);
+  return {
+    id: policy.id,
+    category,
+    categoryLabel: teachingPlanEvaluationCategoryLabels[category],
+    version: policy.version,
+    title: policy.title,
+    status: policy.status,
+    rules: evaluationRulesSchema.parse(policy.rules),
+    createdById: policy.createdById ?? null,
+    createdAt: policy.createdAt.toISOString(),
+    activatedAt: policy.activatedAt?.toISOString() ?? null,
+  };
+}
+
+async function activeTeachingPlanEvaluationPolicy(category: PlanCategory) {
+  const policy = await database.teachingPlanEvaluationPolicyVersion.findFirst({
+    where: { category, status: "ACTIVE" },
+    orderBy: { version: "desc" },
+  });
+  if (!policy) {
+    throw Object.assign(new Error(`No existe una distribución de evaluación activa para la categoría ${teachingPlanEvaluationCategoryLabels[category]}. Configúrela en Administración antes de generar el Plan Docente.`), { statusCode: 409 });
+  }
+  return { ...policy, category, rules: evaluationRulesSchema.parse(policy.rules) };
+}
+
+async function teachingPlanEvaluationPolicyForSnapshot(
+  snapshotId: string | null | undefined,
+  category: PlanCategory,
+) {
+  if (!snapshotId) return activeTeachingPlanEvaluationPolicy(category);
+  const policy = await database.teachingPlanEvaluationPolicyVersion.findUnique({ where: { id: snapshotId } });
+  if (!policy) {
+    throw Object.assign(new Error("La distribución institucional de evaluación usada por este Plan Docente ya no está disponible."), { statusCode: 409 });
+  }
+  const snapshotCategory = planCategorySchema.parse(policy.category);
+  if (snapshotCategory !== category) {
+    throw Object.assign(new Error("La distribución institucional guardada no corresponde al tipo de asignatura del Plan Docente."), { statusCode: 409 });
+  }
+  return { ...policy, category: snapshotCategory, rules: evaluationRulesSchema.parse(policy.rules) };
+}
+
 function listItems(value: string | null | undefined) {
   return String(value || "").split(/\r?\n|[•·]\s*/u).map((item) => item.trim()).filter(Boolean);
 }
@@ -322,7 +402,7 @@ const utplGenericCompetencySchema = z.enum([
   "Ciudadanía global",
 ]);
 
-const uniqueAcademicTextListSchema = z.array(z.string().trim().min(1).max(1000))
+const uniqueAcademicTextListSchema = z.array(z.string().trim().min(1).max(2000))
   .min(1)
   .max(100)
   .refine(
@@ -383,6 +463,17 @@ const generationRequestSchema = z.object({
 type GenerationRequest = z.infer<
   typeof generationRequestSchema
 >;
+
+// Guide generation must use the completed Teaching Plan and institutional data persisted on the server.
+// The browser only sends the active project, week and optional regeneration context; this prevents stale
+// client-side form state from invalidating Guide generation after the Teaching Plan has been completed.
+const guideGenerationClientSchema = z.object({
+  projectId: z.string().uuid(),
+  week: z.number().int().min(1).max(100),
+  adjustmentInstructions: z.string().trim().max(10_000).optional().default(""),
+  currentContent: z.string().trim().max(100_000).optional().default(""),
+  attachments: generationRequestSchema.shape.attachments,
+});
 
 const wordRequestSchema = z.object({
   projectId: z.string().uuid(),
@@ -1234,6 +1325,26 @@ const teachingPlanWeekEditSchema = z.object({
   }).nullable().optional(),
 });
 
+const questionBankGenerateRequestSchema = z.object({
+  topicScope: z.array(z.string().trim().min(1).max(4000)).min(1).max(100),
+  typeConfiguration: questionTypeConfigurationSchema,
+  instructions: z.string().trim().max(4000).optional().default(""),
+});
+
+const questionBankApproveRequestSchema = z.object({
+  version: z.number().int().min(1),
+});
+
+const questionBankQuestionUpdateRequestSchema = z.object({
+  version: z.number().int().min(1),
+  question: structuredQuestionSchema,
+});
+
+const questionBankQuestionRegenerateRequestSchema = z.object({
+  version: z.number().int().min(1),
+  instructions: z.string().trim().min(3).max(4000),
+});
+
 const academicOfferingInclude = {
   course: true,
   program: { include: { academicLevel: true, academicUnit: true } },
@@ -1368,6 +1479,100 @@ async function synchronizeProjectWithOffering(
 
 function normalizedAcademicValue(value: string) {
   return value.trim().toLocaleLowerCase("es");
+}
+
+async function teachingPlanQuestionBankMinimum() {
+  const setting = await database.institutionalSetting.findUnique({ where: { key: QUESTION_BANK_MINIMUM_SETTING_KEY } });
+  return normalizeQuestionBankMinimum(setting?.value, DEFAULT_QUESTION_BANK_MINIMUM);
+}
+
+function teachingPlanQuestionnaireContext(plan: TeachingPlanContent, evaluatedCode: string) {
+  const evaluated = plan.evaluatedActivities.find((activity) => activity.code === evaluatedCode);
+  if (!evaluated) throw Object.assign(new Error(`La actividad ${evaluatedCode} no existe en el Plan Docente.`), { statusCode: 404 });
+  if (evaluated.instrumentConfig?.type !== "QUESTIONNAIRE" || !evaluated.instrumentConfig.questionnaire) {
+    throw Object.assign(new Error(`${evaluatedCode} no utiliza un cuestionario como instrumento de evaluación.`), { statusCode: 409 });
+  }
+  const sequence = plan.sequences.find((item) => item.weeks.some((week) => week.week === evaluated.week));
+  const week = sequence?.weeks.find((item) => item.week === evaluated.week);
+  if (!sequence || !week) throw Object.assign(new Error(`No fue posible identificar la semana de ${evaluatedCode}.`), { statusCode: 409 });
+  return { evaluated, sequence, week, authorizedTopics: [...week.unitContents] };
+}
+
+function questionRecordSnapshot(question: {
+  type: string; topic: string; prompt: string; options: unknown; answerKey: unknown;
+  feedbackCorrect: string; feedbackIncorrect: string; source: string; version: number;
+}) {
+  return {
+    type: question.type, topic: question.topic, prompt: question.prompt, options: question.options, answerKey: question.answerKey,
+    feedbackCorrect: question.feedbackCorrect, feedbackIncorrect: question.feedbackIncorrect, source: question.source, version: question.version,
+  };
+}
+
+function questionBankRecordSnapshot(bank: {
+  evaluatedCode: string; minimumRequired: number; topicScope: string[]; typeConfiguration: unknown;
+  generationInstructions: string; status: string; version: number; questions: Array<{
+    id: string; sortOrder: number; type: string; topic: string; prompt: string; options: unknown; answerKey: unknown;
+    feedbackCorrect: string; feedbackIncorrect: string; source: string; version: number;
+  }>;
+}) {
+  return {
+    evaluatedCode: bank.evaluatedCode, minimumRequired: bank.minimumRequired, topicScope: bank.topicScope,
+    typeConfiguration: bank.typeConfiguration, generationInstructions: bank.generationInstructions, status: bank.status, version: bank.version,
+    questions: bank.questions.map((question) => ({ id: question.id, sortOrder: question.sortOrder, ...questionRecordSnapshot(question) })),
+  };
+}
+
+function teachingPlanQuestionBankApiView(bank: null | {
+  id: string; evaluatedCode: string; minimumRequired: number; topicScope: string[]; typeConfiguration: unknown; generationInstructions: string;
+  status: string; version: number; approvedAt: Date | null; createdAt: Date; updatedAt: Date;
+  questions: Array<{ id: string; sortOrder: number; type: string; topic: string; prompt: string; options: unknown; answerKey: unknown; feedbackCorrect: string; feedbackIncorrect: string; source: string; version: number; createdAt: Date; updatedAt: Date }>;
+  revisions?: Array<{ id: string; version: number; reason: string; createdAt: Date }>;
+}, input: { authorizedTopics: string[]; questionnaireQuestionCount: number; currentMinimum: number }) {
+  const effectiveMinimum = bank?.minimumRequired ?? input.currentMinimum;
+  const required = requiredQuestionBankSize(effectiveMinimum, input.questionnaireQuestionCount);
+  if (!bank) {
+    return {
+      bank: null, requiredMinimum: required, institutionalMinimum: input.currentMinimum, questionnaireQuestionCount: input.questionnaireQuestionCount,
+      authorizedTopics: input.authorizedTopics, defaultTypeConfiguration: defaultQuestionTypeConfiguration(required),
+    };
+  }
+  const staleTopics = bank.topicScope.filter((topic) => !input.authorizedTopics.includes(topic));
+  return {
+    bank: {
+      id: bank.id, evaluatedCode: bank.evaluatedCode, minimumRequired: bank.minimumRequired, topicScope: bank.topicScope,
+      typeConfiguration: questionTypeConfigurationSchema.parse(bank.typeConfiguration), generationInstructions: bank.generationInstructions,
+      status: staleTopics.length ? "NEEDS_REVIEW" : bank.status, version: bank.version, approvedAt: bank.approvedAt?.toISOString() ?? null,
+      createdAt: bank.createdAt.toISOString(), updatedAt: bank.updatedAt.toISOString(), staleTopics,
+      questions: bank.questions.map((question) => ({
+        id: question.id, sortOrder: question.sortOrder, type: question.type, topic: question.topic, prompt: question.prompt,
+        options: question.options, answerKey: question.answerKey, feedbackCorrect: question.feedbackCorrect, feedbackIncorrect: question.feedbackIncorrect,
+        source: question.source, version: question.version, createdAt: question.createdAt.toISOString(), updatedAt: question.updatedAt.toISOString(),
+      })),
+      revisions: (bank.revisions || []).map((revision) => ({ id: revision.id, version: revision.version, reason: revision.reason, createdAt: revision.createdAt.toISOString() })),
+    },
+    requiredMinimum: required, institutionalMinimum: input.currentMinimum, questionnaireQuestionCount: input.questionnaireQuestionCount,
+    authorizedTopics: input.authorizedTopics, defaultTypeConfiguration: defaultQuestionTypeConfiguration(required),
+  };
+}
+
+async function refreshTeachingPlanQuestionBankStatuses(transaction: Prisma.TransactionClient, teachingPlanId: string, plan: TeachingPlanContent) {
+  const banks = await transaction.teachingPlanQuestionBank.findMany({
+    where: { teachingPlanId },
+    include: { _count: { select: { questions: true } } },
+  });
+  for (const bank of banks) {
+    let needsReview = false;
+    try {
+      const context = teachingPlanQuestionnaireContext(plan, bank.evaluatedCode);
+      const required = requiredQuestionBankSize(bank.minimumRequired, context.evaluated.instrumentConfig!.questionnaire!.questionCount);
+      needsReview = bank.topicScope.some((topic) => !context.authorizedTopics.includes(topic)) || bank._count.questions < required;
+    } catch {
+      needsReview = true;
+    }
+    if (needsReview && bank.status !== "NEEDS_REVIEW") {
+      await transaction.teachingPlanQuestionBank.update({ where: { id: bank.id }, data: { status: "NEEDS_REVIEW", approvedAt: null } });
+    }
+  }
 }
 
 
@@ -1531,6 +1736,7 @@ async function replaceTeachingPlanEvaActivities(
   await transaction.teachingPlanActivity.deleteMany({
     where: { teachingPlanId, ...(keptActivityIds.length ? { id: { notIn: keptActivityIds } } : {}) },
   });
+  await refreshTeachingPlanQuestionBankStatuses(transaction, teachingPlanId, plan);
 }
 
 function teachingPlanActivityApiView(activity: {
@@ -1581,6 +1787,53 @@ function teachingPlanActivityApiView(activity: {
       exampleAtTenPoints: scaleInstrumentScoreToActivityGrade(10, activity.actualGrade),
     } : null,
   };
+}
+
+const teachingPlanQuestionBankInclude = {
+  questions: { orderBy: { sortOrder: "asc" as const } },
+  revisions: { orderBy: { version: "desc" as const }, select: { id: true, version: true, reason: true, createdAt: true } },
+};
+
+async function loadTeachingPlanQuestionBankContext(projectId: string, ownerId: string, evaluatedCode: string) {
+  const project = await database.project.findFirst({
+    where: { id: projectId, ownerId, status: { not: "ARCHIVED" } },
+    include: { teachingPlan: true },
+  });
+  if (!project?.teachingPlan) throw Object.assign(new Error("El Plan Docente todavía no ha sido generado."), { statusCode: 404 });
+  const plan = normalizedTeachingPlanContent(teachingPlanContentSchema.parse(project.teachingPlan.content));
+  const questionnaire = teachingPlanQuestionnaireContext(plan, evaluatedCode);
+  const bank = await database.teachingPlanQuestionBank.findUnique({
+    where: { teachingPlanId_evaluatedCode: { teachingPlanId: project.teachingPlan.id, evaluatedCode } },
+    include: teachingPlanQuestionBankInclude,
+  });
+  const institutionalMinimum = await teachingPlanQuestionBankMinimum();
+  return { project, teachingPlan: project.teachingPlan, plan, questionnaire, bank, institutionalMinimum };
+}
+
+async function assertTeachingPlanQuestionnaireBanksReady(teachingPlanId: string, plan: TeachingPlanContent) {
+  const questionnaires = plan.evaluatedActivities.filter((activity) => activity.instrumentConfig?.type === "QUESTIONNAIRE" && activity.instrumentConfig.questionnaire);
+  if (!questionnaires.length) return;
+  const banks = await database.teachingPlanQuestionBank.findMany({
+    where: { teachingPlanId, evaluatedCode: { in: questionnaires.map((activity) => activity.code) } },
+    include: { questions: { orderBy: { sortOrder: "asc" } } },
+  });
+  const byCode = new Map(banks.map((bank) => [bank.evaluatedCode, bank]));
+  for (const activity of questionnaires) {
+    const bank = byCode.get(activity.code);
+    if (!bank || bank.status !== "APPROVED") {
+      throw Object.assign(new Error(`Apruebe el banco de preguntas del cuestionario ${activity.code} antes de confirmar el Plan Docente.`), { statusCode: 409 });
+    }
+    const context = teachingPlanQuestionnaireContext(plan, activity.code);
+    if (bank.topicScope.some((topic) => !context.authorizedTopics.includes(topic))) {
+      throw Object.assign(new Error(`El banco de preguntas de ${activity.code} requiere revisión porque cambió el alcance temático.`), { statusCode: 409 });
+    }
+    const configuration = questionTypeConfigurationSchema.parse(bank.typeConfiguration);
+    validateQuestionBankQuestions({
+      questions: bank.questions.map((question) => questionRecordSnapshot(question)),
+      configuration, allowedTopics: bank.topicScope, minimumRequired: bank.minimumRequired,
+      questionnaireQuestionCount: activity.instrumentConfig!.questionnaire!.questionCount,
+    });
+  }
 }
 
 type AcademicOfferingWrite = Pick<z.infer<typeof academicOfferingSchema>,
@@ -1713,7 +1966,7 @@ function assertProjectSetupMatchesOffering(
   }
 }
 
-function projectPlanConsistencyInput(offering: AcademicOfferingWithCatalogs) {
+function projectPlanConsistencyInput(offering: AcademicOfferingWithCatalogs, evaluationRules: EvaluationRule[]) {
   return {
     totalWeeks: offering.totalWeeks,
     acdHours: offering.acdHours,
@@ -1722,6 +1975,7 @@ function projectPlanConsistencyInput(offering: AcademicOfferingWithCatalogs) {
     learningOutcomes: offering.learningOutcomes,
     unitContents: offering.unitContents,
     planCategory: planCategorySchema.parse(offering.subjectType.planCategory),
+    evaluationRules,
   };
 }
 
@@ -2775,15 +3029,140 @@ async function activePlanTemplateForContext(context: PromptContext) {
     (!item.effectiveFrom || item.effectiveFrom <= new Date()) && (item.appliesToAll || appliesToContext(item, context))));
 }
 
+async function teachingPlanTemplateSnapshot(snapshotId: string | null, context: PromptContext) {
+  if (!snapshotId) {
+    const active = await activePlanTemplateForContext(context);
+    if (!active) {
+      throw Object.assign(new Error("No existe un formato de Plan Docente activo y aplicable. Active un formato vigente en Administración → Conocimiento e IA."), { statusCode: 409 });
+    }
+    return active;
+  }
+  const snapshot = await database.knowledgeDocument.findUnique({ where: { id: snapshotId } });
+  if (!snapshot || snapshot.resourceKind !== "PLAN_TEMPLATE") {
+    throw Object.assign(new Error("El formato institucional con el que fue generado este Plan Docente ya no está disponible. No se sustituirá automáticamente por otro formato."), { statusCode: 409 });
+  }
+  const profile = await knowledgePlanTemplateProfile(snapshot);
+  if (profile.profile === "UNKNOWN") {
+    throw Object.assign(new Error(`El formato histórico «${snapshot.title} · v${snapshot.version}» no tiene un mapeo compatible. Actualice el mapeo antes de descargar o revisar este Plan Docente.`), { statusCode: 409 });
+  }
+  return snapshot;
+}
+
+// Compatibilidad interna: un Plan ya generado conserva su snapshot de formato, aunque exista una versión activa posterior.
 async function assertTeachingPlanUsesCurrentTemplate(snapshotId: string | null, context: PromptContext) {
-  const active = await activePlanTemplateForContext(context);
-  if (!active) {
-    throw Object.assign(new Error("No existe un formato de Plan Docente activo y aplicable. Active un formato vigente en Administración → Conocimiento e IA."), { statusCode: 409 });
+  return teachingPlanTemplateSnapshot(snapshotId, context);
+}
+
+async function buildAndPersistCanonicalTeachingPlan(projectId: string) {
+  const project = await database.project.findUnique({
+    where: { id: projectId },
+    include: {
+      owner: true,
+      academicOffering: { include: academicOfferingInclude },
+      bibliographyEntries: { orderBy: { sortOrder: "asc" } },
+      teachingPlan: { include: {
+        reviewWorkflow: true,
+        questionBanks: { include: { questions: { orderBy: { sortOrder: "asc" } } }, orderBy: { evaluatedCode: "asc" } },
+      } },
+    },
+  });
+  if (!project?.teachingPlan || !project.outcomeMappings || !project.teacherProfileSnapshot) {
+    throw Object.assign(new Error("El Plan Docente todavía no contiene toda la información necesaria para construir su documento canónico."), { statusCode: 409 });
   }
-  if (!snapshotId || snapshotId !== active.id) {
-    throw Object.assign(new Error(`El Plan Docente fue generado con un formato anterior. El formato vigente es «${active.title} · v${active.version}». Regénere el Plan Docente con IA antes de revisarlo o descargarlo.`), { statusCode: 409 });
-  }
-  return active;
+  const context = {
+    level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType,
+    subjectTypeLabel: project.academicOffering.subjectType.name,
+  };
+  const template = await teachingPlanTemplateSnapshot(project.teachingPlan.templateSnapshotId, context);
+  const activeTemplate = await activePlanTemplateForContext(context);
+  const templateProfile = await knowledgePlanTemplateProfile(template);
+  const activeTemplateProfile = activeTemplate ? await knowledgePlanTemplateProfile(activeTemplate) : null;
+  const promptSnapshot = project.teachingPlan.promptSnapshotId
+    ? await database.knowledgeDocument.findUnique({ where: { id: project.teachingPlan.promptSnapshotId } })
+    : null;
+  const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+  const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(project.teachingPlan.evaluationPolicySnapshotId, category);
+  const teachingPlanContent = teachingPlanContentSchema.parse(project.teachingPlan.content);
+  const currentQuestionnaireCodes = new Set<string>(
+    teachingPlanContent.evaluatedActivities
+      .filter((activity) => activity.instrumentConfig?.type === "QUESTIONNAIRE" && activity.instrumentConfig.questionnaire)
+      .map((activity) => activity.code),
+  );
+  const canonical = buildCanonicalTeachingPlan({
+    project: {
+      id: project.id, name: project.name, level: project.level, faculty: project.faculty, career: project.career,
+      professorName: project.professorName, subjectCode: project.subjectCode, subjectName: project.subjectName,
+      subjectType: project.subjectType, modality: project.modality, academicPeriod: project.academicPeriod,
+      totalWeeks: project.totalWeeks, status: project.status, guideReference: project.guideReference,
+      guideReferenceImportance: project.guideReferenceImportance, basicBib: project.basicBib, complementaryBib: project.complementaryBib, reaBib: project.reaBib,
+    },
+    owner: { displayName: project.owner.displayName, email: project.owner.email },
+    offering: {
+      code: project.academicOffering.code,
+      sisCode: project.academicOffering.course.sisCode,
+      metacourseUrl: project.academicOffering.course.metacourseUrl,
+      subjectTypeName: project.academicOffering.subjectType.name,
+      category,
+      credits: project.academicOffering.credits === null ? null : Number(project.academicOffering.credits),
+      acdHours: project.academicOffering.acdHours, apeHours: project.academicOffering.apeHours, aaHours: project.academicOffering.aaHours,
+      semester: project.academicOffering.semester, prerequisites: project.academicOffering.prerequisites,
+      learningOutcomes: project.academicOffering.learningOutcomes, unitContents: project.academicOffering.unitContents,
+      period: {
+        startsAt: project.academicOffering.period.startsAt, endsAt: project.academicOffering.period.endsAt,
+        bimestralEvaluationStartAt: project.academicOffering.period.bimestralEvaluationStartAt ?? project.academicOffering.period.bimestralEvaluationAt,
+        bimestralEvaluationEndAt: project.academicOffering.period.bimestralEvaluationEndAt ?? project.academicOffering.period.bimestralEvaluationAt,
+        recoveryEvaluationStartAt: project.academicOffering.period.recoveryEvaluationStartAt,
+        recoveryEvaluationEndAt: project.academicOffering.period.recoveryEvaluationEndAt,
+      },
+    },
+    mappings: outcomeMappingsSchema.parse(project.outcomeMappings),
+    teacherProfile: teacherProfileSchema.parse(project.teacherProfileSnapshot),
+    bibliographyEntries: project.bibliographyEntries.map((entry) => ({
+      id: entry.id, type: entry.type as "BASIC" | "COMPLEMENTARY" | "REA", citation: entry.citation, title: entry.title,
+      url: entry.url, notes: entry.notes, sortOrder: entry.sortOrder,
+    })),
+    teachingPlan: {
+      id: project.teachingPlan.id, status: project.teachingPlan.status, content: teachingPlanContent,
+      version: project.teachingPlan.version, templateSnapshotId: template.id, promptSnapshotId: project.teachingPlan.promptSnapshotId,
+      documentSnapshotIds: project.teachingPlan.documentSnapshotIds, specificationSnapshotIds: project.teachingPlan.specificationSnapshotIds,
+      generatedAt: project.teachingPlan.generatedAt, createdAt: project.teachingPlan.createdAt, updatedAt: project.teachingPlan.updatedAt,
+      teacherReviewedAt: project.teachingPlan.teacherReviewedAt, methodologyApprovedAt: project.teachingPlan.methodologyApprovedAt,
+      planningApprovedAt: project.teachingPlan.planningApprovedAt, reviewWorkflowStatus: project.teachingPlan.reviewWorkflow?.status ?? null,
+    },
+    templateSnapshot: { id: template.id, title: template.title, version: template.version, checksum: template.checksum, profile: templateProfile.profile },
+    activeTemplate: activeTemplate && activeTemplateProfile && activeTemplateProfile.profile !== "UNKNOWN" ? {
+      id: activeTemplate.id, title: activeTemplate.title, version: activeTemplate.version, checksum: activeTemplate.checksum, profile: activeTemplateProfile.profile,
+    } : null,
+    promptSnapshot: promptSnapshot ? { id: promptSnapshot.id, title: promptSnapshot.title, version: promptSnapshot.version, checksum: promptSnapshot.checksum } : null,
+    evaluationPolicy: { id: evaluationPolicy.id, category, version: evaluationPolicy.version, title: evaluationPolicy.title, rules: evaluationPolicy.rules },
+    // Los bancos históricos cuyo instrumento dejó de ser Cuestionario se conservan en PostgreSQL,
+    // pero no forman parte del documento canónico vigente del Plan.
+    questionBanks: project.teachingPlan.questionBanks.filter((bank) => currentQuestionnaireCodes.has(bank.evaluatedCode)).map((bank) => ({
+      id: bank.id,
+      evaluatedCode: z.enum(["AC1", "AC2", "AC3", "AC4", "AC5"]).parse(bank.evaluatedCode),
+      minimumRequired: bank.minimumRequired,
+      topicScope: bank.topicScope,
+      typeConfiguration: questionTypeConfigurationSchema.parse(bank.typeConfiguration),
+      generationInstructions: bank.generationInstructions,
+      status: z.enum(["DRAFT", "GENERATED", "APPROVED", "NEEDS_REVIEW"]).parse(bank.status),
+      version: bank.version,
+      approvedAt: bank.approvedAt,
+      questions: bank.questions.map((question) => ({
+        id: question.id, sortOrder: question.sortOrder, type: questionTypeSchema.parse(question.type), topic: question.topic, prompt: question.prompt,
+        options: z.array(z.object({ id: z.string(), text: z.string(), matchText: z.string() })).parse(question.options),
+        answerKey: z.array(z.string()).parse(question.answerKey), feedbackCorrect: question.feedbackCorrect, feedbackIncorrect: question.feedbackIncorrect,
+        source: z.enum(["AI", "AI_REGENERATED", "TEACHER_EDITED"]).parse(question.source), version: question.version,
+      })),
+    })),
+  });
+  const serialized = JSON.stringify(canonical);
+  const checksum = createHash("sha256").update(serialized).digest("hex");
+  const record = await database.canonicalTeachingPlanDocument.upsert({
+    where: { teachingPlanId: project.teachingPlan.id },
+    update: { schemaVersion: CANONICAL_TEACHING_PLAN_SCHEMA_VERSION, document: canonical as unknown as Prisma.InputJsonValue, checksum },
+    create: { teachingPlanId: project.teachingPlan.id, schemaVersion: CANONICAL_TEACHING_PLAN_SCHEMA_VERSION, document: canonical as unknown as Prisma.InputJsonValue, checksum },
+  });
+  return { canonical, checksum, record, template, templateProfile, activeTemplate };
 }
 
 
@@ -2959,6 +3338,7 @@ function buildPlanAdaptationAnalysisInput(input: {
   };
   offering: AcademicOfferingWithCatalogs;
   mappings: OutcomeMapping[];
+  evaluationRules: EvaluationRule[];
   teacherFeedback?: string;
 }) {
   const category = planCategorySchema.parse(input.offering.subjectType.planCategory);
@@ -2980,7 +3360,7 @@ ${JSON.stringify({
   unitContents: input.offering.unitContents,
   hours: { acd: input.offering.acdHours, ape: input.offering.apeHours, aa: input.offering.aaHours },
   planCategory: category,
-  evaluationRules: evaluationRulesFor(category),
+  evaluationRules: input.evaluationRules,
   outcomeMappings: input.mappings,
 }, null, 2)}
 
@@ -3134,9 +3514,10 @@ function buildTeachingPlanGenerationInput(input: {
   };
   mappings: OutcomeMapping[];
   teacherProfile: TeacherProfile;
+  evaluationRules: EvaluationRule[];
 }) {
   const category = planCategorySchema.parse(input.offering.subjectType.planCategory);
-  const evaluation = evaluationRulesFor(category);
+  const evaluation = input.evaluationRules;
   return `
 Genere el plan docente completo y devuelva exclusivamente la salida estructurada solicitada.
 
@@ -3218,7 +3599,7 @@ function academicOfferTemplateBytes() {
     id_oferta: "OF-001", periodo_codigo: "2026-2", periodo_nombre: "Octubre 2026 - Abril 2027",
     fecha_inicio: "2026-10-01", fecha_fin: "2027-04-30", asignatura_codigo: "ASG-001",
     asignatura_nombre: "Nombre de la asignatura", codigo_sis: "SIS-001", url_metacurso: "https://ejemplo.edu/metacurso/ASG-001",
-    tipo_asignatura_codigo: "TEORICA",
+    tipo_asignatura_codigo: "TIPO-A",
     numero_semanas: 8, creditos: 4, horas_acd: 16, horas_ape: 16, horas_aa: 64,
     nivel_codigo: "GRADO", nivel_nombre: "Grado", modalidad_codigo: "EN-LINEA",
     modalidad_nombre: "En línea", facultad_codigo: "FAC-001", facultad_nombre: "Facultad",
@@ -3743,6 +4124,65 @@ const httpServer = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "PATCH" && requestUrl.pathname === "/api/admin/settings/question-bank") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const body = z.object({ minimumQuestions: z.number().int().min(1).max(MAX_QUESTION_BANK_SIZE) }).parse(await readJsonBody(request));
+      const setting = await database.institutionalSetting.upsert({
+        where: { key: QUESTION_BANK_MINIMUM_SETTING_KEY },
+        update: { value: String(body.minimumQuestions), updatedById: admin.id },
+        create: { key: QUESTION_BANK_MINIMUM_SETTING_KEY, value: String(body.minimumQuestions), updatedById: admin.id },
+      });
+      await database.auditLog.create({ data: {
+        userId: admin.id, action: "QUESTION_BANK_MINIMUM_UPDATED", entityType: "InstitutionalSetting", entityId: setting.key,
+        details: { minimumQuestions: body.minimumQuestions },
+      } });
+      json(response, 200, { ok: true, minimumQuestions: body.minimumQuestions });
+      return;
+    }
+
+    if (request.method === "POST" && requestUrl.pathname === "/api/admin/teaching-plan-evaluation-policies") {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const body = z.object({
+        category: planCategorySchema,
+        rules: evaluationRulesSchema,
+      }).parse(await readJsonBody(request));
+      const label = teachingPlanEvaluationCategoryLabels[body.category];
+      const rules = [...body.rules].sort((left, right) => left.code.localeCompare(right.code));
+      const policy = await database.$transaction(async (transaction) => {
+        const latest = await transaction.teachingPlanEvaluationPolicyVersion.findFirst({
+          where: { category: body.category },
+          orderBy: { version: "desc" },
+        });
+        await transaction.teachingPlanEvaluationPolicyVersion.updateMany({
+          where: { category: body.category, status: "ACTIVE" },
+          data: { status: "INACTIVE" },
+        });
+        const created = await transaction.teachingPlanEvaluationPolicyVersion.create({
+          data: {
+            category: body.category,
+            version: (latest?.version ?? 0) + 1,
+            title: `Distribución institucional - ${label}`,
+            status: "ACTIVE",
+            rules: rules as unknown as Prisma.InputJsonValue,
+            createdById: admin.id,
+            activatedAt: new Date(),
+          },
+        });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id,
+          action: "TEACHING_PLAN_EVALUATION_POLICY_ACTIVATED",
+          entityType: "TeachingPlanEvaluationPolicyVersion",
+          entityId: created.id,
+          details: { category: body.category, version: created.version, rules },
+        } });
+        return created;
+      });
+      json(response, 201, { ok: true, policy: teachingPlanEvaluationPolicyApiView(policy) });
+      return;
+    }
+
     if (
       request.method === "GET" &&
       requestUrl.pathname === "/health/database"
@@ -4039,7 +4479,7 @@ URL adicional: ${body.url || "No indicada"}`,
       const [
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
-        subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
+        subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings, teachingPlanEvaluationPolicies,
         teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, careerSecretaryAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       ] = await Promise.all([
         database.user.findMany({
@@ -4110,6 +4550,7 @@ URL adicional: ${body.url || "No indicada"}`,
         }),
         database.teacherDepartment.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
         database.institutionalSetting.findMany({ orderBy: { key: "asc" } }),
+        database.teachingPlanEvaluationPolicyVersion.findMany({ orderBy: [{ category: "asc" }, { version: "desc" }] }),
         database.teachingPlanReviewProcessConfig.findUnique({
           where: { id: teachingPlanReviewProcessId }, include: { stages: { orderBy: { sortOrder: "asc" } } },
         }),
@@ -4150,6 +4591,7 @@ URL adicional: ${body.url || "No indicada"}`,
         users, roles, periods, courses, assignments, projects, instructions, documents,
         indicatorVersions, academicLevels, modalities, academicUnits, academicPrograms,
         subjectTypes, academicOfferings, utplGenericCompetencies, departments, institutionalSettings,
+        teachingPlanEvaluationPolicies: teachingPlanEvaluationPolicies.map(teachingPlanEvaluationPolicyApiView),
         teachingPlanReviewProcess, teachingPlanReviewerAssignments, careerDirectorAssignments, careerSecretaryAssignments, teachingPlanIndicatorVersions, teachingPlanNotifications,
       });
       return;
@@ -6119,6 +6561,11 @@ URL adicional: ${body.url || "No indicada"}`,
 
       if (body.target === "PLAN") {
         const mappings = outcomeMappingsSchema.parse(project.outcomeMappings);
+        const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+        const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+          project.teachingPlan?.evaluationPolicySnapshotId,
+          category,
+        );
         const context = {
           level: project.level, modality: project.modality,
           weeks: project.totalWeeks, subjectType: project.subjectType,
@@ -6145,6 +6592,7 @@ URL adicional: ${body.url || "No indicada"}`,
           },
           offering: project.academicOffering,
           mappings,
+          evaluationRules: evaluationPolicy.rules,
           teacherFeedback: body.teacherFeedback,
         });
         const apiResponse = await openai.responses.parse({
@@ -6713,6 +7161,11 @@ ${body.instructions}` : ""}`;
           !offering.unitContents.length) {
         throw new Error("La oferta académica está incompleta para generar el plan docente.");
       }
+      const category = planCategorySchema.parse(offering.subjectType.planCategory);
+      const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+        project.teachingPlan?.evaluationPolicySnapshotId,
+        category,
+      );
       const mappings = outcomeMappingsSchema.parse(project.outcomeMappings);
       const teacherProfile = teacherProfileSchema.parse(project.teacherProfileSnapshot);
       if (!project.workflowMode) {
@@ -6761,6 +7214,7 @@ ${body.instructions}` : ""}`;
         offering,
         mappings,
         teacherProfile,
+        evaluationRules: evaluationPolicy.rules,
       }) + (generationOptions.mode === "PLANNING" && currentPlanForPlanning
         ? `\n\nMETODOLOGÍA Y TAC APROBADAS POR EL PROFESOR. La planificación semanal debe alinearse estrictamente con estas decisiones y conservarlas literalmente:\n${currentPlanForPlanning.sequences.map((sequence) => `- ${sequence.learningOutcome}\n  Metodología: ${sequence.methodology}\n  TAC: ${sequence.tac.join("; ")}`).join("\n")}`
         : generationOptions.instructions
@@ -6823,7 +7277,7 @@ ${planContext.instructions}`,
                 Math.min(...right.weeks.map((week) => week.week))),
           }
         : generatedBase;
-      const planConsistencyInput = projectPlanConsistencyInput(offering);
+      const planConsistencyInput = projectPlanConsistencyInput(offering, evaluationPolicy.rules);
       assertTeachingPlanConsistency(generated, planConsistencyInput);
       if (adaptationProposal) {
         assertTeachingPlanRespectsApprovedAdaptation(
@@ -6847,6 +7301,7 @@ ${planContext.instructions}`,
             version: { increment: 1 }, status: "DRAFT", generatedAt: new Date(),
             templateSnapshotId: planContext.template.id,
             promptSnapshotId: planContext.prompt.id,
+            evaluationPolicySnapshotId: evaluationPolicy.id,
             documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
             specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
             teacherReviewedAt: null,
@@ -6858,6 +7313,7 @@ ${planContext.instructions}`,
             projectId: project.id, content: generated as unknown as Prisma.InputJsonValue,
             version: 1, status: "DRAFT", templateSnapshotId: planContext.template.id,
             promptSnapshotId: planContext.prompt.id,
+            evaluationPolicySnapshotId: evaluationPolicy.id,
             documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
             specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
             methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
@@ -6895,6 +7351,7 @@ ${planContext.instructions}`,
         });
         return plan;
       });
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       json(response, 201, {
         ok: true, teachingPlan: {
           content: generated, version: savedPlan.version, status: savedPlan.status,
@@ -6904,6 +7361,7 @@ ${planContext.instructions}`,
           templateProfile: planContext.templateProfile,
           templateSnapshot: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
           activeTemplate: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
+          evaluationPolicy: teachingPlanEvaluationPolicyApiView(evaluationPolicy),
           templateOutdated: false,
         },
         matrixRows: rows,
@@ -6954,7 +7412,12 @@ ${planContext.instructions}`,
           return { ...sequence, methodology: change.methodology, tac: change.tac };
         }),
       };
-      const planConsistencyInput = projectPlanConsistencyInput(project.academicOffering);
+      const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+      const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+        project.teachingPlan.evaluationPolicySnapshotId,
+        category,
+      );
+      const planConsistencyInput = projectPlanConsistencyInput(project.academicOffering, evaluationPolicy.rules);
       assertTeachingPlanConsistency(updated, planConsistencyInput);
       const reviewChecks = teachingPlanReviewChecks(updated, planConsistencyInput);
       const rows = planMatrixRows(updated);
@@ -6996,12 +7459,14 @@ ${planContext.instructions}`,
           entityType: "TeachingPlan", entityId: project.teachingPlan!.id,
         } });
       });
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       json(response, 200, {
         ok: true,
         teachingPlan: {
           content: updated, version: project.teachingPlan.version + 1, status: project.teachingPlan.status,
           reviewedAt: null, reviewNotes: "", reviewChecks,
           methodologyApprovedAt: null, planningApprovedAt: null,
+          evaluationPolicy: teachingPlanEvaluationPolicyApiView(evaluationPolicy),
         },
         matrixRows: rows,
       });
@@ -7080,7 +7545,12 @@ ${planContext.instructions}`,
           };
         }),
       });
-      const consistencyInput = projectPlanConsistencyInput(project.academicOffering);
+      const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+      const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+        project.teachingPlan.evaluationPolicySnapshotId,
+        category,
+      );
+      const consistencyInput = projectPlanConsistencyInput(project.academicOffering, evaluationPolicy.rules);
       assertTeachingPlanConsistency(updated, consistencyInput);
       const reviewChecks = teachingPlanReviewChecks(updated, consistencyInput);
       const rows = planMatrixRows(updated);
@@ -7109,6 +7579,7 @@ ${planContext.instructions}`,
           details: { week: weekNumber, learningOutcome: sequence.learningOutcome },
         } });
       });
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       json(response, 200, {
         ok: true,
         teachingPlan: {
@@ -7120,6 +7591,7 @@ ${planContext.instructions}`,
           reviewChecks,
           methodologyApprovedAt: project.teachingPlan.methodologyApprovedAt?.toISOString() || null,
           planningApprovedAt: null,
+          evaluationPolicy: teachingPlanEvaluationPolicyApiView(evaluationPolicy),
         },
         matrixRows: rows,
       });
@@ -7144,7 +7616,12 @@ ${planContext.instructions}`,
         throw new Error("Apruebe primero la metodología y las TAC para habilitar la aprobación de la planificación semanal.");
       }
       const plan = teachingPlanContentSchema.parse(project.teachingPlan.content);
-      assertTeachingPlanConsistency(plan, projectPlanConsistencyInput(project.academicOffering));
+      const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+      const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+        project.teachingPlan.evaluationPolicySnapshotId,
+        category,
+      );
+      assertTeachingPlanConsistency(plan, projectPlanConsistencyInput(project.academicOffering, evaluationPolicy.rules));
       const approvedAt = new Date();
       const saved = await database.teachingPlan.update({
         where: { id: project.teachingPlan.id },
@@ -7153,6 +7630,7 @@ ${planContext.instructions}`,
       await database.auditLog.create({ data: {
         userId: user.id, action: "TEACHING_PLAN_PLANNING_APPROVED", entityType: "TeachingPlan", entityId: project.teachingPlan.id,
       } });
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       json(response, 200, { ok: true, methodologyApprovedAt: saved.methodologyApprovedAt?.toISOString() || null, planningApprovedAt: approvedAt.toISOString() });
       return;
     }
@@ -7192,6 +7670,295 @@ ${planContext.instructions}`,
         },
         activities: activities.map(teachingPlanActivityApiView),
       });
+      return;
+    }
+
+    const teachingPlanQuestionBankMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/question-banks\/(AC[1-5])$/i,
+    );
+    if (request.method === "GET" && teachingPlanQuestionBankMatch) {
+      const user = await requireUser(request);
+      const evaluatedCode = teachingPlanQuestionBankMatch[2]!.toUpperCase();
+      const context = await loadTeachingPlanQuestionBankContext(teachingPlanQuestionBankMatch[1]!, user.id, evaluatedCode);
+      const questionnaireQuestionCount = context.questionnaire.evaluated.instrumentConfig!.questionnaire!.questionCount;
+      json(response, 200, {
+        ok: true,
+        evaluatedCode,
+        activity: context.questionnaire.evaluated.activity,
+        week: context.questionnaire.evaluated.week,
+        learningOutcome: context.questionnaire.sequence.learningOutcome,
+        planningApproved: Boolean(context.teachingPlan.planningApprovedAt),
+        ...teachingPlanQuestionBankApiView(context.bank, {
+          authorizedTopics: context.questionnaire.authorizedTopics,
+          questionnaireQuestionCount,
+          currentMinimum: context.institutionalMinimum,
+        }),
+      });
+      return;
+    }
+
+    const teachingPlanQuestionBankGenerateMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/question-banks\/(AC[1-5])\/generate$/i,
+    );
+    if (request.method === "POST" && teachingPlanQuestionBankGenerateMatch) {
+      const user = await requireUser(request);
+      if (!openai) { json(response, 503, { error: "La variable OPENAI_API_KEY no está configurada." }); return; }
+      const evaluatedCode = teachingPlanQuestionBankGenerateMatch[2]!.toUpperCase();
+      const body = questionBankGenerateRequestSchema.parse(await readJsonBody(request));
+      const context = await loadTeachingPlanQuestionBankContext(teachingPlanQuestionBankGenerateMatch[1]!, user.id, evaluatedCode);
+      await assertTeachingPlanTeacherCanEdit(context.teachingPlan.id);
+      if (!context.teachingPlan.planningApprovedAt) {
+        throw Object.assign(new Error("Apruebe primero la planificación semanal antes de generar el banco de preguntas del cuestionario."), { statusCode: 409 });
+      }
+      const topicScope = [...new Set(body.topicScope)];
+      if (topicScope.length !== body.topicScope.length || topicScope.some((topic) => !context.questionnaire.authorizedTopics.includes(topic))) {
+        throw new Error("Seleccione únicamente temas pertenecientes a la semana del cuestionario, sin duplicados.");
+      }
+      const questionnaireQuestionCount = context.questionnaire.evaluated.instrumentConfig!.questionnaire!.questionCount;
+      const configuration = validateQuestionBankConfiguration({
+        configuration: body.typeConfiguration,
+        minimumRequired: context.institutionalMinimum,
+        questionnaireQuestionCount,
+      });
+      const typeSummary = configuration.configuration.map((item) => `- ${item.type}: ${item.quantity}`).join("\n");
+      const prompt = `Genere un banco estructurado de preguntas para el cuestionario ${evaluatedCode} de la asignatura ${context.project.subjectName}.
+
+ALCANCE ACADÉMICO OBLIGATORIO
+Resultado de aprendizaje: ${context.questionnaire.sequence.learningOutcome}
+Actividad evaluada: ${context.questionnaire.evaluated.activity}
+Semana: ${context.questionnaire.evaluated.week}
+Temas autorizados (use exactamente uno de estos textos en topic):
+${topicScope.map((topic) => `- ${topic}`).join("\n")}
+
+DISTRIBUCIÓN EXACTA DE TIPOS
+${typeSummary}
+Total exacto: ${configuration.total} preguntas.
+
+REGLAS ESTRUCTURALES
+1. No formule preguntas sobre contenidos distintos de los temas autorizados.
+2. Cada pregunta debe incluir prompt, clave de respuesta y retroalimentación específica para respuesta correcta e incorrecta.
+3. Todas las opciones deben incluir id, text y matchText; use matchText="" cuando el tipo no sea MATCHING.
+4. MULTIPLE_CHOICE_SINGLE: mínimo 2 opciones, una sola clave válida.
+5. MULTIPLE_CHOICE_MULTIPLE: mínimo 3 opciones y al menos 2 claves válidas.
+6. TRUE_FALSE: exactamente 2 opciones identificadas de forma inequívoca y una clave.
+7. FILL_BLANK: options debe ser [] y answerKey debe incluir una o más respuestas aceptadas.
+8. MATCHING: options debe contener pares con id, text y matchText; answerKey debe listar todos los id.
+9. ORDERING: options contiene los elementos y answerKey contiene todos sus id en el orden correcto.
+10. Evite preguntas duplicadas, ambiguas, triviales o que revelen la respuesta en el enunciado.
+11. La retroalimentación incorrecta debe orientar al estudiante hacia el concepto que necesita revisar sin limitarse a decir que la respuesta es incorrecta.
+${body.instructions ? `\nINDICACIONES ADICIONALES DEL PROFESOR\n${body.instructions}` : ""}`;
+      const outputSchema = z.object({ questions: z.array(structuredQuestionSchema).min(1).max(MAX_QUESTION_BANK_SIZE) });
+      const apiResponse = await openai.responses.parse({
+        model: openaiModel,
+        input: prompt,
+        text: { format: zodTextFormat(outputSchema, "teaching_plan_question_bank") },
+      });
+      if (!apiResponse.output_parsed) throw Object.assign(new Error("La IA no devolvió un banco de preguntas estructurado. Intente generar nuevamente."), { statusCode: 422 });
+      const questions = validateQuestionBankQuestions({
+        questions: apiResponse.output_parsed.questions,
+        configuration: configuration.configuration,
+        allowedTopics: topicScope,
+        minimumRequired: context.institutionalMinimum,
+        questionnaireQuestionCount,
+      });
+      await database.$transaction(async (transaction) => {
+        const existing = await transaction.teachingPlanQuestionBank.findUnique({
+          where: { teachingPlanId_evaluatedCode: { teachingPlanId: context.teachingPlan.id, evaluatedCode } },
+          include: { questions: { orderBy: { sortOrder: "asc" } } },
+        });
+        if (existing) {
+          await transaction.teachingPlanQuestionBankRevision.create({
+            data: {
+              bankId: existing.id,
+              version: existing.version,
+              snapshot: questionBankRecordSnapshot(existing) as unknown as Prisma.InputJsonValue,
+              reason: "FULL_REGENERATION",
+            },
+          });
+          await transaction.teachingPlanQuestion.deleteMany({ where: { bankId: existing.id } });
+        }
+        const bank = existing
+          ? await transaction.teachingPlanQuestionBank.update({
+              where: { id: existing.id },
+              data: {
+                minimumRequired: context.institutionalMinimum,
+                topicScope,
+                typeConfiguration: configuration.configuration as unknown as Prisma.InputJsonValue,
+                generationInstructions: body.instructions,
+                status: "GENERATED",
+                approvedAt: null,
+                version: { increment: 1 },
+              },
+            })
+          : await transaction.teachingPlanQuestionBank.create({
+              data: {
+                teachingPlanId: context.teachingPlan.id,
+                evaluatedCode,
+                minimumRequired: context.institutionalMinimum,
+                topicScope,
+                typeConfiguration: configuration.configuration as unknown as Prisma.InputJsonValue,
+                generationInstructions: body.instructions,
+                status: "GENERATED",
+              },
+            });
+        await transaction.teachingPlanQuestion.createMany({
+          data: questions.map((question, index) => ({
+            bankId: bank.id,
+            sortOrder: index + 1,
+            type: question.type,
+            topic: question.topic,
+            prompt: question.prompt,
+            options: question.options as unknown as Prisma.InputJsonValue,
+            answerKey: question.answerKey as unknown as Prisma.InputJsonValue,
+            feedbackCorrect: question.feedbackCorrect,
+            feedbackIncorrect: question.feedbackIncorrect,
+            source: "AI",
+          })),
+        });
+        await transaction.auditLog.create({ data: {
+          userId: user.id,
+          action: existing ? "TEACHING_PLAN_QUESTION_BANK_REGENERATED" : "TEACHING_PLAN_QUESTION_BANK_GENERATED",
+          entityType: "TeachingPlanQuestionBank",
+          entityId: bank.id,
+          details: { evaluatedCode, totalQuestions: questions.length, topicScope, typeConfiguration: configuration.configuration },
+        } });
+      });
+      await buildAndPersistCanonicalTeachingPlan(context.project.id);
+      const refreshed = await loadTeachingPlanQuestionBankContext(context.project.id, user.id, evaluatedCode);
+      json(response, 200, { ok: true, evaluatedCode, ...teachingPlanQuestionBankApiView(refreshed.bank, {
+        authorizedTopics: refreshed.questionnaire.authorizedTopics,
+        questionnaireQuestionCount,
+        currentMinimum: refreshed.institutionalMinimum,
+      }) });
+      return;
+    }
+
+    const teachingPlanQuestionBankApproveMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/question-banks\/(AC[1-5])\/approve$/i,
+    );
+    if (request.method === "POST" && teachingPlanQuestionBankApproveMatch) {
+      const user = await requireUser(request);
+      const evaluatedCode = teachingPlanQuestionBankApproveMatch[2]!.toUpperCase();
+      const body = questionBankApproveRequestSchema.parse(await readJsonBody(request));
+      const context = await loadTeachingPlanQuestionBankContext(teachingPlanQuestionBankApproveMatch[1]!, user.id, evaluatedCode);
+      await assertTeachingPlanTeacherCanEdit(context.teachingPlan.id);
+      if (!context.bank) throw Object.assign(new Error(`Genere primero el banco de preguntas de ${evaluatedCode}.`), { statusCode: 409 });
+      if (context.bank.version !== body.version) throw Object.assign(new Error("El banco cambió desde que abrió la edición. Recárguelo antes de aprobar."), { statusCode: 409 });
+      if (context.bank.topicScope.some((topic) => !context.questionnaire.authorizedTopics.includes(topic))) {
+        throw Object.assign(new Error("El alcance temático del cuestionario cambió. Regenerar o revisar el banco antes de aprobarlo."), { statusCode: 409 });
+      }
+      const questionnaireQuestionCount = context.questionnaire.evaluated.instrumentConfig!.questionnaire!.questionCount;
+      validateQuestionBankQuestions({
+        questions: context.bank.questions.map((question) => questionRecordSnapshot(question)),
+        configuration: questionTypeConfigurationSchema.parse(context.bank.typeConfiguration),
+        allowedTopics: context.bank.topicScope,
+        minimumRequired: context.bank.minimumRequired,
+        questionnaireQuestionCount,
+      });
+      const approvedAt = new Date();
+      await database.teachingPlanQuestionBank.update({ where: { id: context.bank.id }, data: { status: "APPROVED", approvedAt } });
+      await database.auditLog.create({ data: {
+        userId: user.id, action: "TEACHING_PLAN_QUESTION_BANK_APPROVED", entityType: "TeachingPlanQuestionBank", entityId: context.bank.id,
+        details: { evaluatedCode, version: context.bank.version, questionCount: context.bank.questions.length },
+      } });
+      await buildAndPersistCanonicalTeachingPlan(context.project.id);
+      const refreshed = await loadTeachingPlanQuestionBankContext(context.project.id, user.id, evaluatedCode);
+      json(response, 200, { ok: true, evaluatedCode, ...teachingPlanQuestionBankApiView(refreshed.bank, {
+        authorizedTopics: refreshed.questionnaire.authorizedTopics,
+        questionnaireQuestionCount,
+        currentMinimum: refreshed.institutionalMinimum,
+      }) });
+      return;
+    }
+
+    const teachingPlanQuestionUpdateMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/question-banks\/(AC[1-5])\/questions\/([0-9a-f-]+)$/i,
+    );
+    if (request.method === "PATCH" && teachingPlanQuestionUpdateMatch) {
+      const user = await requireUser(request);
+      const evaluatedCode = teachingPlanQuestionUpdateMatch[2]!.toUpperCase();
+      const questionId = teachingPlanQuestionUpdateMatch[3]!;
+      const body = questionBankQuestionUpdateRequestSchema.parse(await readJsonBody(request));
+      const context = await loadTeachingPlanQuestionBankContext(teachingPlanQuestionUpdateMatch[1]!, user.id, evaluatedCode);
+      await assertTeachingPlanTeacherCanEdit(context.teachingPlan.id);
+      if (!context.bank) throw Object.assign(new Error("El banco de preguntas todavía no existe."), { statusCode: 404 });
+      const current = context.bank.questions.find((question) => question.id === questionId);
+      if (!current) throw Object.assign(new Error("La pregunta no pertenece al banco seleccionado."), { statusCode: 404 });
+      if (current.version !== body.version) throw Object.assign(new Error("La pregunta cambió desde que abrió la edición. Recargue el banco."), { statusCode: 409 });
+      if (body.question.type !== current.type) throw new Error("Para conservar la distribución configurada, el tipo de una pregunta existente no puede cambiarse manualmente. Regenerar el banco para cambiar la distribución.");
+      const question = validateStructuredQuestion(body.question, context.bank.topicScope);
+      await database.$transaction(async (transaction) => {
+        await transaction.teachingPlanQuestionRevision.create({
+          data: { questionId: current.id, version: current.version, snapshot: questionRecordSnapshot(current) as unknown as Prisma.InputJsonValue, reason: "TEACHER_EDIT" },
+        });
+        await transaction.teachingPlanQuestion.update({ where: { id: current.id }, data: {
+          topic: question.topic, prompt: question.prompt, options: question.options as unknown as Prisma.InputJsonValue,
+          answerKey: question.answerKey as unknown as Prisma.InputJsonValue, feedbackCorrect: question.feedbackCorrect,
+          feedbackIncorrect: question.feedbackIncorrect, source: "TEACHER_EDITED", version: { increment: 1 },
+        } });
+        await transaction.teachingPlanQuestionBank.update({ where: { id: context.bank!.id }, data: { status: "GENERATED", approvedAt: null, version: { increment: 1 } } });
+        await transaction.auditLog.create({ data: { userId: user.id, action: "TEACHING_PLAN_QUESTION_EDITED", entityType: "TeachingPlanQuestion", entityId: current.id, details: { evaluatedCode } } });
+      });
+      await buildAndPersistCanonicalTeachingPlan(context.project.id);
+      const refreshed = await loadTeachingPlanQuestionBankContext(context.project.id, user.id, evaluatedCode);
+      json(response, 200, { ok: true, evaluatedCode, ...teachingPlanQuestionBankApiView(refreshed.bank, {
+        authorizedTopics: refreshed.questionnaire.authorizedTopics,
+        questionnaireQuestionCount: refreshed.questionnaire.evaluated.instrumentConfig!.questionnaire!.questionCount,
+        currentMinimum: refreshed.institutionalMinimum,
+      }) });
+      return;
+    }
+
+    const teachingPlanQuestionRegenerateMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/question-banks\/(AC[1-5])\/questions\/([0-9a-f-]+)\/regenerate$/i,
+    );
+    if (request.method === "POST" && teachingPlanQuestionRegenerateMatch) {
+      const user = await requireUser(request);
+      if (!openai) { json(response, 503, { error: "La variable OPENAI_API_KEY no está configurada." }); return; }
+      const evaluatedCode = teachingPlanQuestionRegenerateMatch[2]!.toUpperCase();
+      const questionId = teachingPlanQuestionRegenerateMatch[3]!;
+      const body = questionBankQuestionRegenerateRequestSchema.parse(await readJsonBody(request));
+      const context = await loadTeachingPlanQuestionBankContext(teachingPlanQuestionRegenerateMatch[1]!, user.id, evaluatedCode);
+      await assertTeachingPlanTeacherCanEdit(context.teachingPlan.id);
+      if (!context.bank) throw Object.assign(new Error("El banco de preguntas todavía no existe."), { statusCode: 404 });
+      const current = context.bank.questions.find((question) => question.id === questionId);
+      if (!current) throw Object.assign(new Error("La pregunta no pertenece al banco seleccionado."), { statusCode: 404 });
+      if (current.version !== body.version) throw Object.assign(new Error("La pregunta cambió desde que abrió la edición. Recargue el banco."), { statusCode: 409 });
+      const prompt = `Regenerar una sola pregunta del cuestionario ${evaluatedCode} de ${context.project.subjectName}.
+Conserve obligatoriamente el tipo ${current.type} y el tema exacto: ${current.topic}.
+No use contenidos fuera de los temas autorizados del banco: ${context.bank.topicScope.join("; ")}.
+La nueva pregunta no debe repetir ni parafrasear superficialmente la pregunta anterior: ${current.prompt}
+Incluya clave, opciones cuando correspondan y retroalimentación específica correcta e incorrecta.
+Toda opción debe contener id, text y matchText; use matchText="" salvo que el tipo sea MATCHING. Para FILL_BLANK use options=[].
+Indicaciones del profesor: ${body.instructions}`;
+      const apiResponse = await openai.responses.parse({
+        model: openaiModel,
+        input: prompt,
+        text: { format: zodTextFormat(z.object({ question: structuredQuestionSchema }), "teaching_plan_question") },
+      });
+      if (!apiResponse.output_parsed) throw Object.assign(new Error("La IA no devolvió una pregunta estructurada."), { statusCode: 422 });
+      const question = validateStructuredQuestion(apiResponse.output_parsed.question, context.bank.topicScope);
+      if (question.type !== current.type || question.topic !== current.topic) {
+        throw Object.assign(new Error("La pregunta regenerada cambió el tipo o el tema autorizado. Intente nuevamente con indicaciones más específicas."), { statusCode: 422 });
+      }
+      await database.$transaction(async (transaction) => {
+        await transaction.teachingPlanQuestionRevision.create({
+          data: { questionId: current.id, version: current.version, snapshot: questionRecordSnapshot(current) as unknown as Prisma.InputJsonValue, reason: "AI_REGENERATION" },
+        });
+        await transaction.teachingPlanQuestion.update({ where: { id: current.id }, data: {
+          prompt: question.prompt, options: question.options as unknown as Prisma.InputJsonValue, answerKey: question.answerKey as unknown as Prisma.InputJsonValue,
+          feedbackCorrect: question.feedbackCorrect, feedbackIncorrect: question.feedbackIncorrect, source: "AI_REGENERATED", version: { increment: 1 },
+        } });
+        await transaction.teachingPlanQuestionBank.update({ where: { id: context.bank!.id }, data: { status: "GENERATED", approvedAt: null, version: { increment: 1 } } });
+        await transaction.auditLog.create({ data: { userId: user.id, action: "TEACHING_PLAN_QUESTION_REGENERATED", entityType: "TeachingPlanQuestion", entityId: current.id, details: { evaluatedCode, instructions: body.instructions } } });
+      });
+      await buildAndPersistCanonicalTeachingPlan(context.project.id);
+      const refreshed = await loadTeachingPlanQuestionBankContext(context.project.id, user.id, evaluatedCode);
+      json(response, 200, { ok: true, evaluatedCode, ...teachingPlanQuestionBankApiView(refreshed.bank, {
+        authorizedTopics: refreshed.questionnaire.authorizedTopics,
+        questionnaireQuestionCount: refreshed.questionnaire.evaluated.instrumentConfig!.questionnaire!.questionCount,
+        currentMinimum: refreshed.institutionalMinimum,
+      }) });
       return;
     }
 
@@ -7329,10 +8096,17 @@ ${planContext.instructions}`,
         level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType,
         subjectTypeLabel: project.academicOffering.subjectType.name,
       };
-      const activeTemplate = await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, templateContext);
-      const templateProfile = await knowledgePlanTemplateProfile(activeTemplate);
+      const snapshotTemplate = await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, templateContext);
+      const currentActiveTemplate = await activePlanTemplateForContext(templateContext);
+      const templateProfile = await knowledgePlanTemplateProfile(snapshotTemplate);
       const plan = teachingPlanContentSchema.parse(project.teachingPlan.content);
-      const consistencyInput = projectPlanConsistencyInput(project.academicOffering);
+      await assertTeachingPlanQuestionnaireBanksReady(project.teachingPlan.id, plan);
+      const category = planCategorySchema.parse(project.academicOffering.subjectType.planCategory);
+      const evaluationPolicy = await teachingPlanEvaluationPolicyForSnapshot(
+        project.teachingPlan.evaluationPolicySnapshotId,
+        category,
+      );
+      const consistencyInput = projectPlanConsistencyInput(project.academicOffering, evaluationPolicy.rules);
       assertTeachingPlanConsistency(plan, consistencyInput);
       const reviewChecks = teachingPlanReviewChecks(plan, consistencyInput);
       const failed = reviewChecks.filter((check) => !check.ok);
@@ -7456,6 +8230,7 @@ ${planContext.instructions}`,
         } });
       });
       dispatchTeachingPlanNotifications(notificationIds);
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       const workflow = await database.teachingPlanReviewWorkflow.findUnique({
         where: { teachingPlanId: project.teachingPlan.id },
         include: { stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } } },
@@ -7467,9 +8242,9 @@ ${planContext.instructions}`,
           reviewedAt: reviewedAt.toISOString(), reviewNotes: body.notes, reviewChecks, templateProfile,
           reviewWorkflow: workflow ? teachingPlanWorkflowApiView(workflow) : null,
           reviewProcessEnabled: Boolean(workflow),
-          templateSnapshot: { id: activeTemplate.id, title: activeTemplate.title, version: activeTemplate.version, checksum: activeTemplate.checksum },
-          activeTemplate: { id: activeTemplate.id, title: activeTemplate.title, version: activeTemplate.version, checksum: activeTemplate.checksum },
-          templateOutdated: false,
+          templateSnapshot: { id: snapshotTemplate.id, title: snapshotTemplate.title, version: snapshotTemplate.version, checksum: snapshotTemplate.checksum },
+          activeTemplate: currentActiveTemplate ? { id: currentActiveTemplate.id, title: currentActiveTemplate.title, version: currentActiveTemplate.version, checksum: currentActiveTemplate.checksum } : null,
+          templateOutdated: Boolean(currentActiveTemplate && currentActiveTemplate.id !== snapshotTemplate.id),
         },
       });
       return;
@@ -7484,9 +8259,12 @@ ${planContext.instructions}`,
       const project = await database.project.findUnique({
         where: { id: teachingPlanWorkflowStatusMatch[1] },
         include: {
-          teachingPlan: { include: { reviewWorkflow: { include: {
-            stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
-          } } } },
+          teachingPlan: { include: {
+            canonicalDocument: true,
+            reviewWorkflow: { include: {
+              stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
+            } },
+          } },
         },
       });
       if (!project?.teachingPlan) { json(response, 404, { error: "El Plan Docente no existe." }); return; }
@@ -7586,12 +8364,19 @@ ${planContext.instructions}`,
       if (workflowStage.status === "PENDING_REVIEW" && !currentReview) {
         const indicators = workflowStage.workflow.indicatorVersion.indicators.filter((indicator) => indicator.stage === workflowStage!.stage);
         if (!indicators.length) throw Object.assign(new Error("La versión de lista de cotejo asociada al proceso no contiene criterios para esta etapa."), { statusCode: 409 });
+        const previousCorrectionReview = workflowStage.reviews.find((review) => review.decision === "CHANGES_REQUESTED") || null;
+        const previousItemsByIndicator = new Map((previousCorrectionReview?.items || []).map((item) => [item.indicatorId, item]));
         const nextAttempt = (workflowStage.reviews[0]?.attempt ?? 0) + 1;
         currentReview = await database.teachingPlanReview.create({
           data: {
             workflowStageId: workflowStage.id, indicatorVersionId: workflowStage.workflow.indicatorVersionId,
             attempt: nextAttempt, teachingPlanVersion: workflowStage.workflow.teachingPlan.version,
-            items: { create: indicators.map((indicator) => ({ indicatorId: indicator.id })) },
+            items: { create: indicators.map((indicator) => {
+              const previous = previousItemsByIndicator.get(indicator.id);
+              return previous && teachingPlanReviewResultCanCarryForward(previous.result)
+                ? { indicatorId: indicator.id, result: previous.result, observation: previous.observation }
+                : { indicatorId: indicator.id };
+            }) },
           },
           include: { items: { include: { indicator: true }, orderBy: { indicator: { sortOrder: "asc" } } }, reviewedBy: { select: { id: true, displayName: true } } },
         });
@@ -7623,6 +8408,19 @@ ${planContext.instructions}`,
         ? await knowledgePlanTemplateProfile(reviewTemplateDocument).catch(() => null)
         : null;
       const reviewWorkflowView = teachingPlanWorkflowApiView(workflowStage.workflow);
+      const previousCorrectionForCurrent = currentReview
+        ? workflowStage.reviews.find((review) => review.decision === "CHANGES_REQUESTED" && review.attempt < currentReview!.attempt) || null
+        : null;
+      const previousCorrectionItems = new Map((previousCorrectionForCurrent?.items || []).map((item) => [item.indicatorId, item]));
+      const reviewForApi = currentReview
+        ? {
+            ...currentReview,
+            items: currentReview.items.map((item) => ({
+              ...item,
+              carriedForward: teachingPlanReviewResultCanCarryForward(previousCorrectionItems.get(item.indicatorId)?.result),
+            })),
+          }
+        : workflowStage.reviews[0] || null;
       json(response, 200, {
         stage: { id: workflowStage.id, stage, label: teachingPlanReviewStageLabel[stage], status: workflowStage.status, reviewer: workflowStage.reviewer },
         project: { id: project.id, subjectCode: project.subjectCode, subjectName: project.subjectName, professorName: project.professorName, career: project.career, academicPeriod: project.academicPeriod },
@@ -7665,7 +8463,7 @@ ${planContext.instructions}`,
             reviewWorkflow: reviewWorkflowView, reviewProcessEnabled: true, templateProfile: reviewTemplateProfile,
           },
         },
-        review: currentReview || workflowStage.reviews[0] || null,
+        review: reviewForApi,
         history: workflowStage.reviews.filter((review) => review.decision !== "DRAFT"),
       });
       return;
@@ -7711,12 +8509,28 @@ ${planContext.instructions}`,
       if (review.teachingPlanVersion !== workflowStage.workflow.teachingPlan.version) {
         throw Object.assign(new Error("El Plan Docente cambió después de iniciar esta revisión. Abra nuevamente la etapa."), { statusCode: 409 });
       }
-      const submitted = new Map(body.items.map((item) => [item.id, item]));
+      const rawSubmitted = new Map(body.items.map((item) => [item.id, item]));
       const reviewItemIds = new Set(review.items.map((item) => item.id));
-      if (submitted.size !== body.items.length || body.items.some((item) => !reviewItemIds.has(item.id))) {
+      if (rawSubmitted.size !== body.items.length || body.items.some((item) => !reviewItemIds.has(item.id))) {
         throw new Error("La lista de cotejo contiene criterios que no pertenecen a esta revisión.");
       }
-      if (review.items.some((item) => !submitted.has(item.id))) throw new Error("La lista de cotejo está incompleta.");
+      if (review.items.some((item) => !rawSubmitted.has(item.id))) throw new Error("La lista de cotejo está incompleta.");
+      const previousCorrectionReview = review.attempt > 1
+        ? await database.teachingPlanReview.findFirst({
+            where: { workflowStageId: workflowStage.id, decision: "CHANGES_REQUESTED", attempt: { lt: review.attempt } },
+            orderBy: { attempt: "desc" },
+            include: { items: true },
+          })
+        : null;
+      const previousByIndicator = new Map((previousCorrectionReview?.items || []).map((item) => [item.indicatorId, item]));
+      const submitted = new Map(review.items.map((reviewItem) => {
+        const item = rawSubmitted.get(reviewItem.id)!;
+        const previous = previousByIndicator.get(reviewItem.indicatorId);
+        if (previous && teachingPlanReviewResultCanCarryForward(previous.result)) {
+          return [reviewItem.id, { ...item, result: previous.result, observation: previous.observation || "" }];
+        }
+        return [reviewItem.id, item];
+      }));
       if (body.decision !== "DRAFT" && review.items.some((item) => submitted.get(item.id)?.result === "PENDING")) {
         throw new Error("Complete todos los criterios antes de cerrar la revisión.");
       }
@@ -7724,7 +8538,7 @@ ${planContext.instructions}`,
         throw new Error("No se puede aprobar mientras exista un criterio obligatorio marcado como No cumple.");
       }
       if (body.decision === "CHANGES_REQUESTED") {
-        const correctionEntries = body.items.filter((item) => teachingPlanReviewItemNeedsCorrection(item.result));
+        const correctionEntries = [...submitted.values()].filter((item) => teachingPlanReviewItemNeedsCorrection(item.result));
         if (!correctionEntries.length) {
           throw new Error("Para solicitar correcciones marque al menos un criterio como Cumple parcialmente o No cumple.");
         }
@@ -7738,7 +8552,7 @@ ${planContext.instructions}`,
       const teacher = project.owner;
       const notificationIds: string[] = [];
       await database.$transaction(async (transaction) => {
-        for (const item of body.items) {
+        for (const item of submitted.values()) {
           await transaction.teachingPlanReviewItem.update({
             where: { id: item.id }, data: { result: item.result, observation: item.observation || null },
           });
@@ -7823,6 +8637,7 @@ ${planContext.instructions}`,
         } });
       });
       dispatchTeachingPlanNotifications(notificationIds);
+      await buildAndPersistCanonicalTeachingPlan(project.id);
       const updatedStage = await database.teachingPlanWorkflowStage.findUniqueOrThrow({
         where: { id: workflowStage.id }, include: { workflow: true },
       });
@@ -7866,6 +8681,49 @@ ${planContext.instructions}`,
       return;
     }
 
+    const teachingPlanTemplateUpgradeMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/template\/upgrade$/i,
+    );
+    if (request.method === "POST" && teachingPlanTemplateUpgradeMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: { id: teachingPlanTemplateUpgradeMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
+        include: { teachingPlan: { include: { reviewWorkflow: true } }, academicOffering: { include: academicOfferingInclude } },
+      });
+      if (!project?.teachingPlan) { json(response, 404, { error: "El plan docente todavía no ha sido generado." }); return; }
+      await assertTeachingPlanTeacherCanEdit(project.teachingPlan.id);
+      if (project.teachingPlan.teacherReviewedAt || project.teachingPlan.reviewWorkflow) {
+        throw Object.assign(new Error("El formato de este Plan Docente ya quedó fijado por su confirmación o por el inicio de la revisión institucional. Los planes históricos conservan su formato original."), { statusCode: 409 });
+      }
+      const context = { level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType, subjectTypeLabel: project.academicOffering.subjectType.name };
+      const activeTemplate = await activePlanTemplateForContext(context);
+      if (!activeTemplate) throw Object.assign(new Error("No existe un formato de Plan Docente activo y aplicable."), { statusCode: 409 });
+      const activeProfile = await knowledgePlanTemplateProfile(activeTemplate);
+      if (activeProfile.profile === "UNKNOWN") {
+        throw Object.assign(new Error(`El formato vigente «${activeTemplate.title} · v${activeTemplate.version}» todavía no tiene un mapeo compatible. No se modificó el Plan Docente.`), { statusCode: 409 });
+      }
+      const previousTemplateId = project.teachingPlan.templateSnapshotId;
+      if (previousTemplateId !== activeTemplate.id) {
+        await database.$transaction(async (transaction) => {
+          await transaction.teachingPlan.update({ where: { id: project.teachingPlan!.id }, data: { templateSnapshotId: activeTemplate.id } });
+          await transaction.auditLog.create({ data: {
+            userId: user.id, action: "TEACHING_PLAN_TEMPLATE_UPGRADED", entityType: "TeachingPlan", entityId: project.teachingPlan!.id,
+            details: { previousTemplateId, activeTemplateId: activeTemplate.id, activeTemplateVersion: activeTemplate.version },
+          } });
+        });
+      }
+      const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
+      json(response, 200, {
+        ok: true,
+        templateProfile: canonicalBundle.templateProfile,
+        templateSnapshot: canonicalBundle.canonical.format.snapshot,
+        activeTemplate: canonicalBundle.canonical.format.active,
+        templateOutdated: canonicalBundle.canonical.format.outdated,
+        canonicalSchemaVersion: CANONICAL_TEACHING_PLAN_SCHEMA_VERSION,
+      });
+      return;
+    }
+
     const teachingPlanPdfMatch = requestUrl.pathname.match(
       /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/pdf$/i,
     );
@@ -7875,32 +8733,14 @@ ${planContext.instructions}`,
       if (!enabledFormats.includes("PDF")) { json(response, 403, { error: "La descarga PDF del Plan Docente no está habilitada por Administración." }); return; }
       const project = await database.project.findFirst({
         where: { id: teachingPlanPdfMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
-        include: { teachingPlan: true, academicOffering: { include: academicOfferingInclude } },
+        include: { teachingPlan: true },
       });
-      if (!project?.teachingPlan || !project.outcomeMappings || !project.teacherProfileSnapshot) { json(response, 404, { error: "El plan docente todavía no ha sido generado." }); return; }
-      const templateContext = { level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType, subjectTypeLabel: project.academicOffering.subjectType.name };
-      const template = await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, templateContext);
+      if (!project?.teachingPlan) { json(response, 404, { error: "El plan docente todavía no ha sido generado." }); return; }
       if (!project.teachingPlan.teacherReviewedAt) { json(response, 409, { error: "Revise y confirme la vista previa del Plan Docente antes de descargar el PDF." }); return; }
-      const templateProfile = await knowledgePlanTemplateProfile(template);
+      const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
       let logo: Awaited<ReturnType<typeof extractTemplateLogo>>;
-      try { const original = await knowledgeOriginalFile(template); const source = await readFile(new URL(`../${original.storagePath}`, import.meta.url)); logo = await extractTemplateLogo(source); } catch { logo = undefined; }
-      const offering = project.academicOffering;
-      const docxBytes = await buildTeachingPlanWord({
-        project: { faculty: project.faculty, career: project.career, level: project.level, subjectName: project.subjectName, subjectCode: project.subjectCode, modality: project.modality, academicPeriod: project.academicPeriod, professorName: project.professorName, totalWeeks: project.totalWeeks },
-        offering: { credits: offering.credits === null ? null : Number(offering.credits), acdHours: offering.acdHours, apeHours: offering.apeHours, aaHours: offering.aaHours, semester: offering.semester, prerequisites: offering.prerequisites, unitContents: offering.unitContents, planCategory: planCategorySchema.parse(offering.subjectType.planCategory) },
-        mappings: outcomeMappingsSchema.parse(project.outcomeMappings),
-        teacher: { ...teacherProfileSchema.parse(project.teacherProfileSnapshot), name: user.displayName, email: user.email },
-        bibliography: { guideReference: project.guideReference, guideReferenceImportance: project.guideReferenceImportance, basic: project.basicBib, complementary: project.complementaryBib, rea: project.reaBib || "" },
-        period: {
-          startsAt: offering.period.startsAt?.toISOString() || null,
-          bimestralEvaluationStartAt: offering.period.bimestralEvaluationStartAt?.toISOString() || offering.period.bimestralEvaluationAt?.toISOString() || null,
-          bimestralEvaluationEndAt: offering.period.bimestralEvaluationEndAt?.toISOString() || offering.period.bimestralEvaluationAt?.toISOString() || null,
-          recoveryEvaluationStartAt: offering.period.recoveryEvaluationStartAt?.toISOString() || null,
-          recoveryEvaluationEndAt: offering.period.recoveryEvaluationEndAt?.toISOString() || null,
-        },
-        templateProfile,
-        plan: teachingPlanContentSchema.parse(project.teachingPlan.content), logo,
-      });
+      try { const original = await knowledgeOriginalFile(canonicalBundle.template); const source = await readFile(new URL(`../${original.storagePath}`, import.meta.url)); logo = await extractTemplateLogo(source); } catch { logo = undefined; }
+      const docxBytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo));
       let pdfBytes: Buffer;
       try {
         pdfBytes = Buffer.from(await docxToPdfBytes(docxBytes));
@@ -7911,7 +8751,7 @@ ${planContext.instructions}`,
         return;
       }
       const name = `plan-docente-${project.subjectCode}`.replace(/[^a-zA-Z0-9_-]/g, "_");
-      response.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${name}.pdf"`, "Content-Length": String(pdfBytes.length), "Cache-Control": "no-store" });
+      response.writeHead(200, { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${name}.pdf"`, "Content-Length": String(pdfBytes.length), "Cache-Control": "no-store", "X-Canonical-Schema-Version": CANONICAL_TEACHING_PLAN_SCHEMA_VERSION, "X-Content-SHA256": canonicalBundle.checksum });
       response.end(pdfBytes);
       return;
     }
@@ -7925,16 +8765,20 @@ ${planContext.instructions}`,
       if (!enabledFormats.includes("JSON")) { json(response, 403, { error: "La descarga JSON del Plan Docente no está habilitada por Administración." }); return; }
       const project = await database.project.findFirst({
         where: { id: teachingPlanJsonMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
-        include: { teachingPlan: true, academicOffering: { include: academicOfferingInclude } },
+        include: { teachingPlan: true },
       });
       if (!project?.teachingPlan) { json(response, 404, { error: "El plan docente todavía no ha sido generado." }); return; }
-      const templateContext = { level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType, subjectTypeLabel: project.academicOffering.subjectType.name };
-      await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, templateContext);
       if (!project.teachingPlan.teacherReviewedAt) { json(response, 409, { error: "Revise y confirme la vista previa del Plan Docente antes de descargarlo." }); return; }
-      const plan = normalizedTeachingPlanContent(teachingPlanContentSchema.parse(project.teachingPlan.content));
-      const payload = { project: { id: project.id, subjectCode: project.subjectCode, subjectName: project.subjectName, academicPeriod: project.academicPeriod }, plan, evaActivitiesUrl: `/api/projects/${project.id}/teaching-plan/eva-activities` };
-      response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename="plan-docente-${project.subjectCode || project.id}.json"` });
-      response.end(JSON.stringify(payload, null, 2));
+      const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
+      const canonical = canonicalTeachingPlanDocumentSchema.parse(canonicalBundle.canonical);
+      response.writeHead(200, {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="plan-docente-${project.subjectCode || project.id}-canonico-v1.json"`,
+        "Cache-Control": "no-store",
+        "X-Canonical-Schema-Version": CANONICAL_TEACHING_PLAN_SCHEMA_VERSION,
+        "X-Content-SHA256": canonicalBundle.checksum,
+      });
+      response.end(JSON.stringify(canonical, null, 2));
       return;
     }
 
@@ -7947,65 +8791,27 @@ ${planContext.instructions}`,
       if (!enabledFormats.includes("WORD")) { json(response, 403, { error: "La descarga Word del Plan Docente no está habilitada por Administración." }); return; }
       const project = await database.project.findFirst({
         where: { id: teachingPlanWordMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
-        include: { teachingPlan: true, academicOffering: { include: academicOfferingInclude } },
+        include: { teachingPlan: true },
       });
-      if (!project?.teachingPlan || !project.outcomeMappings || !project.teacherProfileSnapshot) {
-        json(response, 404, { error: "El plan docente todavía no ha sido generado." });
-        return;
-      }
-      const templateContext = { level: project.level, modality: project.modality, weeks: project.totalWeeks, subjectType: project.subjectType, subjectTypeLabel: project.academicOffering.subjectType.name };
-      const template = await assertTeachingPlanUsesCurrentTemplate(project.teachingPlan.templateSnapshotId, templateContext);
-      if (!project.teachingPlan.teacherReviewedAt) {
-        json(response, 409, { error: "Revise y confirme la vista previa del Plan Docente antes de descargar el Word." });
-        return;
-      }
-      const templateProfile = await knowledgePlanTemplateProfile(template);
+      if (!project?.teachingPlan) { json(response, 404, { error: "El plan docente todavía no ha sido generado." }); return; }
+      if (!project.teachingPlan.teacherReviewedAt) { json(response, 409, { error: "Revise y confirme la vista previa del Plan Docente antes de descargar el Word." }); return; }
+      const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
       let logo: Awaited<ReturnType<typeof extractTemplateLogo>>;
       try {
-        const original = await knowledgeOriginalFile(template);
+        const original = await knowledgeOriginalFile(canonicalBundle.template);
         const bytes = await readFile(new URL(`../${original.storagePath}`, import.meta.url));
         logo = await extractTemplateLogo(bytes);
       } catch {
         logo = undefined;
       }
-      const offering = project.academicOffering;
-      const bytes = await buildTeachingPlanWord({
-        project: {
-          faculty: project.faculty, career: project.career, level: project.level, subjectName: project.subjectName,
-          subjectCode: project.subjectCode, modality: project.modality,
-          academicPeriod: project.academicPeriod, professorName: project.professorName,
-          totalWeeks: project.totalWeeks,
-        },
-        offering: {
-          credits: offering.credits === null ? null : Number(offering.credits),
-          acdHours: offering.acdHours, apeHours: offering.apeHours, aaHours: offering.aaHours,
-          semester: offering.semester, prerequisites: offering.prerequisites, unitContents: offering.unitContents,
-          planCategory: planCategorySchema.parse(offering.subjectType.planCategory),
-        },
-        mappings: outcomeMappingsSchema.parse(project.outcomeMappings),
-        teacher: {
-          ...teacherProfileSchema.parse(project.teacherProfileSnapshot),
-          name: user.displayName, email: user.email,
-        },
-        bibliography: {
-          guideReference: project.guideReference, guideReferenceImportance: project.guideReferenceImportance, basic: project.basicBib, complementary: project.complementaryBib, rea: project.reaBib || "",
-        },
-        period: {
-          startsAt: offering.period.startsAt?.toISOString() || null,
-          bimestralEvaluationStartAt: offering.period.bimestralEvaluationStartAt?.toISOString() || offering.period.bimestralEvaluationAt?.toISOString() || null,
-          bimestralEvaluationEndAt: offering.period.bimestralEvaluationEndAt?.toISOString() || offering.period.bimestralEvaluationAt?.toISOString() || null,
-          recoveryEvaluationStartAt: offering.period.recoveryEvaluationStartAt?.toISOString() || null,
-          recoveryEvaluationEndAt: offering.period.recoveryEvaluationEndAt?.toISOString() || null,
-        },
-        templateProfile,
-        plan: teachingPlanContentSchema.parse(project.teachingPlan.content),
-        logo,
-      });
+      const bytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo));
       const name = `plan-docente-${project.subjectCode}`.replace(/[^a-zA-Z0-9_-]/g, "_");
       response.writeHead(200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "Content-Disposition": `attachment; filename="${name}.docx"`,
         "Content-Length": String(bytes.length), "Cache-Control": "no-store",
+        "X-Canonical-Schema-Version": CANONICAL_TEACHING_PLAN_SCHEMA_VERSION,
+        "X-Content-SHA256": canonicalBundle.checksum,
       });
       response.end(bytes);
       return;
@@ -8105,7 +8911,9 @@ ${planContext.instructions}`,
           matrix: { include: { rows: { orderBy: { rowOrder: "asc" } } } },
           weeks: { orderBy: { weekNumber: "asc" } },
           bibliographyEntries: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] },
-          teachingPlan: { include: { reviewWorkflow: { include: {
+          teachingPlan: { include: {
+            canonicalDocument: { select: { schemaVersion: true, updatedAt: true } },
+            reviewWorkflow: { include: {
             stages: { orderBy: { sortOrder: "asc" }, include: { reviewer: { select: { id: true, displayName: true, email: true } } } },
           } } } },
           academicOffering: { include: academicOfferingInclude },
@@ -8137,8 +8945,17 @@ ${planContext.instructions}`,
           adaptationProposals: [],
         });
       }
+      if (project.teachingPlan && (!project.teachingPlan.canonicalDocument || project.teachingPlan.canonicalDocument.schemaVersion !== CANONICAL_TEACHING_PLAN_SCHEMA_VERSION || project.teachingPlan.canonicalDocument.updatedAt < project.teachingPlan.updatedAt)) {
+        await buildAndPersistCanonicalTeachingPlan(project.id);
+      }
       const currentTeachingPlanContent = project.teachingPlan
         ? normalizedTeachingPlanContent(teachingPlanContentSchema.parse(project.teachingPlan.content))
+        : null;
+      const currentTeachingPlanEvaluationPolicy = project.teachingPlan
+        ? await teachingPlanEvaluationPolicyForSnapshot(
+            project.teachingPlan.evaluationPolicySnapshotId,
+            planCategorySchema.parse(project.academicOffering.subjectType.planCategory),
+          )
         : null;
       const teachingPlanTemplateDocument = project.teachingPlan?.templateSnapshotId
         ? await database.knowledgeDocument.findUnique({ where: { id: project.teachingPlan.templateSnapshotId } })
@@ -8153,8 +8970,11 @@ ${planContext.instructions}`,
         level: project.level, modality: project.modality, weeks: project.totalWeeks,
         subjectType: project.subjectType, subjectTypeLabel: project.academicOffering.subjectType.name,
       }) ?? null;
-      const currentTeachingPlanChecks = currentTeachingPlanContent
-        ? teachingPlanReviewChecks(currentTeachingPlanContent, projectPlanConsistencyInput(project.academicOffering))
+      const currentTeachingPlanChecks = currentTeachingPlanContent && currentTeachingPlanEvaluationPolicy
+        ? teachingPlanReviewChecks(
+            currentTeachingPlanContent,
+            projectPlanConsistencyInput(project.academicOffering, currentTeachingPlanEvaluationPolicy.rules),
+          )
         : [];
       const teachingPlanReviewProcess = project.teachingPlan ? await ensureTeachingPlanReviewProcessConfig() : null;
       const teachingPlanCorrections = project.teachingPlan?.reviewWorkflow
@@ -8267,6 +9087,7 @@ ${planContext.instructions}`,
             templateProfile: teachingPlanTemplateProfile,
             templateSnapshot: teachingPlanTemplateSnapshot,
             activeTemplate: activeTemplateSnapshot ? { id: activeTemplateSnapshot.id, title: activeTemplateSnapshot.title, version: activeTemplateSnapshot.version, checksum: activeTemplateSnapshot.checksum } : null,
+            evaluationPolicy: currentTeachingPlanEvaluationPolicy ? teachingPlanEvaluationPolicyApiView(currentTeachingPlanEvaluationPolicy) : null,
             templateOutdated: Boolean(teachingPlanTemplateSnapshot && activeTemplateSnapshot && teachingPlanTemplateSnapshot.id !== activeTemplateSnapshot.id),
           } : null,
           weekStates: Object.fromEntries(project.weeks.map((week) => [
@@ -8578,33 +9399,18 @@ ${planContext.instructions}`,
       }
 
       const requestBody = await readJsonBody(request);
-
-      const validation =
-        generationRequestSchema.safeParse(requestBody);
-
-      if (!validation.success) {
-        response.writeHead(400, {
-          "Content-Type": "application/json; charset=utf-8",
+      const clientValidation = guideGenerationClientSchema.safeParse(requestBody);
+      if (!clientValidation.success) {
+        json(response, 400, {
+          error: "No fue posible identificar correctamente la asignatura, la semana o los archivos de apoyo para generar la Guía Didáctica.",
+          details: clientValidation.error.flatten(),
         });
-
-        response.end(
-          JSON.stringify({
-            error:
-              "La información enviada está incompleta o no es válida.",
-            details: validation.error.flatten(),
-          }),
-        );
-
         return;
       }
 
-      if (!validation.data.projectId) {
-        json(response, 409, { error: "Seleccione una asignatura y genere su plan docente antes de crear la guía." });
-        return;
-      }
       const planSource = await database.project.findFirst({
         where: {
-          id: validation.data.projectId, ownerId: user.id,
+          id: clientValidation.data.projectId, ownerId: user.id,
           status: { not: "ARCHIVED" }, teachingPlan: { isNot: null },
         },
         include: { teachingPlan: true, academicOffering: { include: academicOfferingInclude } },
@@ -8622,27 +9428,83 @@ ${planContext.instructions}`,
         level: planSource.level, modality: planSource.modality, weeks: planSource.totalWeeks, subjectType: planSource.subjectType,
         subjectTypeLabel: planSource.academicOffering.subjectType.name,
       });
-      const expectedRows = planMatrixRows(teachingPlanContentSchema.parse(planSource.teachingPlan.content));
-      if (JSON.stringify(expectedRows) !== JSON.stringify(validation.data.matrixRows)) {
-        json(response, 409, { error: "La programación de la guía debe provenir del plan docente vigente." });
+
+      const teachingPlan = teachingPlanContentSchema.parse(planSource.teachingPlan.content);
+      const authoritativeRows = planMatrixRows(teachingPlan);
+      const mappingValidation = outcomeMappingsSchema.safeParse(planSource.outcomeMappings);
+      if (!mappingValidation.success) {
+        json(response, 409, {
+          error: "El Plan Docente confirmado no contiene una matriz de contribución válida para construir la Guía Didáctica.",
+          details: mappingValidation.error.flatten(),
+        });
         return;
       }
+      const uniqueText = (values: string[]) => [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+      const authoritativeProject = offeringSnapshot(planSource.academicOffering);
+      const authoritativeProfile = {
+        professionalProfileCompetencies: uniqueText(mappingValidation.data.flatMap((item) => item.professionalCompetencies)),
+        graduateProfileResults: uniqueText(mappingValidation.data.flatMap((item) => item.graduateProfileResults)),
+        utplGenericCompetencies: uniqueText(mappingValidation.data.flatMap((item) => item.utplGenericCompetencies)),
+      };
+      const authoritativeValidation = generationRequestSchema.safeParse({
+        projectId: planSource.id,
+        week: clientValidation.data.week,
+        project: {
+          projectName: planSource.name,
+          level: authoritativeProject.level,
+          faculty: authoritativeProject.faculty,
+          career: authoritativeProject.career,
+          professorName: planSource.professorName.trim() || user.displayName.trim(),
+          subjectCode: authoritativeProject.subjectCode,
+          subjectName: authoritativeProject.subjectName,
+          subjectType: authoritativeProject.subjectType,
+          subjectTypeLabel: planSource.academicOffering.subjectType.name,
+          modality: authoritativeProject.modality,
+          academicPeriod: authoritativeProject.academicPeriod,
+          weeks: authoritativeProject.totalWeeks,
+          ...authoritativeProfile,
+        },
+        matrixRows: authoritativeRows,
+        bibliography: {
+          guideReference: planSource.guideReference || buildDidacticGuideReference({
+            subjectName: authoritativeProject.subjectName, subjectCode: authoritativeProject.subjectCode,
+            career: authoritativeProject.career, academicPeriod: authoritativeProject.academicPeriod,
+          }),
+          guideReferenceImportance: planSource.guideReferenceImportance || buildDidacticGuideImportance({ subjectName: authoritativeProject.subjectName }),
+          basic: planSource.basicBib || "",
+          complementary: planSource.complementaryBib || "",
+          rea: planSource.reaBib || "",
+        },
+        adjustmentInstructions: clientValidation.data.adjustmentInstructions,
+        currentContent: clientValidation.data.currentContent,
+        attachments: clientValidation.data.attachments,
+      });
+      if (!authoritativeValidation.success) {
+        const invalidFields = [...new Set(authoritativeValidation.error.issues.map((issue) =>
+          issue.path.length ? issue.path.join(".") : "datos institucionales"))];
+        json(response, 409, {
+          error: invalidFields.length
+            ? `La información institucional guardada para generar la Guía Didáctica requiere revisión (${invalidFields.join(", ")}). Abra nuevamente la ficha de la asignatura y confirme sus datos.`
+            : "La información institucional guardada para generar la Guía Didáctica requiere revisión.",
+          details: authoritativeValidation.error.flatten(),
+        });
+        return;
+      }
+      const generation = authoritativeValidation.data;
 
-      const weekRows = validation.data.matrixRows.filter(
-        (row) =>
-          Number.parseInt(row.Semana, 10) === validation.data.week,
+      const weekRows = generation.matrixRows.filter(
+        (row) => Number.parseInt(row.Semana, 10) === generation.week,
       );
       const matrixWeeks = [
-        ...new Set(validation.data.matrixRows.map((row) => Number.parseInt(row.Semana, 10))),
+        ...new Set(generation.matrixRows.map((row) => Number.parseInt(row.Semana, 10))),
       ].sort((a, b) => a - b);
       const validSequence =
-        matrixWeeks.length === validation.data.project.weeks &&
+        matrixWeeks.length === planSource.totalWeeks &&
         matrixWeeks.every((week, index) => week === index + 1);
-      if (!validSequence || validation.data.week > validation.data.project.weeks) {
-        response.writeHead(400, { "Content-Type": "application/json; charset=utf-8" });
-        response.end(JSON.stringify({
-          error: "El número y la secuencia de semanas de la matriz no coinciden con el proyecto.",
-        }));
+      if (!validSequence || generation.week > planSource.totalWeeks) {
+        json(response, 409, {
+          error: "La programación del Plan Docente no contiene una secuencia completa de semanas para construir la Guía Didáctica.",
+        });
         return;
       }
       const activeLegacyGuide = planSource.workflowMode === "ADAPTATION_16_TO_8"
@@ -8661,11 +9523,10 @@ ${planContext.instructions}`,
       if (guideAdaptationProposal) {
         assertCurrentAdaptationWeeklyStructure(guideAdaptationProposal.weeklyStructure);
       }
-      const teachingPlan = teachingPlanContentSchema.parse(planSource.teachingPlan.content);
       const plannedWeek = teachingPlan.sequences.flatMap((sequence) => sequence.weeks)
-        .find((week) => week.week === validation.data.week);
+        .find((week) => week.week === generation.week);
       if (!plannedWeek) {
-        json(response, 409, { error: `El Plan Docente no contiene la semana ${validation.data.week}.` });
+        json(response, 409, { error: `El Plan Docente no contiene la semana ${generation.week}.` });
         return;
       }
       const guideOutline = buildGuideWeekOutline({
@@ -8683,7 +9544,7 @@ ${planContext.instructions}`,
         json(response, 409, { error: "No fue posible construir la jerarquía institucional de Unidad, tema y subtema para esta semana. Revise la oferta académica." });
         return;
       }
-      const generationText = buildGenerationInput(validation.data, guideOutline);
+      const generationText = buildGenerationInput(generation, guideOutline);
       const inputContent: Array<Record<string, string>> = [
         {
           type: "input_text",
@@ -8693,7 +9554,7 @@ ${planContext.instructions}`,
 ${approvedAdaptationContext(guideAdaptationProposal)}`
             : generationText,
         },
-        ...validation.data.attachments.map((attachment) => ({
+        ...generation.attachments.map((attachment) => ({
           type: "input_file",
           filename: attachment.fileName,
           file_data: `data:${attachment.mimeType};base64,${attachment.content}`,
@@ -8705,26 +9566,26 @@ ${approvedAdaptationContext(guideAdaptationProposal)}`
       }
 
       const administrativeContext = await activeAdministrativeContext({
-        level: validation.data.project.level,
-        modality: validation.data.project.modality,
-        weeks: validation.data.project.weeks,
-        subjectType: validation.data.project.subjectType,
-        subjectTypeLabel: validation.data.project.subjectTypeLabel,
-      }, validation.data.projectId);
+        level: generation.project.level,
+        modality: generation.project.modality,
+        weeks: generation.project.weeks,
+        subjectType: generation.project.subjectType,
+        subjectTypeLabel: generation.project.subjectTypeLabel,
+      }, generation.projectId);
       const guideContext = await activeGuideContext({
-        level: validation.data.project.level,
-        modality: validation.data.project.modality,
-        weeks: validation.data.project.weeks,
-        subjectType: validation.data.project.subjectType,
-        subjectTypeLabel: validation.data.project.subjectTypeLabel,
-      }, validation.data.projectId);
+        level: generation.project.level,
+        modality: generation.project.modality,
+        weeks: generation.project.weeks,
+        subjectType: generation.project.subjectType,
+        subjectTypeLabel: generation.project.subjectTypeLabel,
+      }, generation.projectId);
       if (guideAdaptationProposal) {
         const guideAdaptationSpecifications = await activeFunctionalSpecifications({
-          level: validation.data.project.level,
-          modality: validation.data.project.modality,
-          weeks: validation.data.project.weeks,
-          subjectType: validation.data.project.subjectType,
-          subjectTypeLabel: validation.data.project.subjectTypeLabel,
+          level: generation.project.level,
+          modality: generation.project.modality,
+          weeks: generation.project.weeks,
+          subjectType: generation.project.subjectType,
+          subjectTypeLabel: generation.project.subjectTypeLabel,
         }, "GUIDE_ADAPTATION");
         assertGuideAdaptationSourcesStillMatch(
           guideAdaptationProposal,
@@ -8750,11 +9611,11 @@ ${approvedAdaptationContext(guideAdaptationProposal)}`
         throw new Error("OpenAI no devolvió contenido para la semana.");
       }
 
-      const assistedResourceProposals = validation.data.adjustmentInstructions
+      const assistedResourceProposals = generation.adjustmentInstructions
         ? []
         : await analyzeAssistedResourceOpportunities(
             generatedContent,
-            validation.data.project.subjectName,
+            generation.project.subjectName,
             [...new Set(weekRows.map((row) => row["Resultado de aprendizaje"]))],
             [...new Set(weekRows.map((row) => row.Metodología))],
           );
@@ -8766,7 +9627,7 @@ ${approvedAdaptationContext(guideAdaptationProposal)}`
 
       response.end(
         JSON.stringify({
-          week: validation.data.week,
+          week: generation.week,
           content: generatedContent,
           assistedResourceProposals,
           visualProposals: assistedResourceProposals,
@@ -8879,6 +9740,9 @@ No añada información, cifras, citas, logotipos, marcas de agua, datos personal
         return;
       }
       const scriptFormat = ["video_script", "podcast_script"].includes(body.proposal.kind) ? "audiovisual" : "interactive";
+      const generationSchema = scriptFormat === "audiovisual"
+        ? audiovisualEducationalResourceSchema
+        : interactiveEducationalResourceSchema;
       const bibliographyContext = [project.basicBib, project.complementaryBib, project.reaBib || ""].filter(Boolean).join("\n");
       const resourceResponse = await openai.responses.create({
         model: openaiModel,
@@ -8912,9 +9776,9 @@ CONTENIDO DE REFERENCIA: ${body.proposal.insertionAfter}
 
 BIBLIOGRAFÍA DISPONIBLE (NO USE LA REFERENCIA DE LA PROPIA GUÍA):
 ${bibliographyContext}`,
-        text: { format: zodTextFormat(educationalResourceSchema, "educational_resource") },
+        text: { format: zodTextFormat(generationSchema, "educational_resource") },
       });
-      const generated = educationalResourceSchema.parse(jsonObjectFromText(resourceResponse.output_text));
+      const generated = generationSchema.parse(jsonObjectFromText(resourceResponse.output_text));
       const resource: EducationalResource = educationalResourceSchema.parse({
         ...generated,
         id: `resource-${body.week}-${Date.now()}`,
@@ -9147,6 +10011,15 @@ ${bibliographyContext}`,
     }
     if (request.method === "GET" && requestUrl.pathname === "/schemas/guide-canonical-v3.schema.json") {
       const schema = await readFile(canonicalGuideV3SchemaFileUrl, "utf8");
+      response.writeHead(200, {
+        "Content-Type": "application/schema+json; charset=utf-8",
+        "Cache-Control": "public, max-age=3600",
+      });
+      response.end(schema);
+      return;
+    }
+    if (request.method === "GET" && requestUrl.pathname === "/schemas/teaching-plan-canonical-v1.schema.json") {
+      const schema = await readFile(canonicalTeachingPlanV1SchemaFileUrl, "utf8");
       response.writeHead(200, {
         "Content-Type": "application/schema+json; charset=utf-8",
         "Cache-Control": "public, max-age=3600",

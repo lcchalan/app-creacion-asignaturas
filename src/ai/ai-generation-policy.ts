@@ -38,7 +38,9 @@ export function managedAiPath(method: string | undefined, pathname: string) {
     pathname === "/api/generate-assisted-resource" ||
     /^\/api\/projects\/[0-9a-f-]+\/adaptation\/analyze$/iu.test(pathname) ||
     /^\/api\/projects\/[0-9a-f-]+\/microcurricular-presentation\/generate$/iu.test(pathname) ||
-    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/generate$/iu.test(pathname);
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/generate$/iu.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/question-banks\/AC[1-5]\/generate$/iu.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/question-banks\/AC[1-5]\/questions\/[0-9a-f-]+\/regenerate$/iu.test(pathname);
 }
 
 export function describeManagedAiRequest(
@@ -119,6 +121,29 @@ export function describeManagedAiRequest(
       targetKey: `project:${projectId}:microcurricular-presentation`,
       projectId,
       label: "Generación de presentación de la asignatura",
+    };
+  }
+
+  const questionBankGenerate = suffix.match(/^teaching-plan\/question-banks\/(AC[1-5])\/generate$/iu);
+  if (projectId && questionBankGenerate) {
+    const code = questionBankGenerate[1]!.toUpperCase();
+    return {
+      operation: "TEACHING_PLAN_QUESTION_BANK_GENERATION",
+      targetKey: `project:${projectId}:question-bank:${code}`,
+      projectId,
+      label: `Generación de banco de preguntas · ${code}`,
+    };
+  }
+
+  const questionRegenerate = suffix.match(/^teaching-plan\/question-banks\/(AC[1-5])\/questions\/([0-9a-f-]+)\/regenerate$/iu);
+  if (projectId && questionRegenerate) {
+    const code = questionRegenerate[1]!.toUpperCase();
+    const questionId = questionRegenerate[2]!;
+    return {
+      operation: "TEACHING_PLAN_QUESTION_REGENERATION",
+      targetKey: `project:${projectId}:question-bank:${code}:question:${questionId}`,
+      projectId,
+      label: `Regeneración de pregunta · ${code}`,
     };
   }
 

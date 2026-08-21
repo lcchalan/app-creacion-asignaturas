@@ -76,6 +76,11 @@ export function teachingPlanReviewItemNeedsCorrection(result: string) {
   return teachingPlanCorrectionResults.includes(result as TeachingPlanCorrectionResult);
 }
 
+export function teachingPlanReviewResultCanCarryForward(result: string | null | undefined) {
+  const normalized = String(result || "");
+  return Boolean(normalized) && normalized !== "PENDING" && !teachingPlanReviewItemNeedsCorrection(normalized);
+}
+
 export type TeachingPlanPreviewSection = "cover" | "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h";
 
 export function teachingPlanIndicatorPreviewSection(code: string): TeachingPlanPreviewSection {

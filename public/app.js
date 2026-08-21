@@ -11,7 +11,9 @@ function browserManagedAiPath(method, pathname) {
     pathname === "/api/generate-assisted-resource" ||
     /^\/api\/projects\/[0-9a-f-]+\/adaptation\/analyze$/i.test(pathname) ||
     /^\/api\/projects\/[0-9a-f-]+\/microcurricular-presentation\/generate$/i.test(pathname) ||
-    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/generate$/i.test(pathname);
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/generate$/i.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/question-banks\/AC[1-5]\/generate$/i.test(pathname) ||
+    /^\/api\/projects\/[0-9a-f-]+\/teaching-plan\/question-banks\/AC[1-5]\/questions\/[0-9a-f-]+\/regenerate$/i.test(pathname);
 }
 
 function aiRequestSignature(method, pathname, body) {
@@ -550,6 +552,7 @@ let bibliographyEntriesState = [];
 let guideReferenceImportanceState = "";
 let teachingPlanState = null;
 let teachingPlanCorrectionsState = { pending: null, history: [] };
+let activeTeacherCorrectionItemId = null;
 let workflowModeState = null;
 let legacyDocumentsState = [];
 let planAdaptationProposalState = null;
@@ -2021,17 +2024,25 @@ function renderReviewChecklist(detail) {
   const review = detail.review;
   const editable = detail.stage.status === "PENDING_REVIEW" && review?.decision === "DRAFT";
   const items = review?.items || [];
-  $("#review-checklist-items").innerHTML = items.length ? items.map((item, index) => `<article class="review-checklist-item" data-review-item="${escapeHtml(item.id)}">
-    <div class="review-checklist-heading"><span class="review-indicator-code">${escapeHtml(item.indicator?.code || String(index + 1))}</span><div><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong><p>${escapeHtml(item.indicator?.description || "")}</p>${item.indicator?.required ? '<small>Obligatorio</small>' : '<small>No obligatorio</small>'}</div></div>
-    <label>Resultado<select data-review-result ${editable ? "" : "disabled"}>${Object.entries(reviewResultLabels).map(([value, label]) => `<option value="${value}" ${item.result === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select></label>
-    <label>Observación<textarea data-review-observation maxlength="5000" ${editable ? "" : "disabled"} placeholder="Detalle el hallazgo o la evidencia revisada.">${escapeHtml(item.observation || "")}</textarea></label>
-  </article>`).join("") : '<p class="projects-empty">Esta etapa todavía no está disponible para completar su lista de cotejo.</p>';
+  $("#review-checklist-items").innerHTML = items.length ? items.map((item, index) => {
+    const carriedForward = Boolean(item.carriedForward);
+    const itemEditable = editable && !carriedForward;
+    return `<article class="review-checklist-item ${carriedForward ? "carried-forward" : ""}" data-review-item="${escapeHtml(item.id)}">
+      <div class="review-checklist-heading"><span class="review-indicator-code">${escapeHtml(item.indicator?.code || String(index + 1))}</span><div><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong><p>${escapeHtml(item.indicator?.description || "")}</p>${item.indicator?.required ? '<small>Obligatorio</small>' : '<small>No obligatorio</small>'}</div></div>
+      ${carriedForward ? `<div class="review-carried-forward"><strong>✓ Calificación conservada</strong><span>Este criterio ya fue marcado como ${escapeHtml(reviewResultLabels[item.result] || item.result)} en el intento anterior y no requiere una nueva calificación.</span></div>` : ""}
+      <label>Resultado<select data-review-result ${itemEditable ? "" : "disabled"}>${Object.entries(reviewResultLabels).map(([value, label]) => `<option value="${value}" ${item.result === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select></label>
+      <label>Observación<textarea data-review-observation maxlength="5000" ${itemEditable ? "" : "disabled"} placeholder="Detalle el hallazgo o la evidencia revisada.">${escapeHtml(item.observation || "")}</textarea></label>
+    </article>`;
+  }).join("") : '<p class="projects-empty">Esta etapa todavía no está disponible para completar su lista de cotejo.</p>';
   const general = $("#review-general-observation");
   general.value = review?.generalObservation || "";
   general.disabled = !editable;
   [$("#save-review-draft"), $("#request-review-changes"), $("#approve-review-stage")].forEach((button) => { if (button) button.disabled = !editable; });
+  const hasCarriedForward = items.some((item) => item.carriedForward);
   $("#review-checklist-help").textContent = editable
-    ? "Complete todos los criterios antes de aprobar o solicitar correcciones. Si marca Cumple parcialmente o No cumple, describa la corrección requerida. Puede guardar un borrador y continuar después."
+    ? hasCarriedForward
+      ? "Las calificaciones que ya cumplieron se conservan. Revise únicamente los criterios que fueron devueltos a corrección y cierre la etapa cuando termine la revalidación."
+      : "Complete todos los criterios antes de aprobar o solicitar correcciones. Si marca Cumple parcialmente o No cumple, describa la corrección requerida. Puede guardar un borrador y continuar después."
     : detail.stage.status === "WAITING" ? "Esta etapa se habilitará cuando finalice la etapa anterior." : detail.stage.status === "APPROVED" ? "Esta etapa ya fue aprobada y permanece disponible solo para consulta." : "La etapa no está disponible para edición en este momento.";
   $("#review-decision-status").textContent = review?.decision && review.decision !== "DRAFT" ? `Decisión registrada: ${review.decision === "APPROVED" ? "Aprobada" : "Correcciones solicitadas"}.` : "";
 }
@@ -3575,20 +3586,11 @@ const planPreviewSections = [
   ["c", "C", "C. Contribución"], ["d", "D", "D. Programación"], ["e", "E", "E. Evaluación"],
   ["f", "F", "F. Docente"], ["g", "G", "G. Bibliografía"], ["h", "H", "H. Aprobación"],
 ];
-const planEvaluationPreviewRules = {
-  CONCEPTUAL: [
-    ["AC1", "ACD", 2, 1, 10], ["AC2", "AA", 4, 1, 10], ["AC3", "ACD", 6, 3, 30],
-    ["AC4", "APE", 7, 2, 20], ["AC5", "AA", 8, 3, 30],
-  ],
-  ACTIVE: [
-    ["AC1", "ACD", 2, .5, 5], ["AC2", "APE", 4, 2, 20], ["AC3", "ACD", 6, 1.5, 15],
-    ["AC4", "APE", 7, 3, 30], ["AC5", "AA", 8, 3, 30],
-  ],
-  INTEGRATING: [
-    ["AC1", "ACD", 2, 1, 10], ["AC2", "APE", 4, 2, 20], ["AC3", "ACD", 6, 1, 10],
-    ["AC4", "APE", 7, 4, 40], ["AC5", "AA", 8, 2, 20],
-  ],
-};
+function currentPlanEvaluationPreviewRules() {
+  return Array.isArray(teachingPlanState?.evaluationPolicy?.rules)
+    ? teachingPlanState.evaluationPolicy.rules
+    : [];
+}
 function normalizePlanPreviewValue(value) {
   return String(value || "").normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("es");
 }
@@ -3616,9 +3618,11 @@ function localTeachingPlanReviewChecks() {
   const unknownContents = weeks.flatMap((week) => (week.unitContents || []).filter((item) => !allowedContents.has(normalizePlanPreviewValue(item))));
   const hours = weeks.reduce((sum, week) => ({ acd: sum.acd + Number(week.acdHours || 0), ape: sum.ape + Number(week.apeHours || 0), aa: sum.aa + Number(week.aaHours || 0) }), { acd: 0, ape: 0, aa: 0 });
   const hoursOk = hours.acd === Number(institutionalDataState.acdHours || 0) && hours.ape === Number(institutionalDataState.apeHours || 0) && hours.aa === Number(institutionalDataState.aaHours || 0);
-  const rules = planEvaluationPreviewRules[institutionalDataState.planCategory] || [];
+  const rules = currentPlanEvaluationPreviewRules();
   const activities = content.evaluatedActivities || [];
-  const evaluationOk = rules.length === activities.length && rules.every(([code, component, week, grade, weight]) => activities.some((item) => item.code === code && item.component === component && Number(item.week) === week && Number(item.grade) === grade && Number(item.weight) === weight));
+  const evaluationOk = rules.length === activities.length && rules.every((rule) => activities.some((item) =>
+    item.code === rule.code && item.component === rule.component && Number(item.week) === Number(rule.week) &&
+    Number(item.grade) === Number(rule.grade) && Number(item.weight) === Number(rule.weight)));
   const totalGrade = activities.reduce((sum, item) => sum + Number(item.grade || 0), 0);
   const totalWeight = activities.reduce((sum, item) => sum + Number(item.weight || 0), 0);
   const methodologyOk = (content.sequences || []).every((sequence) => String(sequence.methodology || "").trim().length >= 3 && Array.isArray(sequence.tac) && sequence.tac.some((item) => String(item || "").trim()));
@@ -3645,7 +3649,7 @@ function teachingPlanReviewChecksState() {
     ? [...teachingPlanState.reviewChecks]
     : localTeachingPlanReviewChecks();
   const formatCheck = teachingPlanState?.templateOutdated
-    ? { code: "TEMPLATE", label: "Formato institucional", ok: false, detail: `El Plan Docente fue generado con ${teachingPlanState?.templateSnapshot?.title || "un formato anterior"} · v${teachingPlanState?.templateSnapshot?.version || "—"}. Regénere para aplicar ${teachingPlanState?.activeTemplate?.title || "el formato vigente"} · v${teachingPlanState?.activeTemplate?.version || "—"}.` }
+    ? { code: "TEMPLATE", label: "Formato institucional", ok: true, detail: `Este Plan conserva ${teachingPlanState?.templateSnapshot?.title || "su formato histórico"} · v${teachingPlanState?.templateSnapshot?.version || "—"}. Existe ${teachingPlanState?.activeTemplate?.title || "un formato vigente posterior"} · v${teachingPlanState?.activeTemplate?.version || "—"}, pero el contenido no necesita regenerarse.` }
     : { code: "TEMPLATE", label: "Formato institucional", ok: true, detail: teachingPlanState?.templateSnapshot ? `Se utiliza ${teachingPlanState.templateSnapshot.title} · v${teachingPlanState.templateSnapshot.version}.` : "El formato utilizado quedó registrado con la generación." };
   return checks.some((check) => check.code === "TEMPLATE") ? checks : [...checks, formatCheck];
 }
@@ -3669,6 +3673,66 @@ function teachingPlanCorrectionHistoryHtml(history = []) {
     ${review.teacherGeneralResponse ? `<p class="teacher-correction-history-general-response"><strong>Respuesta general del docente:</strong> ${escapeHtml(review.teacherGeneralResponse)}</p>` : ""}
     <div class="teacher-correction-history-items">${(review.items || []).map((item) => `<div><span class="review-indicator-code">${escapeHtml(item.indicator?.code || "Criterio")}</span><p><strong>${escapeHtml(item.indicator?.name || "Criterio")}</strong><br>${escapeHtml(item.observation || "Sin observación específica.")}</p><p class="teacher-correction-history-response"><strong>Respuesta docente:</strong> ${escapeHtml(item.teacherResponse || "Sin respuesta registrada.")}</p></div>`).join("")}</div>
   </article>`).join("");
+}
+
+function teacherCorrectionCardById(itemId) {
+  return $$('[data-teacher-correction-item]', $("#teaching-plan-correction-items")).find((card) => card.dataset.teacherCorrectionItem === itemId) || null;
+}
+
+function hideTeacherCorrectionCompanion() {
+  activeTeacherCorrectionItemId = null;
+  $("#teacher-correction-companion")?.classList.add("hidden");
+}
+
+function renderTeacherCorrectionCompanion() {
+  const companion = $("#teacher-correction-companion");
+  if (!companion || !activeTeacherCorrectionItemId || teachingPlanState?.reviewWorkflow?.status !== "CHANGES_REQUESTED") {
+    companion?.classList.add("hidden");
+    return;
+  }
+  const card = teacherCorrectionCardById(activeTeacherCorrectionItemId);
+  const pendingItems = teachingPlanCorrectionsState?.pending?.items || [];
+  const item = pendingItems.find((entry) => entry.id === activeTeacherCorrectionItemId);
+  if (!card || !item) { hideTeacherCorrectionCompanion(); return; }
+  const cards = $$("[data-teacher-correction-item]", $("#teaching-plan-correction-items"));
+  const index = Math.max(cards.findIndex((entry) => entry.dataset.teacherCorrectionItem === activeTeacherCorrectionItemId), 0);
+  $("#teacher-correction-companion-code").textContent = item.indicator?.code || "Criterio";
+  $("#teacher-correction-companion-title").textContent = item.indicator?.name || "Corrección pendiente";
+  $("#teacher-correction-companion-observation").textContent = item.observation || "El revisor no registró un detalle específico.";
+  $("#teacher-correction-companion-response").value = card.querySelector("[data-teacher-correction-response]")?.value || "";
+  $("#teacher-correction-companion-addressed").checked = Boolean(card.querySelector("[data-teacher-correction-addressed]")?.checked);
+  $("#teacher-correction-companion-position").textContent = `${index + 1} de ${cards.length}`;
+  companion.classList.remove("hidden");
+}
+
+function syncTeacherCorrectionCompanionToCard() {
+  if (!activeTeacherCorrectionItemId) return;
+  const card = teacherCorrectionCardById(activeTeacherCorrectionItemId);
+  if (!card) return;
+  const response = card.querySelector("[data-teacher-correction-response]");
+  const addressed = card.querySelector("[data-teacher-correction-addressed]");
+  if (response) response.value = $("#teacher-correction-companion-response")?.value || "";
+  if (addressed) addressed.checked = Boolean($("#teacher-correction-companion-addressed")?.checked);
+  card.classList.toggle("addressed", Boolean(addressed?.checked));
+  updateTeacherCorrectionActionsFromForm();
+}
+
+function activateTeacherCorrection(itemId, section) {
+  activeTeacherCorrectionItemId = itemId;
+  renderTeacherCorrectionCompanion();
+  focusTeachingPlanCorrectionSection(section);
+}
+
+function goToNextTeacherCorrection() {
+  syncTeacherCorrectionCompanionToCard();
+  const cards = $$("[data-teacher-correction-item]", $("#teaching-plan-correction-items"));
+  if (!cards.length) return;
+  const currentIndex = Math.max(cards.findIndex((card) => card.dataset.teacherCorrectionItem === activeTeacherCorrectionItemId), 0);
+  const ordered = cards.slice(currentIndex + 1).concat(cards.slice(0, currentIndex));
+  const next = ordered.find((card) => !card.querySelector("[data-teacher-correction-addressed]")?.checked) || ordered[0];
+  if (!next) return;
+  const item = teachingPlanCorrectionsState?.pending?.items?.find((entry) => entry.id === next.dataset.teacherCorrectionItem);
+  activateTeacherCorrection(next.dataset.teacherCorrectionItem, item?.section || "cover");
 }
 
 function teacherCorrectionFormState() {
@@ -3738,6 +3802,7 @@ function renderTeachingPlanCorrections() {
   const visible = hasPending || history.length > 0;
   panel.classList.toggle("hidden", !visible);
   if (!visible) {
+    hideTeacherCorrectionCompanion();
     delete panel.dataset.correctionReviewId;
     $("#teaching-plan-correction-items").innerHTML = "";
     return;
@@ -3754,6 +3819,7 @@ function renderTeachingPlanCorrections() {
   currentControls.forEach((element) => element?.classList.toggle("hidden", !hasPending));
   const count = $("#teaching-plan-corrections-count");
   if (!hasPending) {
+    hideTeacherCorrectionCompanion();
     delete panel.dataset.correctionReviewId;
     $("#teaching-plan-corrections-meta").textContent = "No existen correcciones pendientes. Consulte aquí las observaciones y respuestas registradas durante la revisión institucional.";
     if (count) { count.textContent = "Sin pendientes"; count.className = "status-badge status-completed"; }
@@ -3795,6 +3861,7 @@ function renderTeachingPlanCorrections() {
   const historyContainer = $("#teaching-plan-corrections-history");
   if (historyContainer) historyContainer.innerHTML = teachingPlanCorrectionHistoryHtml(history);
   updateTeacherCorrectionActionsFromForm();
+  if (activeTeacherCorrectionItemId) renderTeacherCorrectionCompanion();
 }
 
 async function saveTeachingPlanCorrections({ silent = false } = {}) {
@@ -3873,6 +3940,17 @@ const planQuestionnaireModeLabels = {
   LAST_ATTEMPT: "Último intento",
   HIGHEST_GRADE: "Calificación más alta",
 };
+const questionBankTypeLabels = {
+  MULTIPLE_CHOICE_SINGLE: "Opción múltiple · una respuesta",
+  MULTIPLE_CHOICE_MULTIPLE: "Opción múltiple · varias respuestas",
+  TRUE_FALSE: "Verdadero / falso",
+  FILL_BLANK: "Completar",
+  MATCHING: "Relacionar",
+  ORDERING: "Ordenar",
+};
+const questionBankSourceLabels = { AI: "Generada con IA", AI_REGENERATED: "Regenerada con IA", TEACHER_EDITED: "Editada por el profesor" };
+let questionBankState = null;
+
 function institutionalContentText(value) {
   return String(value || "")
     .replace(/^\s*(?:UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:\s*/i, "")
@@ -3888,6 +3966,27 @@ function institutionalContentDepth(value) {
   const number = raw.match(/^\s*(\d+(?:\.\d+){0,2})\s*(?:[.)]|[:\-–—])/u)?.[1];
   return number ? number.split(".").length : 1;
 }
+function questionBankTopicDisplayMap(unitContents = institutionalDataState?.unitContents || []) {
+  const map = new Map();
+  let unit = 0, content = 0, subcontent = 0;
+  for (const raw of unitContents || []) {
+    const depth = institutionalContentDepth(raw);
+    const text = institutionalContentText(raw);
+    if (depth === 1) { unit += 1; content = 0; subcontent = 0; }
+    else if (depth === 2) { if (!unit) unit = 1; content += 1; subcontent = 0; }
+    else { if (!unit) unit = 1; if (!content) content = 1; subcontent += 1; }
+    const number = depth === 1 ? `${unit}` : depth === 2 ? `${unit}.${content}` : `${unit}.${content}.${subcontent}`;
+    map.set(normalizePlanPreviewValue(raw), `${number}. ${text}`);
+  }
+  return map;
+}
+
+function questionBankTopicDisplayLabel(topic) {
+  const raw = String(topic || "").trim();
+  const mapped = questionBankTopicDisplayMap().get(normalizePlanPreviewValue(raw));
+  return mapped || raw.replace(/^\s*(?:UNIDAD|CONTENIDO|SUBCONTENIDO)\s*:\s*/i, "").trim();
+}
+
 function sentenceCaseInstitutionalUnit(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed || trimmed !== trimmed.toLocaleUpperCase("es")) return trimmed;
@@ -4007,7 +4106,7 @@ function planInstrumentDetailHtml(activity) {
   const formula = `Calificación real = (puntaje EVA / 10) × ${Number(activity.grade).toFixed(2)}`;
   if (config.type === "QUESTIONNAIRE") {
     const questionnaire = config.questionnaire || {};
-    return `<div class="plan-instrument-detail"><h6>Configuración EVA · Cuestionario · 10 puntos</h6><div>Tipo de calificación: <strong>${escapeHtml(planQuestionnaireModeLabels[questionnaire.gradingMode] || questionnaire.gradingMode || "—")}</strong></div><div>Número de preguntas: <strong>${escapeHtml(questionnaire.questionCount || "—")}</strong></div><div>Tiempo: <strong>${escapeHtml(questionnaire.timeMinutes || "—")} minutos</strong></div><div class="plan-score-formula">${escapeHtml(formula)}</div></div>`;
+    return `<div class="plan-instrument-detail"><h6>Configuración EVA · Cuestionario · 10 puntos</h6><div>Tipo de calificación: <strong>${escapeHtml(planQuestionnaireModeLabels[questionnaire.gradingMode] || questionnaire.gradingMode || "—")}</strong></div><div>Número de preguntas: <strong>${escapeHtml(questionnaire.questionCount || "—")}</strong></div><div>Tiempo: <strong>${escapeHtml(questionnaire.timeMinutes || "—")} minutos</strong></div><div class="plan-score-formula">${escapeHtml(formula)}</div><div class="plan-question-bank-action plan-preview-screen-only"><button class="button secondary compact" type="button" data-question-bank-code="${escapeHtml(activity.code || "")}">Configurar banco de preguntas</button></div></div>`;
   }
   if (["RUBRIC", "CHECKLIST", "RATING_SCALE"].includes(config.type)) {
     const levelLabels = [...new Set((config.criteria || []).flatMap((criterion) => (criterion.levels || []).map((level) => level.label)))];
@@ -4174,12 +4273,21 @@ function teachingPlanPreviewHtml(viewContext = null, options = {}) {
 }
 function renderTeachingPlanTemplateApplied() {
   const target = $("#teaching-plan-template-applied");
+  const upgrade = $("#upgrade-teaching-plan-template");
   if (!target) return;
   const snapshot = teachingPlanState?.templateSnapshot;
   const active = teachingPlanState?.activeTemplate;
+  const reviewLocked = Boolean(teachingPlanState?.reviewedAt || teachingPlanState?.reviewWorkflow);
+  const canUpgrade = Boolean(teachingPlanState?.templateOutdated && snapshot && active && !reviewLocked);
+  if (upgrade) {
+    upgrade.classList.toggle("hidden", !canUpgrade);
+    upgrade.disabled = !canUpgrade;
+  }
   if (teachingPlanState?.templateOutdated && snapshot && active) {
     target.classList.add("warning");
-    target.textContent = `Formato usado en este plan: ${snapshot.title} · v${snapshot.version}. Está activo ${active.title} · v${active.version}; regenere el Plan Docente para aplicar el formato vigente.`;
+    target.textContent = reviewLocked
+      ? `Formato histórico conservado: ${snapshot.title} · v${snapshot.version}. El formato vigente es ${active.title} · v${active.version}; este Plan no se modifica porque ya fue confirmado o enviado a revisión.`
+      : `Formato usado en este Plan: ${snapshot.title} · v${snapshot.version}. Existe ${active.title} · v${active.version}; puede actualizar solo el formato sin regenerar el contenido académico.`;
     return;
   }
   target.classList.remove("warning");
@@ -4549,6 +4657,266 @@ function instrumentConfigFromWeekEditor() {
   return config;
 }
 
+function closeQuestionBankModal() {
+  $("#question-bank-modal")?.classList.add("hidden");
+  questionBankState = null;
+}
+
+function questionBankTypeConfigurationFromDom() {
+  return $$(".question-bank-type-row", $("#question-bank-types")).flatMap((row) => {
+    const enabled = row.querySelector("[data-question-type-enabled]")?.checked;
+    const quantity = Number(row.querySelector("[data-question-type-quantity]")?.value || 0);
+    return enabled && Number.isInteger(quantity) && quantity > 0 ? [{ type: row.dataset.questionType, quantity }] : [];
+  });
+}
+
+function selectedQuestionBankTopics() {
+  return $$("[data-question-bank-topic]", $("#question-bank-topics")).filter((input) => input.checked).map((input) => input.value);
+}
+
+function updateQuestionBankConfiguredTotal() {
+  const total = questionBankTypeConfigurationFromDom().reduce((sum, item) => sum + item.quantity, 0);
+  const target = $("#question-bank-total");
+  if (target) target.textContent = String(total);
+  return total;
+}
+
+function questionBankOptionRowsHtml(question) {
+  if (question.type === "FILL_BLANK") return "";
+  const answerKey = new Set(question.answerKey || []);
+  return (question.options || []).map((option) => {
+    const answerControl = question.type === "MULTIPLE_CHOICE_SINGLE" || question.type === "TRUE_FALSE"
+      ? `<input class="question-option-answer" type="radio" name="answer-${escapeHtml(question.id)}" value="${escapeHtml(option.id)}" ${answerKey.has(option.id) ? "checked" : ""} aria-label="Respuesta correcta">`
+      : question.type === "MULTIPLE_CHOICE_MULTIPLE"
+        ? `<input class="question-option-answer" type="checkbox" value="${escapeHtml(option.id)}" ${answerKey.has(option.id) ? "checked" : ""} aria-label="Respuesta correcta">`
+        : `<span class="question-option-id">${escapeHtml(option.id)}</span>`;
+    const correctClass = ["MULTIPLE_CHOICE_SINGLE", "MULTIPLE_CHOICE_MULTIPLE", "TRUE_FALSE"].includes(question.type) && answerKey.has(option.id) ? " correct-answer" : "";
+    return `<div class="question-bank-option-row ${question.type === "MATCHING" ? "matching" : ""}${correctClass}" data-option-id="${escapeHtml(option.id)}">
+      <div>${answerControl}</div>
+      <input class="question-option-text" value="${escapeHtml(option.text || "")}" maxlength="2000" aria-label="Opción ${escapeHtml(option.id)}">
+      ${question.type === "MATCHING" ? `<input class="question-option-match" value="${escapeHtml(option.matchText || "")}" maxlength="2000" placeholder="Correspondencia correcta" aria-label="Correspondencia ${escapeHtml(option.id)}">` : ""}
+    </div>`;
+  }).join("");
+}
+
+function questionBankAnswerEditorHtml(question) {
+  if (question.type === "FILL_BLANK") {
+    return `<label>Respuestas aceptadas · una por línea<textarea class="question-fill-answers" rows="3" maxlength="4000">${escapeHtml((question.answerKey || []).join("\n"))}</textarea></label>`;
+  }
+  if (question.type === "ORDERING") {
+    return `<label>Orden correcto · IDs separados por coma<input class="question-order-key" value="${escapeHtml((question.answerKey || []).join(", "))}" maxlength="1000"></label>`;
+  }
+  if (question.type === "MATCHING") {
+    return '<p class="field-help">En preguntas de relacionar, cada fila contiene el elemento y su correspondencia correcta.</p>';
+  }
+  return '<p class="field-help">Marque la opción correcta utilizando los controles ubicados junto a cada alternativa.</p>';
+}
+
+function questionBankQuestionHtml(question) {
+  const topics = questionBankState?.bank?.topicScope || questionBankState?.authorizedTopics || [];
+  const topicLabel = questionBankTopicDisplayLabel(question.topic);
+  return `<details class="question-bank-question-card" data-question-id="${escapeHtml(question.id)}" data-question-type="${escapeHtml(question.type)}" data-question-version="${escapeHtml(question.version)}">
+    <summary>${escapeHtml(`#${question.sortOrder} · ${questionBankTypeLabels[question.type] || question.type} · ${topicLabel}`)} <span class="question-bank-source-badge">${escapeHtml(questionBankSourceLabels[question.source] || question.source)}</span></summary>
+    <div class="question-bank-question-body">
+      <div class="question-bank-question-meta">
+        <label>Tipo<input value="${escapeHtml(questionBankTypeLabels[question.type] || question.type)}" disabled></label>
+        <label>Tema<select class="question-topic">${topics.map((topic) => `<option value="${escapeHtml(topic)}" ${topic === question.topic ? "selected" : ""}>${escapeHtml(questionBankTopicDisplayLabel(topic))}</option>`).join("")}</select></label>
+      </div>
+      <label>Pregunta<textarea class="question-prompt" rows="3" maxlength="6000">${escapeHtml(question.prompt)}</textarea></label>
+      ${question.type !== "FILL_BLANK" ? `<div><strong>Opciones / elementos</strong><div class="question-bank-options">${questionBankOptionRowsHtml(question)}</div></div>` : ""}
+      ${questionBankAnswerEditorHtml(question)}
+      <div class="two-cols">
+        <label>Retroalimentación si responde correctamente<textarea class="question-feedback-correct" rows="3" maxlength="4000">${escapeHtml(question.feedbackCorrect)}</textarea></label>
+        <label>Retroalimentación si responde incorrectamente<textarea class="question-feedback-incorrect" rows="3" maxlength="4000">${escapeHtml(question.feedbackIncorrect)}</textarea></label>
+      </div>
+      <div class="question-bank-question-actions">
+        <button class="button secondary compact" type="button" data-question-save="${escapeHtml(question.id)}">Guardar edición</button>
+        <textarea class="question-regenerate-instructions" rows="2" maxlength="4000" placeholder="Indicaciones para regenerar solo esta pregunta"></textarea>
+        <button class="button secondary compact" type="button" data-question-regenerate="${escapeHtml(question.id)}">Regenerar con IA</button>
+      </div>
+    </div>
+  </details>`;
+}
+
+function renderQuestionBankModal() {
+  const state = questionBankState;
+  if (!state) return;
+  const bank = state.bank;
+  const title = $("#question-bank-title");
+  if (title) title.textContent = `Banco de preguntas · ${state.evaluatedCode}`;
+  const status = $("#question-bank-status");
+  const statusLabel = bank?.status === "APPROVED" ? "Aprobado" : bank?.status === "NEEDS_REVIEW" ? "Requiere revisión" : bank ? "En edición" : "Sin generar";
+  if (status) status.innerHTML = `<div class="question-bank-status-card"><strong>${escapeHtml(statusLabel)}</strong><span>Semana ${escapeHtml(state.week || "—")} · ${escapeHtml(state.activity || "Actividad evaluada")}</span>${bank ? `<span> · versión ${escapeHtml(bank.version)} · ${escapeHtml(bank.questions.length)} preguntas</span>` : ""}</div>${bank?.staleTopics?.length ? `<div class="notice compact">El alcance temático cambió. Revise o regenere el banco antes de aprobarlo.</div>` : ""}`;
+
+  const selectedTopics = new Set(bank?.topicScope?.length ? bank.topicScope : state.authorizedTopics || []);
+  const topics = $("#question-bank-topics");
+  if (topics) topics.innerHTML = (state.authorizedTopics || []).map((topic) => `<label class="question-bank-topic-item"><input type="checkbox" data-question-bank-topic value="${escapeHtml(topic)}" ${selectedTopics.has(topic) ? "checked" : ""}><span class="question-bank-topic-copy"><span class="question-bank-topic-text">${escapeHtml(questionBankTopicDisplayLabel(topic))}</span></span></label>`).join("");
+
+  const configured = new Map((bank?.typeConfiguration?.length ? bank.typeConfiguration : state.defaultTypeConfiguration || []).map((item) => [item.type, item.quantity]));
+  const types = $("#question-bank-types");
+  if (types) types.innerHTML = Object.entries(questionBankTypeLabels).map(([type, label]) => `<div class="question-bank-type-row" data-question-type="${escapeHtml(type)}"><label class="question-bank-type-toggle"><input type="checkbox" data-question-type-enabled ${configured.has(type) ? "checked" : ""}><span>${escapeHtml(label)}</span></label><label class="question-bank-type-quantity"><span>Cantidad</span><input data-question-type-quantity type="number" min="1" max="200" step="1" value="${escapeHtml(configured.get(type) || 1)}" ${configured.has(type) ? "" : "disabled"}></label></div>`).join("");
+  updateQuestionBankConfiguredTotal();
+  const help = $("#question-bank-minimum-help");
+  if (help) help.textContent = `Mínimo exigido para este banco: ${state.requiredMinimum} preguntas. El cuestionario presenta ${state.questionnaireQuestionCount} preguntas al estudiante. Mínimo institucional vigente: ${state.institutionalMinimum}.`;
+  const instructions = $("#question-bank-instructions");
+  if (instructions) instructions.value = bank?.generationInstructions || "";
+  const generate = $("#question-bank-generate");
+  if (generate) { generate.textContent = bank ? "Regenerar banco con IA" : "Generar banco con IA"; generate.disabled = !state.planningApproved; }
+  const questions = $("#question-bank-questions");
+  if (questions) questions.innerHTML = bank?.questions?.length ? bank.questions.map(questionBankQuestionHtml).join("") : '<p class="muted">Todavía no se ha generado el banco de preguntas.</p>';
+  const approve = $("#question-bank-approve");
+  if (approve) approve.disabled = !bank?.questions?.length || bank.status === "APPROVED" || Boolean(bank.staleTopics?.length);
+}
+
+async function questionBankRequest(url, options = {}) {
+  const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "No fue posible completar la operación del banco de preguntas.");
+  return payload;
+}
+
+async function openQuestionBankModal(evaluatedCode) {
+  if (!projectId) return;
+  const modal = $("#question-bank-modal");
+  modal?.classList.remove("hidden");
+  const status = $("#question-bank-status");
+  if (status) status.innerHTML = '<div class="question-bank-status-card">Cargando banco de preguntas…</div>';
+  try {
+    questionBankState = await questionBankRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/question-banks/${encodeURIComponent(evaluatedCode)}`);
+    renderQuestionBankModal();
+  } catch (error) {
+    closeQuestionBankModal();
+    showValidationModal(error.message, "#teaching-plan-preview-e");
+  }
+}
+
+function readQuestionBankQuestionCard(card) {
+  const type = card.dataset.questionType;
+  const options = $$(".question-bank-option-row", card).map((row) => ({
+    id: row.dataset.optionId,
+    text: row.querySelector(".question-option-text")?.value.trim() || "",
+    matchText: row.querySelector(".question-option-match")?.value.trim() || "",
+  }));
+  let answerKey = [];
+  if (["MULTIPLE_CHOICE_SINGLE", "TRUE_FALSE"].includes(type)) {
+    const selected = card.querySelector(".question-option-answer:checked");
+    answerKey = selected ? [selected.value] : [];
+  } else if (type === "MULTIPLE_CHOICE_MULTIPLE") {
+    answerKey = $$(".question-option-answer:checked", card).map((input) => input.value);
+  } else if (type === "FILL_BLANK") {
+    answerKey = String(card.querySelector(".question-fill-answers")?.value || "").split("\n").map((item) => item.trim()).filter(Boolean);
+  } else if (type === "MATCHING") {
+    answerKey = options.map((option) => option.id);
+  } else if (type === "ORDERING") {
+    answerKey = String(card.querySelector(".question-order-key")?.value || "").split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  return {
+    type,
+    topic: card.querySelector(".question-topic")?.value || "",
+    prompt: card.querySelector(".question-prompt")?.value.trim() || "",
+    options,
+    answerKey,
+    feedbackCorrect: card.querySelector(".question-feedback-correct")?.value.trim() || "",
+    feedbackIncorrect: card.querySelector(".question-feedback-incorrect")?.value.trim() || "",
+  };
+}
+
+$("#question-bank-close")?.addEventListener("click", closeQuestionBankModal);
+$("#question-bank-cancel")?.addEventListener("click", closeQuestionBankModal);
+$("#question-bank-modal")?.addEventListener("click", (event) => { if (event.target.id === "question-bank-modal") closeQuestionBankModal(); });
+$("#question-bank-types")?.addEventListener("change", (event) => {
+  const row = event.target.closest(".question-bank-type-row");
+  if (!row) return;
+  if (event.target.matches("[data-question-type-enabled]")) row.querySelector("[data-question-type-quantity]").disabled = !event.target.checked;
+  updateQuestionBankConfiguredTotal();
+});
+$("#question-bank-types")?.addEventListener("input", updateQuestionBankConfiguredTotal);
+
+$("#question-bank-generate")?.addEventListener("click", async () => {
+  if (!questionBankState || !projectId) return;
+  const topicScope = selectedQuestionBankTopics();
+  const typeConfiguration = questionBankTypeConfigurationFromDom();
+  const total = typeConfiguration.reduce((sum, item) => sum + item.quantity, 0);
+  if (!topicScope.length) return showValidationModal("Seleccione al menos un tema de estudio para el cuestionario.", "#question-bank-topics");
+  if (!typeConfiguration.length) return showValidationModal("Seleccione al menos un tipo de pregunta.", "#question-bank-types");
+  if (total < Number(questionBankState.requiredMinimum || 0)) return showValidationModal(`Configure al menos ${questionBankState.requiredMinimum} preguntas para este banco.`, "#question-bank-types");
+  const button = $("#question-bank-generate");
+  const label = button.textContent;
+  button.disabled = true; button.textContent = "Generando banco…";
+  try {
+    const payload = await questionBankRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/question-banks/${encodeURIComponent(questionBankState.evaluatedCode)}/generate`, {
+      method: "POST",
+      body: JSON.stringify({ topicScope, typeConfiguration, instructions: $("#question-bank-instructions")?.value.trim() || "" }),
+    });
+    questionBankState = { ...questionBankState, ...payload };
+    renderQuestionBankModal();
+  } catch (error) { showValidationModal(error.message, "#question-bank-modal"); }
+  finally {
+    if (button && button.isConnected) {
+      button.disabled = !questionBankState?.planningApproved;
+      button.textContent = questionBankState?.bank ? "Regenerar banco con IA" : label;
+    }
+  }
+});
+
+$("#question-bank-approve")?.addEventListener("click", async () => {
+  if (!questionBankState?.bank || !projectId) return;
+  const button = $("#question-bank-approve");
+  button.disabled = true;
+  try {
+    const payload = await questionBankRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/question-banks/${encodeURIComponent(questionBankState.evaluatedCode)}/approve`, {
+      method: "POST", body: JSON.stringify({ version: questionBankState.bank.version }),
+    });
+    questionBankState = { ...questionBankState, ...payload };
+    showMessage("Banco guardado.");
+    closeQuestionBankModal();
+  } catch (error) { showValidationModal(error.message, "#question-bank-modal"); }
+  finally { if (button?.isConnected && questionBankState?.bank?.status !== "APPROVED") button.disabled = false; }
+});
+
+$("#question-bank-questions")?.addEventListener("change", (event) => {
+  const control = event.target.closest(".question-option-answer");
+  if (!control) return;
+  const card = control.closest("[data-question-id]");
+  if (!card) return;
+  $$(".question-bank-option-row", card).forEach((row) => {
+    const answer = row.querySelector(".question-option-answer");
+    row.classList.toggle("correct-answer", Boolean(answer?.checked));
+  });
+});
+
+$("#question-bank-questions")?.addEventListener("click", async (event) => {
+  if (!questionBankState?.bank || !projectId) return;
+  const save = event.target.closest("[data-question-save]");
+  const regenerate = event.target.closest("[data-question-regenerate]");
+  if (!save && !regenerate) return;
+  const questionId = (save || regenerate).dataset.questionSave || (save || regenerate).dataset.questionRegenerate;
+  const card = event.target.closest(".question-bank-question-card");
+  const question = questionBankState.bank.questions.find((item) => item.id === questionId);
+  if (!card || !question) return;
+  const button = save || regenerate;
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  try {
+    let payload;
+    if (save) {
+      payload = await questionBankRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/question-banks/${encodeURIComponent(questionBankState.evaluatedCode)}/questions/${encodeURIComponent(questionId)}`, {
+        method: "PATCH", body: JSON.stringify({ version: question.version, question: readQuestionBankQuestionCard(card) }),
+      });
+    } else {
+      const instructions = card.querySelector(".question-regenerate-instructions")?.value.trim() || "";
+      if (instructions.length < 3) throw new Error("Escriba una indicación breve sobre cómo debe regenerarse esta pregunta.");
+      button.textContent = "Regenerando…";
+      payload = await questionBankRequest(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/question-banks/${encodeURIComponent(questionBankState.evaluatedCode)}/questions/${encodeURIComponent(questionId)}/regenerate`, {
+        method: "POST", body: JSON.stringify({ version: question.version, instructions }),
+      });
+    }
+    questionBankState = { ...questionBankState, ...payload };
+    renderQuestionBankModal();
+  } catch (error) { showValidationModal(error.message, "#question-bank-modal"); }
+  finally { if (button?.isConnected) { button.disabled = false; button.textContent = originalLabel; } }
+});
+
 $("#teaching-plan-preview-nav")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-plan-preview-target]");
   if (!button) return;
@@ -4556,6 +4924,8 @@ $("#teaching-plan-preview-nav")?.addEventListener("click", (event) => {
   target?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 $("#teaching-plan-preview")?.addEventListener("click", (event) => {
+  const questionBankButton = event.target.closest("[data-question-bank-code]");
+  if (questionBankButton) { void openQuestionBankModal(questionBankButton.dataset.questionBankCode); return; }
   const button = event.target.closest("[data-edit-plan-week]");
   if (!button) return;
   openTeachingPlanWeekEditor(Number(button.dataset.sequenceIndex), Number(button.dataset.editPlanWeek));
@@ -4655,6 +5025,7 @@ $("#teaching-plan-week-form")?.addEventListener("submit", async (event) => {
       templateProfile: payload.teachingPlan?.templateProfile || teachingPlanState?.templateProfile || null,
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
+      evaluationPolicy: payload.teachingPlan?.evaluationPolicy || teachingPlanState?.evaluationPolicy || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
       reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
       reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
@@ -4722,6 +5093,7 @@ async function submitTeacherPlanReview({ correctionMode = false } = {}) {
       templateProfile: payload.teachingPlan?.templateProfile || teachingPlanState?.templateProfile || null,
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
+      evaluationPolicy: payload.teachingPlan?.evaluationPolicy || teachingPlanState?.evaluationPolicy || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
       reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
       reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
@@ -4761,14 +5133,27 @@ $("#teacher-plan-review-confirm")?.addEventListener("change", () => {
 $("#confirm-teaching-plan-review")?.addEventListener("click", () => submitTeacherPlanReview().catch(() => {}));
 $("#teaching-plan-correction-items")?.addEventListener("input", (event) => {
   const card = event.target.closest("[data-teacher-correction-item]");
-  if (card) card.classList.toggle("addressed", Boolean(card.querySelector("[data-teacher-correction-addressed]")?.checked));
+  if (card) {
+    card.classList.toggle("addressed", Boolean(card.querySelector("[data-teacher-correction-addressed]")?.checked));
+    if (card.dataset.teacherCorrectionItem === activeTeacherCorrectionItemId) renderTeacherCorrectionCompanion();
+  }
   updateTeacherCorrectionActionsFromForm();
 });
 $("#teaching-plan-correction-items")?.addEventListener("change", updateTeacherCorrectionActionsFromForm);
 $("#teaching-plan-correction-items")?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-teacher-correction-target]");
-  if (button) focusTeachingPlanCorrectionSection(button.dataset.teacherCorrectionTarget);
+  if (!button) return;
+  const card = button.closest("[data-teacher-correction-item]");
+  if (card) activateTeacherCorrection(card.dataset.teacherCorrectionItem, button.dataset.teacherCorrectionTarget);
 });
+$("#teacher-correction-companion-close")?.addEventListener("click", hideTeacherCorrectionCompanion);
+$("#teacher-correction-companion-response")?.addEventListener("input", syncTeacherCorrectionCompanionToCard);
+$("#teacher-correction-companion-addressed")?.addEventListener("change", syncTeacherCorrectionCompanionToCard);
+$("#teacher-correction-companion-save")?.addEventListener("click", () => {
+  syncTeacherCorrectionCompanionToCard();
+  saveTeachingPlanCorrections().then(() => renderTeacherCorrectionCompanion()).catch((error) => showValidationModal(error.message, "#teacher-correction-companion"));
+});
+$("#teacher-correction-companion-next")?.addEventListener("click", goToNextTeacherCorrection);
 $("#teacher-corrections-general-response")?.addEventListener("input", updateTeacherCorrectionActionsFromForm);
 $("#teacher-corrections-confirm")?.addEventListener("change", updateTeacherCorrectionActionsFromForm);
 $("#save-teaching-plan-corrections")?.addEventListener("click", () => saveTeachingPlanCorrections().catch((error) => showValidationModal(error.message, "#teaching-plan-corrections")));
@@ -4801,6 +5186,7 @@ async function generateTeachingPlanStage(mode = "METHODOLOGY", instructions = ""
       templateProfile: payload.teachingPlan?.templateProfile || teachingPlanState?.templateProfile || null,
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
+      evaluationPolicy: payload.teachingPlan?.evaluationPolicy || teachingPlanState?.evaluationPolicy || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
       reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
       reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
@@ -4872,6 +5258,7 @@ $("#save-plan-methodologies").onclick = async () => {
       templateProfile: payload.teachingPlan?.templateProfile || teachingPlanState?.templateProfile || null,
       templateSnapshot: payload.teachingPlan?.templateSnapshot || teachingPlanState?.templateSnapshot || null,
       activeTemplate: payload.teachingPlan?.activeTemplate || teachingPlanState?.activeTemplate || null,
+      evaluationPolicy: payload.teachingPlan?.evaluationPolicy || teachingPlanState?.evaluationPolicy || null,
       templateOutdated: payload.teachingPlan?.templateOutdated ?? teachingPlanState?.templateOutdated ?? false,
       reviewWorkflow: payload.teachingPlan?.reviewWorkflow ?? teachingPlanState?.reviewWorkflow ?? null,
       reviewProcessEnabled: payload.teachingPlan?.reviewProcessEnabled ?? teachingPlanState?.reviewProcessEnabled ?? false,
@@ -4976,7 +5363,7 @@ function configuredPlanDownloadFormats() {
 }
 function updatePlanDownloadButtons() {
   const formats = configuredPlanDownloadFormats();
-  const reviewed = Boolean(teachingPlanState?.reviewedAt) && !teachingPlanState?.templateOutdated;
+  const reviewed = Boolean(teachingPlanState?.reviewedAt);
   [["#download-teaching-plan-pdf", "PDF"], ["#download-teaching-plan", "WORD"], ["#download-teaching-plan-json", "JSON"]].forEach(([selector, format]) => {
     const button = $(selector); if (!button) return; const enabled = formats.includes(format); button.classList.toggle("hidden", !enabled); button.disabled = !reviewed;
   });
@@ -4996,7 +5383,6 @@ async function ensureGuideGenerationReady() {
 }
 
 async function downloadPlanFormat(format) {
-  if (teachingPlanState?.templateOutdated) return showValidationModal("El Plan Docente fue generado con un formato anterior. Regénere el plan para aplicar el formato institucional vigente antes de descargarlo.", "#generate-teaching-plan");
   if (!teachingPlanState?.reviewedAt) return showValidationModal("Revise y confirme la vista previa del Plan Docente antes de descargarlo.", "#teaching-plan-review-panel");
   if (!projectId) return;
   const route = format === "PDF" ? "pdf" : format === "JSON" ? "json" : "word";
@@ -5023,6 +5409,33 @@ async function downloadPlanFormat(format) {
     if (button) { button.textContent = originalText; updatePlanDownloadButtons(); }
   }
 }
+$("#upgrade-teaching-plan-template")?.addEventListener("click", async (event) => {
+  if (!projectId || !teachingPlanState?.templateOutdated) return;
+  const button = event.currentTarget;
+  const original = button.textContent;
+  button.disabled = true;
+  button.textContent = "Actualizando formato…";
+  try {
+    const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/teaching-plan/template/upgrade`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "No fue posible actualizar el formato del Plan Docente.");
+    teachingPlanState = {
+      ...teachingPlanState,
+      templateProfile: payload.templateProfile || teachingPlanState.templateProfile,
+      templateSnapshot: payload.templateSnapshot || teachingPlanState.templateSnapshot,
+      activeTemplate: payload.activeTemplate || teachingPlanState.activeTemplate,
+      templateOutdated: Boolean(payload.templateOutdated),
+    };
+    renderTeachingPlan();
+    showMessage("El Plan Docente ahora usa el formato institucional vigente. El contenido académico se conservó sin regeneración.");
+  } catch (error) {
+    showValidationModal(error.message || "No fue posible actualizar el formato del Plan Docente.", "#teaching-plan-template-applied");
+  } finally {
+    button.textContent = original;
+    renderTeachingPlanTemplateApplied();
+  }
+});
+
 $("#download-teaching-plan-pdf")?.addEventListener("click", () => downloadPlanFormat("PDF"));
 $("#download-teaching-plan")?.addEventListener("click", () => downloadPlanFormat("WORD"));
 $("#download-teaching-plan-json")?.addEventListener("click", () => downloadPlanFormat("JSON"));
@@ -5063,7 +5476,6 @@ next.onclick = async () => {
     }
   } else if (step === 4) {
     if (!teachingPlanState || !matrixRows.length) return showValidationModal("Genere el Plan Docente antes de continuar con la Guía Didáctica.", "#generate-teaching-plan");
-    if (teachingPlanState.templateOutdated) return showValidationModal("El formato institucional del Plan Docente cambió. Regénere el plan con el formato vigente antes de continuar con la Guía Didáctica.", "#generate-teaching-plan");
     if (!teachingPlanState.reviewedAt) return showValidationModal("Revise y confirme la vista previa del Plan Docente antes de continuar con la Guía Didáctica.", "#teaching-plan-review-checks");
     next.disabled = true;
     try {
@@ -5169,30 +5581,10 @@ async function adjustmentAttachments() {
 }
 
 async function generationPayload(adjustmentInstructions = "") {
-  const project = data();
+  if (!projectId) throw new Error("No se encontró la asignatura activa para generar la Guía Didáctica.");
   return {
-    projectId: projectId || undefined,
+    projectId,
     week: currentWeek,
-    project: {
-      projectName: project.projectName, level: project.level,
-      modality: project.modality, faculty: project.faculty,
-      career: project.career, professorName: project.professorName,
-      subjectCode: project.subjectCode, subjectName: project.subjectName,
-      subjectType: project.subjectType,
-      subjectTypeLabel: project.subjectTypeName || project.subjectType,
-      academicPeriod: project.academicPeriod, weeks: Number(project.weeks),
-      professionalProfileCompetencies: project.professionalProfileCompetencies,
-      graduateProfileResults: project.graduateProfileResults,
-      utplGenericCompetencies: project.utplGenericCompetencies,
-    },
-    matrixRows,
-    bibliography: {
-      guideReference: project.guideReference || "",
-      guideReferenceImportance: guideReferenceImportanceState,
-      basic: bibliographyLegacyText("BASIC"),
-      complementary: bibliographyLegacyText("COMPLEMENTARY"),
-      rea: bibliographyLegacyText("REA"),
-    },
     adjustmentInstructions,
     currentContent: adjustmentInstructions ? editorToMarkdown($("#generation-output")) : "",
     attachments: adjustmentInstructions ? await adjustmentAttachments() : [],
@@ -5907,6 +6299,72 @@ function renderCatalogs() {
   }).join("") || `<tr><td colspan="4">No existen registros en este catálogo.</td></tr>`;
 }
 
+const teachingPlanEvaluationCategoryLabels = {
+  CONCEPTUAL: "Conceptual",
+  ACTIVE: "Activa",
+  INTEGRATING: "Integradora",
+};
+const teachingPlanEvaluationCodes = ["AC1", "AC2", "AC3", "AC4", "AC5"];
+
+function activeTeachingPlanEvaluationPolicy(category) {
+  return (adminData?.teachingPlanEvaluationPolicies || [])
+    .filter((item) => item.category === category && item.status === "ACTIVE")
+    .sort((left, right) => Number(right.version) - Number(left.version))[0] || null;
+}
+
+function updateTeachingPlanEvaluationPolicyTotals() {
+  const rows = $$("#teaching-plan-evaluation-rules-body tr");
+  const totalGrade = rows.reduce((sum, row) => sum + Number(row.querySelector("[data-evaluation-grade]")?.value || 0), 0);
+  const totalWeight = rows.reduce((sum, row) => sum + Number(row.querySelector("[data-evaluation-weight]")?.value || 0), 0);
+  const target = $("#teaching-plan-evaluation-totals");
+  if (!target) return;
+  const valid = Math.abs(totalGrade - 10) < .001 && totalWeight === 100;
+  target.className = `evaluation-policy-totals ${valid ? "valid" : "invalid"}`;
+  target.innerHTML = `<strong>Total:</strong> ${totalGrade.toFixed(1)} puntos · ${totalWeight}%${valid ? "" : " · Debe sumar 10 puntos y 100%."}`;
+}
+
+function renderTeachingPlanEvaluationPolicies() {
+  if (!adminData) return;
+  const categoryField = $("#teaching-plan-evaluation-category");
+  const body = $("#teaching-plan-evaluation-rules-body");
+  const history = $("#teaching-plan-evaluation-policy-history");
+  if (!categoryField || !body || !history) return;
+  const category = categoryField.value || "CONCEPTUAL";
+  const active = activeTeachingPlanEvaluationPolicy(category);
+  const rulesByCode = new Map((active?.rules || []).map((rule) => [rule.code, rule]));
+  body.innerHTML = teachingPlanEvaluationCodes.map((code) => {
+    const rule = rulesByCode.get(code) || { code, component: "ACD", week: "", grade: "", weight: "" };
+    return `<tr data-evaluation-policy-code="${code}">
+      <td><strong>${code}</strong></td>
+      <td><select data-evaluation-component><option value="ACD" ${rule.component === "ACD" ? "selected" : ""}>ACD</option><option value="APE" ${rule.component === "APE" ? "selected" : ""}>APE</option><option value="AA" ${rule.component === "AA" ? "selected" : ""}>AA</option></select></td>
+      <td><input data-evaluation-week type="number" min="1" max="100" step="1" value="${escapeHtml(rule.week)}" required></td>
+      <td><input data-evaluation-grade type="number" min="0" max="10" step="0.1" value="${escapeHtml(rule.grade)}" required></td>
+      <td><div class="evaluation-weight-input"><input data-evaluation-weight type="number" min="1" max="100" step="1" value="${escapeHtml(rule.weight)}" required><span>%</span></div></td>
+    </tr>`;
+  }).join("");
+  const version = $("#teaching-plan-evaluation-current-version");
+  if (version) version.textContent = active
+    ? `Versión activa: v${active.version} · activada ${active.activatedAt ? new Date(active.activatedAt).toLocaleString("es-EC") : "sin fecha"}.`
+    : "No existe una versión activa para esta categoría.";
+  history.innerHTML = (adminData.teachingPlanEvaluationPolicies || []).map((item) => `<tr>
+    <td>${escapeHtml(item.categoryLabel || teachingPlanEvaluationCategoryLabels[item.category] || item.category)}</td>
+    <td>v${escapeHtml(item.version)}</td>
+    <td><span class="status-badge ${item.status === "ACTIVE" ? "status-completed" : "status-draft"}">${escapeHtml(item.status === "ACTIVE" ? "Activa" : "Histórica")}</span></td>
+    <td>${item.activatedAt ? new Date(item.activatedAt).toLocaleString("es-EC") : "—"}</td>
+  </tr>`).join("") || '<tr><td colspan="4">Todavía no existen versiones de evaluación.</td></tr>';
+  updateTeachingPlanEvaluationPolicyTotals();
+}
+
+function collectTeachingPlanEvaluationPolicyRules() {
+  return $$("#teaching-plan-evaluation-rules-body tr").map((row) => ({
+    code: row.dataset.evaluationPolicyCode,
+    component: row.querySelector("[data-evaluation-component]").value,
+    week: Number(row.querySelector("[data-evaluation-week]").value),
+    grade: Number(row.querySelector("[data-evaluation-grade]").value),
+    weight: Number(row.querySelector("[data-evaluation-weight]").value),
+  }));
+}
+
 function resetCatalogForm(keepKind = true) {
   const form = $("#catalog-form");
   const kind = form.elements.kind.value;
@@ -6290,6 +6748,12 @@ function renderGuideReport() {
 function institutionalSettingValue(key, fallback = "") {
   return (adminData?.institutionalSettings || []).find((item) => item.key === key)?.value || fallback;
 }
+function renderQuestionBankAdminSetting() {
+  const field = $("#question-bank-minimum");
+  if (!field) return;
+  field.value = institutionalSettingValue("TEACHING_PLAN_QUESTION_BANK_MINIMUM_QUESTIONS", "20");
+}
+
 function renderAiGenerationPolicy() {
   const field = $("#ai-max-generations-per-content");
   if (!field) return;
@@ -6299,6 +6763,25 @@ function renderAiGenerationPolicy() {
     ? "Actualmente no existe un límite institucional de generaciones por contenido."
     : `Actualmente se permiten hasta ${field.value} generaciones exitosas por contenido y profesor.`;
 }
+
+$("#question-bank-settings-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const field = $("#question-bank-minimum");
+  const value = Number.parseInt(String(field?.value || ""), 10);
+  if (!Number.isInteger(value) || value < 1 || value > 200) {
+    return showValidationModal("Banco de preguntas: ingrese un número entero entre 1 y 200.", "#question-bank-minimum");
+  }
+  try {
+    await authRequest("/api/admin/settings/question-bank", {
+      method: "PATCH",
+      body: JSON.stringify({ minimumQuestions: value }),
+    });
+    await loadAdminDashboard();
+    showAdminMessage(`Mínimo institucional de preguntas actualizado a ${value}. Los bancos ya aprobados conservan su configuración histórica.`);
+  } catch (error) {
+    showValidationModal(error.message || "No fue posible guardar el mínimo de preguntas.", "#question-bank-settings-form");
+  }
+});
 
 $("#ai-generation-policy-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -6545,7 +7028,7 @@ async function loadAdminDashboard() {
   adminData = await authRequest("/api/admin/dashboard");
   renderKnowledgeScopePickers();
   renderAdminRoleSelector();
-  renderAdminUsers(); renderCatalogs(); renderAssignments(); renderPlanReviewAdmin(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderAiGenerationPolicy(); renderGuideReport();
+  renderAdminUsers(); renderCatalogs(); renderTeachingPlanEvaluationPolicies(); renderQuestionBankAdminSetting(); renderAssignments(); renderPlanReviewAdmin(); renderAiVersions(); configureKnowledgeForm(currentKnowledgeKind()); renderInstitutionalPlanText(); renderGuideDownloadSettings(); renderAiGenerationPolicy(); renderGuideReport();
   const checklistProject = $("#checklist-project");
   if (checklistProject) {
     checklistProject.innerHTML = `<option value="">Seleccione una guía</option>${adminData.projects.map((project) => `<option value="${project.id}">${escapeHtml(`${project.subjectCode} — ${project.subjectName} · ${project.professorName}`)}</option>`).join("")}`;
@@ -6565,6 +7048,35 @@ $$("[data-admin-tab]").forEach((button) => {
     $$("[data-admin-tab]").forEach((item) => item.classList.toggle("active", item === button));
     $$("[data-admin-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.adminPanel === button.dataset.adminTab));
   };
+});
+$("#teaching-plan-evaluation-category")?.addEventListener("change", renderTeachingPlanEvaluationPolicies);
+$("#teaching-plan-evaluation-rules-body")?.addEventListener("input", updateTeachingPlanEvaluationPolicyTotals);
+$("#teaching-plan-evaluation-policy-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const category = $("#teaching-plan-evaluation-category")?.value || "CONCEPTUAL";
+  const rules = collectTeachingPlanEvaluationPolicyRules();
+  const totalGrade = rules.reduce((sum, rule) => sum + rule.grade, 0);
+  const totalWeight = rules.reduce((sum, rule) => sum + rule.weight, 0);
+  if (new Set(rules.map((rule) => rule.week)).size !== rules.length) {
+    return showValidationModal("Cada actividad calificada debe estar asignada a una semana diferente.", "#teaching-plan-evaluation-policy-form");
+  }
+  if (Math.abs(totalGrade - 10) > .001 || totalWeight !== 100) {
+    return showValidationModal("La distribución institucional debe sumar exactamente 10 puntos y 100% antes de guardarla.", "#teaching-plan-evaluation-policy-form");
+  }
+  try {
+    await authRequest("/api/admin/teaching-plan-evaluation-policies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ category, rules }),
+    });
+    await loadAdminDashboard();
+    const categoryField = $("#teaching-plan-evaluation-category");
+    if (categoryField) categoryField.value = category;
+    renderTeachingPlanEvaluationPolicies();
+    showAdminMessage(`Nueva versión de evaluación ${teachingPlanEvaluationCategoryLabels[category] || category} activada. Los planes existentes conservan su versión anterior.`);
+  } catch (error) {
+    showValidationModal(error.message, "#teaching-plan-evaluation-policy-form");
+  }
 });
 $("#plan-review-project")?.addEventListener("change", syncPlanReviewerAssignmentForm);
 $("#career-director-program")?.addEventListener("change", () => { void syncCareerDirectorForm({ keepModality: false, reloadModalities: true }); });

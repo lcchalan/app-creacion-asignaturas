@@ -158,24 +158,24 @@ enum InstitutionalDataIssueEmailStatus {
 }
 
 model User {
-  id                                     String                            @id @default(uuid()) @db.Uuid
-  email                                  String                            @unique
-  firstName                              String                            @default("")
-  lastName                               String                            @default("")
-  nationalId                             String?                           @unique
+  id                                     String                                @id @default(uuid()) @db.Uuid
+  email                                  String                                @unique
+  firstName                              String                                @default("")
+  lastName                               String                                @default("")
+  nationalId                             String?                               @unique
   displayName                            String
   passwordHash                           String?
-  mustChangePassword                     Boolean                           @default(false)
-  active                                 Boolean                           @default(true)
-  createdAt                              DateTime                          @default(now())
-  updatedAt                              DateTime                          @updatedAt
+  mustChangePassword                     Boolean                               @default(false)
+  active                                 Boolean                               @default(true)
+  createdAt                              DateTime                              @default(now())
+  updatedAt                              DateTime                              @updatedAt
   roles                                  UserRole[]
-  projects                               Project[]                         @relation("ProjectOwner")
+  projects                               Project[]                             @relation("ProjectOwner")
   weekVersions                           WeekVersion[]
   instructions                           GenerationInstruction[]
   documents                              KnowledgeDocument[]
-  retiredInstructions                    GenerationInstruction[]           @relation("GenerationInstructionRetiredBy")
-  retiredDocuments                       KnowledgeDocument[]               @relation("KnowledgeDocumentRetiredBy")
+  retiredInstructions                    GenerationInstruction[]               @relation("GenerationInstructionRetiredBy")
+  retiredDocuments                       KnowledgeDocument[]                   @relation("KnowledgeDocumentRetiredBy")
   auditLogs                              AuditLog[]
   sessions                               UserSession[]
   passwordResetTokens                    PasswordResetToken[]
@@ -183,28 +183,29 @@ model User {
   indicatorVersions                      IndicatorVersion[]
   guideReviews                           GuideReview[]
   teachingPlanIndicatorVersions          TeachingPlanIndicatorVersion[]
-  teachingPlanReviewerAssignments        TeachingPlanReviewerAssignment[]  @relation("TeachingPlanReviewer")
-  teachingPlanReviewerAssignmentsCreated TeachingPlanReviewerAssignment[]  @relation("TeachingPlanReviewerAssignedBy")
-  careerDirectorAssignments              CareerDirectorAssignment[]        @relation("CareerDirector")
-  careerDirectorAssignmentsCreated       CareerDirectorAssignment[]        @relation("CareerDirectorAssignedBy")
-  careerSecretaryAssignments             CareerSecretaryAssignment[]       @relation("CareerSecretary")
-  careerSecretaryAssignmentsCreated      CareerSecretaryAssignment[]       @relation("CareerSecretaryAssignedBy")
-  teachingPlanWorkflowStages             TeachingPlanWorkflowStage[]       @relation("TeachingPlanWorkflowReviewer")
-  teachingPlanReviews                    TeachingPlanReview[]              @relation("TeachingPlanReviewerUser")
-  teachingPlanNotifications              TeachingPlanNotification[]        @relation("TeachingPlanNotificationRecipient")
-  teachingPlanReviewProcessUpdates       TeachingPlanReviewProcessConfig[] @relation("TeachingPlanReviewProcessUpdatedBy")
+  teachingPlanReviewerAssignments        TeachingPlanReviewerAssignment[]      @relation("TeachingPlanReviewer")
+  teachingPlanReviewerAssignmentsCreated TeachingPlanReviewerAssignment[]      @relation("TeachingPlanReviewerAssignedBy")
+  careerDirectorAssignments              CareerDirectorAssignment[]            @relation("CareerDirector")
+  careerDirectorAssignmentsCreated       CareerDirectorAssignment[]            @relation("CareerDirectorAssignedBy")
+  careerSecretaryAssignments             CareerSecretaryAssignment[]           @relation("CareerSecretary")
+  careerSecretaryAssignmentsCreated      CareerSecretaryAssignment[]           @relation("CareerSecretaryAssignedBy")
+  teachingPlanWorkflowStages             TeachingPlanWorkflowStage[]           @relation("TeachingPlanWorkflowReviewer")
+  teachingPlanReviews                    TeachingPlanReview[]                  @relation("TeachingPlanReviewerUser")
+  teachingPlanNotifications              TeachingPlanNotification[]            @relation("TeachingPlanNotificationRecipient")
+  teachingPlanReviewProcessUpdates       TeachingPlanReviewProcessConfig[]     @relation("TeachingPlanReviewProcessUpdatedBy")
   uploadedLegacyDocuments                LegacyAcademicDocument[]
   updatedInstitutionalSettings           InstitutionalSetting[]
-  thirdLevelDegrees                      String[]                          @default([])
-  fourthLevelDegrees                     String[]                          @default([])
+  thirdLevelDegrees                      String[]                              @default([])
+  fourthLevelDegrees                     String[]                              @default([])
   teacherFaculty                         String?
   teacherDepartment                      String?
-  teacherDepartmentId                    String?                           @db.Uuid
-  department                             TeacherDepartment?                @relation(fields: [teacherDepartmentId], references: [id])
+  teacherDepartmentId                    String?                               @db.Uuid
+  department                             TeacherDepartment?                    @relation(fields: [teacherDepartmentId], references: [id])
   phone                                  String?
   shortCv                                String?
-  aiGenerationJobs                       AiGenerationJob[]                 @relation("AiGenerationRequestedBy")
-  institutionalDataIssues                InstitutionalDataIssue[]          @relation("InstitutionalDataIssueReporter")
+  aiGenerationJobs                       AiGenerationJob[]                     @relation("AiGenerationRequestedBy")
+  institutionalDataIssues                InstitutionalDataIssue[]              @relation("InstitutionalDataIssueReporter")
+  teachingPlanEvaluationPoliciesCreated  TeachingPlanEvaluationPolicyVersion[] @relation("TeachingPlanEvaluationPolicyCreatedBy")
 }
 
 model InstitutionalSetting {
@@ -864,28 +865,132 @@ model KnowledgeDocument {
 }
 
 model TeachingPlan {
-  id                       String                      @id @default(uuid()) @db.Uuid
-  projectId                String                      @unique @db.Uuid
-  schemaVersion            String                      @default("1.0.0")
-  status                   String                      @default("DRAFT")
-  content                  Json
-  version                  Int                         @default(1)
-  templateSnapshotId       String?                     @db.Uuid
-  promptSnapshotId         String?                     @db.Uuid
-  documentSnapshotIds      String[]                    @default([])
-  specificationSnapshotIds String[]                    @default([])
-  teacherReviewedAt        DateTime?
-  teacherReviewNotes       String?
-  methodologyApprovedAt    DateTime?
-  planningApprovedAt       DateTime?
-  generatedAt              DateTime                    @default(now())
-  createdAt                DateTime                    @default(now())
-  updatedAt                DateTime                    @updatedAt
-  project                  Project                     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  activities               TeachingPlanActivity[]
-  reviewWorkflow           TeachingPlanReviewWorkflow?
+  id                         String                               @id @default(uuid()) @db.Uuid
+  projectId                  String                               @unique @db.Uuid
+  schemaVersion              String                               @default("1.0.0")
+  status                     String                               @default("DRAFT")
+  content                    Json
+  version                    Int                                  @default(1)
+  templateSnapshotId         String?                              @db.Uuid
+  promptSnapshotId           String?                              @db.Uuid
+  evaluationPolicySnapshotId String?                              @db.Uuid
+  documentSnapshotIds        String[]                             @default([])
+  specificationSnapshotIds   String[]                             @default([])
+  teacherReviewedAt          DateTime?
+  teacherReviewNotes         String?
+  methodologyApprovedAt      DateTime?
+  planningApprovedAt         DateTime?
+  generatedAt                DateTime                             @default(now())
+  createdAt                  DateTime                             @default(now())
+  updatedAt                  DateTime                             @updatedAt
+  project                    Project                              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  evaluationPolicySnapshot   TeachingPlanEvaluationPolicyVersion? @relation(fields: [evaluationPolicySnapshotId], references: [id], onDelete: SetNull)
+  activities                 TeachingPlanActivity[]
+  reviewWorkflow             TeachingPlanReviewWorkflow?
+  canonicalDocument          CanonicalTeachingPlanDocument?
+  questionBanks              TeachingPlanQuestionBank[]
 
   @@index([status, updatedAt])
+  @@index([evaluationPolicySnapshotId])
+}
+
+model CanonicalTeachingPlanDocument {
+  id             String       @id @default(uuid()) @db.Uuid
+  teachingPlanId String       @unique @db.Uuid
+  schemaVersion  String
+  document       Json
+  checksum       String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  teachingPlan   TeachingPlan @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+
+  @@index([schemaVersion])
+}
+
+model TeachingPlanQuestionBank {
+  id                     String                             @id @default(uuid()) @db.Uuid
+  teachingPlanId         String                             @db.Uuid
+  evaluatedCode          String
+  minimumRequired        Int
+  topicScope             String[]                           @default([])
+  typeConfiguration      Json
+  generationInstructions String                             @default("") @db.Text
+  status                 String                             @default("DRAFT")
+  version                Int                                @default(1)
+  approvedAt             DateTime?
+  createdAt              DateTime                           @default(now())
+  updatedAt              DateTime                           @updatedAt
+  teachingPlan           TeachingPlan                       @relation(fields: [teachingPlanId], references: [id], onDelete: Cascade)
+  questions              TeachingPlanQuestion[]
+  revisions              TeachingPlanQuestionBankRevision[]
+
+  @@unique([teachingPlanId, evaluatedCode])
+  @@index([teachingPlanId, status])
+}
+
+model TeachingPlanQuestion {
+  id                String                         @id @default(uuid()) @db.Uuid
+  bankId            String                         @db.Uuid
+  sortOrder         Int
+  type              String
+  topic             String                         @db.Text
+  prompt            String                         @db.Text
+  options           Json
+  answerKey         Json
+  feedbackCorrect   String                         @db.Text
+  feedbackIncorrect String                         @db.Text
+  source            String                         @default("AI")
+  version           Int                            @default(1)
+  createdAt         DateTime                       @default(now())
+  updatedAt         DateTime                       @updatedAt
+  bank              TeachingPlanQuestionBank       @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  revisions         TeachingPlanQuestionRevision[]
+
+  @@unique([bankId, sortOrder])
+  @@index([bankId, type])
+}
+
+model TeachingPlanQuestionRevision {
+  id         String               @id @default(uuid()) @db.Uuid
+  questionId String               @db.Uuid
+  version    Int
+  snapshot   Json
+  reason     String
+  createdAt  DateTime             @default(now())
+  question   TeachingPlanQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, version])
+  @@index([questionId, createdAt])
+}
+
+model TeachingPlanQuestionBankRevision {
+  id        String                   @id @default(uuid()) @db.Uuid
+  bankId    String                   @db.Uuid
+  version   Int
+  snapshot  Json
+  reason    String
+  createdAt DateTime                 @default(now())
+  bank      TeachingPlanQuestionBank @relation(fields: [bankId], references: [id], onDelete: Cascade)
+
+  @@unique([bankId, version])
+  @@index([bankId, createdAt])
+}
+
+model TeachingPlanEvaluationPolicyVersion {
+  id            String         @id @default(uuid()) @db.Uuid
+  category      String
+  version       Int
+  title         String
+  status        DocumentStatus @default(DRAFT)
+  rules         Json
+  createdById   String?        @db.Uuid
+  createdAt     DateTime       @default(now())
+  activatedAt   DateTime?
+  createdBy     User?          @relation("TeachingPlanEvaluationPolicyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  teachingPlans TeachingPlan[]
+
+  @@unique([category, version])
+  @@index([category, status])
 }
 
 model TeachingPlanReviewProcessConfig {

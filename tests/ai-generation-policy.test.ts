@@ -23,6 +23,11 @@ test("clasifica las operaciones IA y conserva el alcance por contenido", () => {
   });
   assert.equal(week?.targetKey, "project:22222222-2222-2222-2222-222222222222:guide-week:4");
   assert.equal(week?.operation, "GUIDE_WEEK_GENERATION");
+  const bank = describeManagedAiRequest("POST", "/api/projects/11111111-1111-1111-1111-111111111111/teaching-plan/question-banks/AC1/generate", {});
+  assert.equal(bank?.operation, "TEACHING_PLAN_QUESTION_BANK_GENERATION");
+  assert.equal(bank?.targetKey, "project:11111111-1111-1111-1111-111111111111:question-bank:AC1");
+  const question = describeManagedAiRequest("POST", "/api/projects/11111111-1111-1111-1111-111111111111/teaching-plan/question-banks/AC1/questions/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/regenerate", {});
+  assert.equal(question?.operation, "TEACHING_PLAN_QUESTION_REGENERATION");
 });
 
 test("no clasifica rutas ajenas a generación IA", () => {

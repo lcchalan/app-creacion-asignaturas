@@ -145,11 +145,9 @@ async function main() {
   }
 
   for (const [sortOrder, subjectType] of [
-    { code: "GENERAL", name: "General", planCategory: null },
-    { code: "TEORICA", name: "Teórica", planCategory: "CONCEPTUAL" },
-    { code: "PRACTICA", name: "Práctica", planCategory: "ACTIVE" },
-    { code: "PROYECTO", name: "Proyecto o integradora", planCategory: "INTEGRATING" },
-    { code: "OTRA", name: "Otra", planCategory: null },
+    { code: "TIPO-A", name: "Conceptual", planCategory: "CONCEPTUAL" },
+    { code: "TIPO-B", name: "Activa", planCategory: "ACTIVE" },
+    { code: "TIPO-C", name: "Integradora", planCategory: "INTEGRATING" },
   ].entries()) {
     await database.subjectType.upsert({
       where: { code: subjectType.code },

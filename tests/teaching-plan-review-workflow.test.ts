@@ -6,6 +6,7 @@ import {
   previouslyApprovedTeachingPlanStages,
   teachingPlanIndicatorPreviewSection,
   teachingPlanReviewItemNeedsCorrection,
+  teachingPlanReviewResultCanCarryForward,
   teachingPlanReviewWorkflowIsSuspended,
   teachingPlanReviewStageRole,
   userCanActOnTeachingPlanStage,
@@ -67,6 +68,15 @@ test("identifica los resultados de lista de cotejo que requieren corrección doc
   assert.equal(teachingPlanReviewItemNeedsCorrection("COMPLIES_PARTIALLY"), true);
   assert.equal(teachingPlanReviewItemNeedsCorrection("COMPLIES"), false);
   assert.equal(teachingPlanReviewItemNeedsCorrection("NOT_APPLICABLE"), false);
+});
+
+
+test("la revalidación conserva los criterios que ya cumplieron", () => {
+  assert.equal(teachingPlanReviewResultCanCarryForward("COMPLIES"), true);
+  assert.equal(teachingPlanReviewResultCanCarryForward("NOT_APPLICABLE"), true);
+  assert.equal(teachingPlanReviewResultCanCarryForward("COMPLIES_PARTIALLY"), false);
+  assert.equal(teachingPlanReviewResultCanCarryForward("DOES_NOT_COMPLY"), false);
+  assert.equal(teachingPlanReviewResultCanCarryForward("PENDING"), false);
 });
 
 test("relaciona los criterios de la lista de cotejo con la sección visible del Plan Docente", () => {

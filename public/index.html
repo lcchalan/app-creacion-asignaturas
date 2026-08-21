@@ -125,6 +125,7 @@
       <div class="admin-tabs" role="tablist">
         <button class="active" data-admin-tab="users">Usuarios</button>
         <button data-admin-tab="catalogs">Catálogos académicos</button>
+        <button data-admin-tab="academic-config">Configuración académica</button>
         <button data-admin-tab="assignments">Asignaciones</button>
         <button data-admin-tab="plan-review">Revisión del Plan</button>
         <button data-admin-tab="checklists">Listas de cotejo</button>
@@ -270,6 +271,50 @@
         <div class="admin-card">
           <div class="table-toolbar"><h2 id="catalog-table-title">Niveles académicos</h2><input id="catalog-search" type="search" placeholder="Buscar en el catálogo"></div>
           <div class="table-scroll"><table class="admin-table"><thead><tr><th>Código o asignatura</th><th>Nombre y contexto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody id="catalog-table-body"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="admin-panel" data-admin-panel="academic-config">
+        <div class="admin-grid academic-config-grid">
+          <form class="admin-card academic-config-evaluation-card" id="teaching-plan-evaluation-policy-form">
+            <h2>Distribución de evaluación del Plan Docente</h2>
+            <p>Estos valores son la fuente institucional para la generación, validación y exportación del Plan Docente. Cada guardado crea una nueva versión; los planes ya generados conservan la versión que utilizaron.</p>
+            <label>Tipo de asignatura
+              <select name="category" id="teaching-plan-evaluation-category">
+                <option value="CONCEPTUAL">Conceptual</option>
+                <option value="ACTIVE">Activa</option>
+                <option value="INTEGRATING">Integradora</option>
+              </select>
+            </label>
+            <p class="field-help" id="teaching-plan-evaluation-current-version"></p>
+            <div class="table-scroll">
+              <table class="admin-table evaluation-policy-table">
+                <thead><tr><th>Actividad</th><th>Componente</th><th>Semana</th><th>Calificación</th><th>Peso</th></tr></thead>
+                <tbody id="teaching-plan-evaluation-rules-body"></tbody>
+              </table>
+            </div>
+            <div class="evaluation-policy-totals" id="teaching-plan-evaluation-totals"></div>
+            <div class="form-actions"><button class="button" type="submit">Guardar y activar nueva versión</button></div>
+          </form>
+          <form class="admin-card academic-config-question-bank-card" id="question-bank-settings-form">
+            <h2>Banco de preguntas para cuestionarios</h2>
+            <p>Defina el número mínimo de preguntas que debe contener cada banco asociado a un cuestionario del Plan Docente. El banco nunca puede tener menos preguntas que las que presenta el cuestionario al estudiante.</p>
+            <label>Número mínimo de preguntas por banco
+              <input id="question-bank-minimum" name="minimumQuestions" type="number" min="1" max="200" step="1" required>
+            </label>
+            <p class="field-help">El valor se aplica a nuevos bancos y regeneraciones. Los bancos ya aprobados conservan el mínimo con el que fueron construidos.</p>
+            <div class="form-actions"><button class="button" type="submit">Guardar configuración</button></div>
+          </form>
+          <div class="admin-card academic-config-history-card">
+            <h2>Historial de versiones</h2>
+            <p class="field-help">Las versiones anteriores se conservan para mantener la trazabilidad de los Planes Docentes ya generados.</p>
+            <div class="table-scroll">
+              <table class="admin-table">
+                <thead><tr><th>Tipo</th><th>Versión</th><th>Estado</th><th>Activada</th></tr></thead>
+                <tbody id="teaching-plan-evaluation-policy-history"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -807,7 +852,10 @@
                   <p class="eyebrow">Revisión del profesor</p>
                   <h4 id="teaching-plan-preview-title">Vista previa del Plan Docente</h4>
                   <p>La vista reproduce la estructura del formato oficial para revisar el contenido antes de descargar el documento y continuar con la Guía Didáctica.</p>
-                  <p class="plan-template-applied" id="teaching-plan-template-applied"></p>
+                  <div class="plan-template-status-row">
+                    <p class="plan-template-applied" id="teaching-plan-template-applied"></p>
+                    <button class="button secondary compact hidden" id="upgrade-teaching-plan-template" type="button">Actualizar al formato vigente</button>
+                  </div>
                 </div>
               </div>
               <section class="teaching-plan-corrections hidden" id="teaching-plan-corrections" aria-labelledby="teaching-plan-corrections-title">
@@ -838,6 +886,20 @@
                   <div id="teaching-plan-corrections-history"></div>
                 </details>
               </section>
+              <aside class="teacher-correction-companion hidden plan-preview-screen-only" id="teacher-correction-companion" aria-live="polite">
+                <div class="teacher-correction-companion-heading">
+                  <div><span class="review-indicator-code" id="teacher-correction-companion-code">Criterio</span><strong id="teacher-correction-companion-title">Corrección pendiente</strong></div>
+                  <button class="icon-action" id="teacher-correction-companion-close" type="button" aria-label="Cerrar asistente de corrección" title="Cerrar">×</button>
+                </div>
+                <p class="teacher-correction-companion-observation"><strong>Qué debe corregir:</strong> <span id="teacher-correction-companion-observation"></span></p>
+                <label>Respuesta al revisor<textarea id="teacher-correction-companion-response" rows="2" maxlength="5000" placeholder="Describa brevemente qué ajustó en esta sección."></textarea></label>
+                <label class="teacher-correction-addressed"><input id="teacher-correction-companion-addressed" type="checkbox"> <span>Marcar esta corrección como atendida</span></label>
+                <div class="teacher-correction-companion-actions">
+                  <span id="teacher-correction-companion-position">1 de 1</span>
+                  <button class="button secondary compact" id="teacher-correction-companion-save" type="button">Guardar respuesta</button>
+                  <button class="button approve compact" id="teacher-correction-companion-next" type="button">Siguiente observación</button>
+                </div>
+              </aside>
               <section class="plan-methodologies-section plan-methodologies-section-top" id="plan-methodologies-section">
                 <div class="plan-methodologies-heading">
                   <div><h4>Metodologías activas y TAC</h4><p>Revise y edite estos campos aquí antes de validar el Plan Docente.</p></div>
@@ -1023,6 +1085,33 @@
         </section>
         <div class="bibliography-entry-modal-actions"><button class="button secondary" id="teaching-plan-week-cancel" type="button">Cancelar</button><button class="button" type="submit">Guardar ajustes de la semana</button></div>
       </form>
+    </section>
+  </div>
+  <div class="validation-modal-overlay hidden" id="question-bank-modal" role="dialog" aria-modal="true" aria-labelledby="question-bank-title">
+    <section class="question-bank-modal-card">
+      <div class="bibliography-entry-modal-header"><div><p class="eyebrow">Plan Docente · Cuestionario</p><h2 id="question-bank-title">Banco de preguntas</h2></div><button class="icon-button" id="question-bank-close" type="button" aria-label="Cerrar">×</button></div>
+      <div id="question-bank-status" class="question-bank-status"></div>
+      <section class="question-bank-config-section question-bank-topic-section">
+        <h4>1. Alcance temático</h4>
+        <p class="field-help">La IA solo puede generar preguntas a partir de los temas planificados para la semana de esta actividad.</p>
+        <div id="question-bank-topics" class="question-bank-topic-list"></div>
+      </section>
+      <section class="question-bank-config-section question-bank-types-section">
+        <h4>2. Tipos y cantidad de preguntas</h4>
+        <p class="field-help" id="question-bank-minimum-help"></p>
+        <div id="question-bank-types" class="question-bank-type-list"></div>
+        <div class="question-bank-total">Total configurado: <strong id="question-bank-total">0</strong></div>
+      </section>
+      <section class="question-bank-config-section">
+        <h4>3. Indicaciones adicionales para IA</h4>
+        <textarea id="question-bank-instructions" rows="4" maxlength="4000" placeholder="Ejemplo: priorice preguntas de aplicación, evite formulaciones memorísticas y use situaciones contextualizadas."></textarea>
+        <div class="form-actions"><button class="button" id="question-bank-generate" type="button">Generar banco con IA</button></div>
+      </section>
+      <section class="question-bank-questions-section">
+        <div class="bibliography-section-header"><div><h4>Preguntas del banco</h4><p>Puede editar cada pregunta o regenerarla individualmente con indicaciones adicionales.</p></div></div>
+        <div id="question-bank-questions"></div>
+      </section>
+      <div class="question-bank-footer"><button class="button secondary" id="question-bank-cancel" type="button">Cerrar</button><button class="button" id="question-bank-approve" type="button">Aprobar banco de preguntas</button></div>
     </section>
   </div>
   <div class="validation-modal-overlay hidden" id="knowledge-retire-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-retire-title">

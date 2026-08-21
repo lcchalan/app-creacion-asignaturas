@@ -139,6 +139,7 @@ test("valida semanas, horas, resultados, contenidos y evaluación del plan", () 
     learningOutcomes: ["Analiza principios de diseño curricular."],
     unitContents: ["Unidad 1. Fundamentos", "Unidad 2. Aplicación"],
     planCategory: "CONCEPTUAL",
+    evaluationRules: conceptualRules,
   }));
   assert.equal(planMatrixRows(plan).length, 8);
 });
@@ -151,6 +152,7 @@ test("controla que las horas de las actividades coincidan con ACD, APE y AA de c
     learningOutcomes: ["Analiza principios de diseño curricular."],
     unitContents: ["Unidad 1. Fundamentos", "Unidad 2. Aplicación"],
     planCategory: "CONCEPTUAL",
+    evaluationRules: conceptualRules,
   }), /distribución de horas por actividad/);
 });
 
@@ -163,6 +165,7 @@ test("resume las validaciones automáticas para la vista previa del Plan Docente
     learningOutcomes: ["Analiza principios de diseño curricular."],
     unitContents: ["Unidad 1. Fundamentos", "Unidad 2. Aplicación"],
     planCategory: "CONCEPTUAL",
+    evaluationRules: conceptualRules,
   });
   assert.equal(checks.length, 9);
   assert.ok(checks.every((check) => check.ok));
@@ -181,6 +184,7 @@ test("la vista previa identifica horas y totales de evaluación inconsistentes",
     learningOutcomes: ["Analiza principios de diseño curricular."],
     unitContents: ["Unidad 1. Fundamentos", "Unidad 2. Aplicación"],
     planCategory: "CONCEPTUAL",
+    evaluationRules: conceptualRules,
   });
   assert.equal(checks.find((check) => check.code === "HOURS")!.ok, false);
   assert.equal(checks.find((check) => check.code === "TOTALS")!.ok, false);
@@ -198,6 +202,7 @@ test("rechaza contenidos inventados por la generación", () => {
     learningOutcomes: ["Analiza principios de diseño curricular."],
     unitContents: ["Unidad 1. Fundamentos", "Unidad 2. Aplicación"],
     planCategory: "CONCEPTUAL",
+    evaluationRules: conceptualRules,
   }), /no consta literalmente/);
 });
 

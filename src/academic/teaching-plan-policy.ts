@@ -229,14 +229,37 @@ export class TeachingPlanConsistencyError extends Error {
   }
 }
 
-export type EvaluationRule = {
-  code: "AC1" | "AC2" | "AC3" | "AC4" | "AC5";
-  component: "ACD" | "APE" | "AA";
-  week: number;
-  grade: number;
-  weight: number;
-};
+export const evaluationRuleSchema = z.object({
+  code: z.enum(["AC1", "AC2", "AC3", "AC4", "AC5"]),
+  component: teachingActivityComponentSchema,
+  week: z.number().int().min(1).max(100),
+  grade: z.number().min(0).max(10),
+  weight: z.number().int().min(1).max(100),
+});
 
+export const evaluationRulesSchema = z.array(evaluationRuleSchema).length(5).superRefine((rules, context) => {
+  const expectedCodes = ["AC1", "AC2", "AC3", "AC4", "AC5"];
+  const codes = rules.map((rule) => rule.code);
+  if (new Set(codes).size !== expectedCodes.length || expectedCodes.some((code) => !codes.includes(code as typeof codes[number]))) {
+    context.addIssue({ code: "custom", message: "La distribución debe contener exactamente AC1, AC2, AC3, AC4 y AC5." });
+  }
+  const weeks = rules.map((rule) => rule.week);
+  if (new Set(weeks).size !== weeks.length) {
+    context.addIssue({ code: "custom", message: "Cada actividad calificada debe estar asignada a una semana diferente." });
+  }
+  const totalGrade = rules.reduce((sum, rule) => sum + rule.grade, 0);
+  if (Math.abs(totalGrade - 10) > 0.001) {
+    context.addIssue({ code: "custom", message: `La calificación total debe sumar 10 puntos; actualmente suma ${totalGrade}.` });
+  }
+  const totalWeight = rules.reduce((sum, rule) => sum + rule.weight, 0);
+  if (totalWeight !== 100) {
+    context.addIssue({ code: "custom", message: `El peso total debe sumar 100%; actualmente suma ${totalWeight}%.` });
+  }
+});
+
+export type EvaluationRule = z.infer<typeof evaluationRuleSchema>;
+
+// Baseline institucional usado solo para bootstrap/compatibilidad y pruebas. En runtime, la fuente autoritativa es la versión persistida en PostgreSQL.
 const evaluationRules: Record<PlanCategory, EvaluationRule[]> = {
   CONCEPTUAL: [
     { code: "AC1", component: "ACD", week: 2, grade: 1, weight: 10 },
@@ -322,6 +345,7 @@ export type TeachingPlanConsistencyInput = {
   learningOutcomes: string[];
   unitContents: string[];
   planCategory: PlanCategory;
+  evaluationRules: EvaluationRule[];
 };
 
 type InstitutionalContentKind = "UNIT" | "CONTENT" | "SUBCONTENT";
@@ -495,7 +519,7 @@ export function assertTeachingPlanConsistency(
     );
   }
 
-  const expectedRules = evaluationRulesFor(input.planCategory);
+  const expectedRules = input.evaluationRules;
   if (expectedRules.some((rule) => rule.week > input.totalWeeks)) {
     throw new TeachingPlanConsistencyError(`El tipo de asignatura requiere al menos ${Math.max(...expectedRules.map((rule) => rule.week))} semanas lectivas.`);
   }
@@ -576,7 +600,7 @@ export function teachingPlanReviewChecks(
     return sums.ACD === week.acdHours && sums.APE === week.apeHours && sums.AA === week.aaHours;
   });
 
-  const expectedRules = evaluationRulesFor(input.planCategory);
+  const expectedRules = input.evaluationRules;
   const evaluationOk = plan.evaluatedActivities.length === expectedRules.length && expectedRules.every((rule) =>
     plan.evaluatedActivities.some((activity) =>
       activity.code === rule.code && activity.component === rule.component && activity.week === rule.week &&

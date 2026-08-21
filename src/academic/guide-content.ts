@@ -196,6 +196,17 @@ export const educationalResourceSchema = z.strictObject({
   script: z.union([interactiveScriptSchema, audiovisualScriptSchema]),
   bibliography: z.array(resourceBibliographySchema).min(1),
 });
+
+// Structured Output must receive only the script branch expected by the
+// selected resource kind. The generic schema remains the persisted contract.
+export const interactiveEducationalResourceSchema = educationalResourceSchema.extend({
+  script: interactiveScriptSchema,
+});
+
+export const audiovisualEducationalResourceSchema = educationalResourceSchema.extend({
+  script: audiovisualScriptSchema,
+});
+
 export type EducationalResource = z.infer<typeof educationalResourceSchema>;
 
 export const guideAiSectionSchema = z.strictObject({
