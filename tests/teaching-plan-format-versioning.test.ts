@@ -22,5 +22,5 @@ test("un borrador puede adoptar el formato vigente sin regenerar el contenido ac
 test("la descarga JSON del Plan Docente entrega el documento canónico", () => {
   assert.match(indexSource, /canonicalTeachingPlanDocumentSchema\.parse\(canonicalBundle\.canonical\)/);
   assert.match(indexSource, /X-Canonical-Schema-Version/);
-  assert.match(indexSource, /canonicalTeachingPlanToWordInput\(canonicalBundle\.canonical, logo\)/);
+  assert.match(indexSource, /canonicalTeachingPlanToWordInput\(canonicalBundle\.canonical, logo, canonicalBundle\.templateProfile\)/);
 });

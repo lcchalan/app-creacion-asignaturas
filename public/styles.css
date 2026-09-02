@@ -1091,3 +1091,47 @@ input[readonly]{background:#f1f4f7;color:#405269;cursor:not-allowed}.academic-pr
   .teacher-correction-companion-actions > span { margin-right: 0; }
   .teacher-correction-companion-actions .button { width: 100%; }
 }
+
+
+/* v33.0.3 · validación final del Plan Docente */
+.teaching-plan-review-check {
+  position: relative;
+}
+.teaching-plan-review-check.ok {
+  border-color: #cfe8da;
+  background: #f7fcf9;
+}
+.teaching-plan-review-check.error {
+  border-color: #efb5b5;
+  background: #fff7f7;
+}
+.teaching-plan-review-check.error .icon {
+  background: #fde2e2;
+  color: #a61b1b;
+}
+.teaching-plan-review-check.warning {
+  border-color: #efd28a;
+  background: #fffaf0;
+}
+.teaching-plan-review-check.warning .icon {
+  background: #fff0c7;
+  color: #8a5b00;
+}
+.teaching-plan-review-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-top: .65rem;
+}
+.teaching-plan-review-check-actions .button {
+  width: auto;
+}
+.teaching-plan-review-status.blocked {
+  border-color: #efb5b5;
+  background: #fff7f7;
+  color: #8a1c1c;
+}
+#teacher-plan-review-notes-help {
+  display: block;
+  margin-top: .35rem;
+}

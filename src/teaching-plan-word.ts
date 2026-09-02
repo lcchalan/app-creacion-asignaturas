@@ -242,6 +242,40 @@ function categorySelectionLabel(category: PlanCategory) {
 
 function identificationTable(input: TeachingPlanWordInput) {
   const totalHours = input.offering.acdHours + input.offering.apeHours + input.offering.aaHours;
+  if (input.templateProfile?.profile === "DYNAMIC_MODULAR") {
+    const widths = scaledColumnWidths([2200, 2380, 2380, 2400], PORTRAIT_WIDTH);
+    const mergedValue = (label: string, value: string) => new TableRow({ children: [
+      tableCell(label, { width: widths[0]!, bold: true }),
+      tableCell(value, { width: PORTRAIT_WIDTH - widths[0]!, columnSpan: 3 }),
+    ] });
+    return fixedTable(PORTRAIT_WIDTH, widths, [
+      mergedValue("Facultad", input.project.faculty),
+      mergedValue("Carrera", input.project.career),
+      mergedValue("Asignatura", input.project.subjectName),
+      mergedValue("Código", input.project.subjectCode),
+      new TableRow({ children: [
+        tableCell("Número de créditos", { width: widths[0]!, bold: true }),
+        tableCell(String(input.offering.credits ?? "—"), { width: widths[1]! }),
+        tableCell("Total horas", { width: widths[2]!, bold: true }),
+        tableCell(String(totalHours), { width: widths[3]!, alignment: AlignmentType.CENTER }),
+      ] }),
+      new TableRow({ children: [
+        tableCell("Total de horas por componente de aprendizaje", { width: widths[0]!, bold: true }),
+        tableCell("Aprendizaje en contacto con el docente (ACD)", { width: widths[1]!, bold: true, alignment: AlignmentType.CENTER }),
+        tableCell("Aprendizaje Práctico-Experimental (APE)", { width: widths[2]!, bold: true, alignment: AlignmentType.CENTER }),
+        tableCell("Aprendizaje Autónomo (AA)", { width: widths[3]!, bold: true, alignment: AlignmentType.CENTER }),
+      ] }),
+      new TableRow({ children: [
+        tableCell(`Total: ${totalHours}`, { width: widths[0]!, bold: true }),
+        tableCell(String(input.offering.acdHours), { width: widths[1]!, alignment: AlignmentType.CENTER }),
+        tableCell(String(input.offering.apeHours), { width: widths[2]!, alignment: AlignmentType.CENTER }),
+        tableCell(String(input.offering.aaHours), { width: widths[3]!, alignment: AlignmentType.CENTER }),
+      ] }),
+      mergedValue("Tipo de asignatura", categorySelectionLabel(input.offering.planCategory)),
+      mergedValue("Periodo académico/nivel", `${input.project.academicPeriod} / ${input.project.level || "—"}`),
+      mergedValue("Período académico ordinario/semestre", input.offering.semester ?? "—"),
+    ]);
+  }
   if (input.templateProfile?.profile === "CURRENT_MODULAR") {
     const widths = scaledColumnWidths([2200, 2380, 2380, 2400], PORTRAIT_WIDTH);
     const mergedValue = (label: string, value: string) => new TableRow({ children: [
@@ -387,21 +421,72 @@ function weekActivityLines(week: TeachingPlanContent["sequences"][number]["weeks
   return week.activities;
 }
 
+function scheduleFieldsForTemplate(input: TeachingPlanWordInput) {
+  if (input.templateProfile?.profile === "DYNAMIC_MODULAR" && input.templateProfile.scheduleFields?.length) {
+    return input.templateProfile.scheduleFields ?? [];
+  }
+  if (input.templateProfile?.profile === "CURRENT_MODULAR") {
+    return ["WEEK", "CONTENTS", "ACD_HOURS", "APE_HOURS", "AA_HOURS", "ACTIVITIES", "RESOURCES"] as const;
+  }
+  return ["WEEK", "CONTENTS", "ACD_HOURS", "APE_HOURS", "AA_HOURS", "ACTIVITIES", "RESOURCES", "ASSESSMENT_INSTRUMENT", "GRADE"] as const;
+}
+
+const scheduleFieldLabels: Record<string, string> = {
+  WEEK: "Semana",
+  CONTENTS: "Contenidos",
+  ACD_HOURS: "ACD",
+  APE_HOURS: "APE",
+  AA_HOURS: "AA",
+  ACTIVITIES: "Actividades de aprendizaje",
+  RESOURCES: "Recursos de aprendizaje",
+  ASSESSMENT_INSTRUMENT: "Instrumento de evaluación",
+  GRADE: "Calificación",
+};
+
+const scheduleFieldBaseWidths: Record<string, number> = {
+  WEEK: 800,
+  CONTENTS: 2450,
+  ACD_HOURS: 550,
+  APE_HOURS: 550,
+  AA_HOURS: 550,
+  ACTIVITIES: 3000,
+  RESOURCES: 1900,
+  ASSESSMENT_INSTRUMENT: 1900,
+  GRADE: 1260,
+};
+
+function scheduleCellForField(
+  field: string,
+  week: TeachingPlanContent["sequences"][number]["weeks"][number],
+  width: number,
+  contentLabels: Map<string, string>,
+) {
+  if (field === "WEEK") return tableCell(String(week.week), { width, alignment: AlignmentType.CENTER });
+  if (field === "CONTENTS") return tableCell(separatedParagraphs(week.unitContents.map((value) => contentLabels.get(normalizedContentKey(value)) ?? value)), { width });
+  if (field === "ACD_HOURS") return tableCell(String(week.acdHours), { width, alignment: AlignmentType.CENTER });
+  if (field === "APE_HOURS") return tableCell(String(week.apeHours), { width, alignment: AlignmentType.CENTER });
+  if (field === "AA_HOURS") return tableCell(String(week.aaHours), { width, alignment: AlignmentType.CENTER });
+  if (field === "ACTIVITIES") return tableCell(separatedParagraphs(weekActivityLines(week)), { width });
+  if (field === "RESOURCES") return tableCell(separatedParagraphs(week.resources), { width });
+  if (field === "ASSESSMENT_INSTRUMENT") return tableCell(week.assessmentInstrument || "—", { width });
+  if (field === "GRADE") return tableCell(week.grade ? week.grade.toFixed(1) : "—", { width, alignment: AlignmentType.CENTER });
+  return tableCell("—", { width });
+}
+
+
 function scheduleTables(input: TeachingPlanWordInput) {
   const children: Array<Paragraph | Table> = [
     sectionBand("D. Programación del proceso de aprendizaje de la asignatura", LANDSCAPE_WIDTH),
     textParagraph("1. Descripción de la secuencia didáctica", { bold: true, size: 22, before: 180, after: 100 }),
   ];
+  const fields = [...scheduleFieldsForTemplate(input)];
   const currentFormat = input.templateProfile?.profile === "CURRENT_MODULAR";
-  const widths = scaledColumnWidths(
-    currentFormat
-      ? [850, 2800, 650, 650, 650, 4000, 3360]
-      : [800, 2450, 550, 550, 550, 3000, 1900, 1900, 1260],
-    LANDSCAPE_WIDTH,
-  );
-  const headers = currentFormat
-    ? ["Semana", "Contenidos", "ACD", "APE", "AA", "Actividades de aprendizaje", "Recursos de aprendizaje"]
-    : ["Semana", "Contenidos", "ACD", "APE", "AA", "Actividades de aprendizaje", "Recursos de aprendizaje", "Instrumentos de evaluación", "Calificación"];
+  const legacyFormat = input.templateProfile?.profile === "LEGACY_MODULAR";
+  const widths = currentFormat
+    ? scaledColumnWidths([850, 2800, 650, 650, 650, 4000, 3360], LANDSCAPE_WIDTH)
+    : legacyFormat
+      ? scaledColumnWidths([800, 2450, 550, 550, 550, 3000, 1900, 1900, 1260], LANDSCAPE_WIDTH)
+      : scaledColumnWidths(fields.map((field) => scheduleFieldBaseWidths[field] ?? 1200), LANDSCAPE_WIDTH);
   const contentLabels = numberedContentMap(input.offering.unitContents);
   for (const sequence of input.plan.sequences) {
     children.push(fixedTable(LANDSCAPE_WIDTH, [LANDSCAPE_WIDTH], [new TableRow({ children: [
@@ -421,25 +506,12 @@ function scheduleTables(input: TeachingPlanWordInput) {
       ], { width: sequenceInfoWidths[1]!, fill: LIGHT_GRAY }),
     ] })]));
     children.push(fixedTable(LANDSCAPE_WIDTH, widths, [
-      new TableRow({ tableHeader: true, children: headers.map((label, index) => tableCell(label, {
+      new TableRow({ tableHeader: true, children: fields.map((field, index) => tableCell(scheduleFieldLabels[field] ?? field, {
         width: widths[index] ?? 1000, bold: true, size: 16, fill: LIGHT_GRAY, alignment: AlignmentType.CENTER,
       })) }),
-      ...sequence.weeks.map((week) => {
-        const base = [
-          tableCell(String(week.week), { width: widths[0] ?? 800, alignment: AlignmentType.CENTER }),
-          tableCell(separatedParagraphs(week.unitContents.map((value) => contentLabels.get(normalizedContentKey(value)) ?? value)), { width: widths[1] ?? 2450 }),
-          tableCell(String(week.acdHours), { width: widths[2] ?? 550, alignment: AlignmentType.CENTER }),
-          tableCell(String(week.apeHours), { width: widths[3] ?? 550, alignment: AlignmentType.CENTER }),
-          tableCell(String(week.aaHours), { width: widths[4] ?? 550, alignment: AlignmentType.CENTER }),
-          tableCell(separatedParagraphs(weekActivityLines(week)), { width: widths[5] ?? 3000 }),
-          tableCell(separatedParagraphs(week.resources), { width: widths[6] ?? 1900 }),
-        ];
-        if (!currentFormat) {
-          base.push(tableCell(week.assessmentInstrument, { width: widths[7] ?? 1900 }));
-          base.push(tableCell(week.grade ? week.grade.toFixed(1) : "—", { width: widths[8] ?? 1260, alignment: AlignmentType.CENTER }));
-        }
-        return new TableRow({ children: base });
-      }),
+      ...sequence.weeks.map((week) => new TableRow({
+        children: fields.map((field, index) => scheduleCellForField(field, week, widths[index] ?? 1000, contentLabels)),
+      })),
     ]));
     children.push(textParagraph("", { after: 120 }));
   }
@@ -505,11 +577,64 @@ function recoveryEvaluationTable(input: TeachingPlanWordInput, totalWidth: numbe
 
 function evaluationTable(input: TeachingPlanWordInput, totalWidth = PORTRAIT_WIDTH) {
   const currentFormat = input.templateProfile?.profile === "CURRENT_MODULAR";
+  const dynamicFormat = input.templateProfile?.profile === "DYNAMIC_MODULAR";
+  const sorted = [...input.plan.evaluatedActivities].sort((a, b) => a.week - b.week);
+
+  if (dynamicFormat) {
+    const fields = input.templateProfile?.evaluationFields?.length
+      ? input.templateProfile.evaluationFields
+      : ["COMPONENT", "ACTIVITY", "DELIVERABLE", "INSTRUMENT", "WEEK", "GRADE", "WEIGHT"];
+    const labels: Record<string, string> = {
+      COMPONENT: "Componente",
+      ACTIVITY: "Actividad",
+      WORK_STRATEGIES: "Estrategias de trabajo",
+      DELIVERABLE: "Entregable",
+      INSTRUMENT: "Instrumento de evaluación",
+      WEEK: "Semana ejecución*",
+      GRADE: "Calificación",
+      WEIGHT: "Peso",
+    };
+    const baseWidths: Record<string, number> = {
+      COMPONENT: 900,
+      ACTIVITY: 2100,
+      WORK_STRATEGIES: 2200,
+      DELIVERABLE: 1900,
+      INSTRUMENT: 1500,
+      WEEK: 1350,
+      GRADE: 1000,
+      WEIGHT: 950,
+    };
+    const widths = scaledColumnWidths(fields.map((field) => baseWidths[field] ?? 1200), totalWidth);
+    const strategyText = (value: string) => String(value || "").split(/\r?\n|[•·]\s*/u).map((item) => item.trim()).filter(Boolean).map((item) => `• ${item}`).join("\n") || "—";
+    const cellFor = (field: string, activity: TeachingPlanContent["evaluatedActivities"][number], width: number) => {
+      const date = weekDateRange(input.period?.startsAt, activity.week);
+      if (field === "COMPONENT") return tableCell(activity.component, { width, bold: true, alignment: AlignmentType.CENTER });
+      if (field === "ACTIVITY") return tableCell(`${activity.code}. ${activity.activity}`, { width });
+      if (field === "WORK_STRATEGIES") return tableCell(strategyText(activity.workStrategies), { width });
+      if (field === "DELIVERABLE") return tableCell(activity.deliverable || "—", { width });
+      if (field === "INSTRUMENT") return tableCell(activity.instrument, { width });
+      if (field === "WEEK") return tableCell(`Semana ${activity.week}${date ? `\n${date}` : ""}`, { width, alignment: AlignmentType.CENTER });
+      if (field === "GRADE") return tableCell(activity.grade.toFixed(1), { width, alignment: AlignmentType.CENTER });
+      if (field === "WEIGHT") return tableCell(`${activity.weight}%`, { width, alignment: AlignmentType.CENTER });
+      return tableCell("—", { width });
+    };
+    return fixedTable(totalWidth, widths, [
+      new TableRow({ tableHeader: true, children: fields.map((field, index) => tableCell(labels[field] ?? field, { width: widths[index] ?? 1000, bold: true, fill: LIGHT_GRAY, alignment: AlignmentType.CENTER })) }),
+      ...sorted.map((activity) => new TableRow({ children: fields.map((field, index) => cellFor(field, activity, widths[index] ?? 1000)) })),
+      new TableRow({ children: fields.map((field, index) => {
+        const width = widths[index] ?? 1000;
+        if (field === "COMPONENT") return tableCell("TOTAL", { width, bold: true, alignment: AlignmentType.RIGHT });
+        if (field === "GRADE") return tableCell(sorted.reduce((sum, item) => sum + item.grade, 0).toFixed(1), { width, bold: true, alignment: AlignmentType.CENTER });
+        if (field === "WEIGHT") return tableCell(`${sorted.reduce((sum, item) => sum + item.weight, 0)}%`, { width, bold: true, alignment: AlignmentType.CENTER });
+        return tableCell("", { width });
+      }) }),
+    ]);
+  }
+
   const widths = scaledColumnWidths(
     currentFormat ? [850, 1900, 2000, 1400, 1300, 950, 960] : [1100, 3200, 1550, 1500, 1010, 1000],
     totalWidth,
   );
-  const sorted = [...input.plan.evaluatedActivities].sort((a, b) => a.week - b.week);
   const headerLabels = currentFormat
     ? ["Componente", "Actividad", "Estrategias de trabajo", "Instrumento de evaluación", "Semana ejecución*", "Calificación", "Peso"]
     : ["Componente", "Actividad", "Instrumento de evaluación", "Semana ejecución*", "Calificación", "Peso"];

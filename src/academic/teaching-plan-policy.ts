@@ -184,6 +184,7 @@ export const teachingPlanEvaluationSchema = z.object({
   week: z.number().int().min(1).max(100),
   activity: z.string().trim().min(3).max(3000),
   workStrategies: z.string().trim().min(3).max(5000),
+  deliverable: z.string().trim().max(3000).default(""),
   instrument: z.string().trim().min(2).max(2000),
   instrumentConfig: teachingPlanInstrumentConfigSchema.optional(),
   grade: z.number().min(0).max(10),
@@ -191,6 +192,7 @@ export const teachingPlanEvaluationSchema = z.object({
 });
 
 export const teachingPlanAiEvaluationSchema = teachingPlanEvaluationSchema.extend({
+  deliverable: z.string().trim().min(2).max(3000),
   instrumentConfig: teachingPlanInstrumentConfigSchema,
 });
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -390,7 +390,7 @@ export async function restoreKnowledgeFromGit(): Promise<KnowledgeRestoreSummary
 
   const documentPlans: Array<
     | { kind: "CREATE"; version: number; item: KnowledgeGitSnapshot["documents"][number] }
-    | { kind: "ALIGN"; id: string; item: KnowledgeGitSnapshot["documents"][number] }
+    | { kind: "ALIGN"; id: string; version: number; storagePath: string; item: KnowledgeGitSnapshot["documents"][number] }
   > = [];
 
   for (const item of snapshot.documents) {
@@ -412,7 +412,7 @@ export async function restoreKnowledgeFromGit(): Promise<KnowledgeRestoreSummary
         });
         continue;
       }
-      documentPlans.push({ kind: "ALIGN", id: active[0].id, item });
+      documentPlans.push({ kind: "ALIGN", id: active[0].id, version: active[0].version, storagePath: active[0].storagePath, item });
       continue;
     }
 
@@ -550,6 +550,42 @@ export async function restoreKnowledgeFromGit(): Promise<KnowledgeRestoreSummary
 
   if (conflicts.length) throw new Error(conflictMessage(conflicts));
 
+  // V33.0.5.2: restore Git snapshot into immutable local storage
+  const restoredDocumentStoragePaths = new Map<string, string>();
+  await mkdir(absolutePath(PROJECT_ROOT, "knowledge/uploads"), { recursive: true });
+  for (const plan of documentPlans) {
+    const item = plan.item;
+    if (plan.kind === "ALIGN" && !plan.storagePath.startsWith("knowledge/official/")) {
+      const existingChecksum = await checksumStoredDocument(plan.storagePath);
+      if (existingChecksum === item.checksum) {
+        restoredDocumentStoragePaths.set(item.key, plan.storagePath);
+        continue;
+      }
+    }
+
+    const safeKey = item.key
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-zA-Z0-9_-]/g, "_")
+      .slice(0, 120) || "knowledge";
+    const safeName = (item.originalName || `${item.key}.bin`)
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+    const relativePath = `knowledge/uploads/${safeKey}-restore-v${plan.version}-${item.checksum.slice(0, 16)}-${safeName}`;
+    const targetPath = absolutePath(PROJECT_ROOT, relativePath);
+
+    if (await fileExists(targetPath)) {
+      const existingChecksum = sha256(await readFile(targetPath));
+      if (existingChecksum !== item.checksum) {
+        throw new Error(`El archivo historico de restauracion ya existe pero no coincide con Git: ${relativePath}.`);
+      }
+    } else {
+      await writeFile(targetPath, item.bytes);
+    }
+    restoredDocumentStoragePaths.set(item.key, relativePath);
+  }
+
   const now = new Date();
   const summary: KnowledgeRestoreSummary = {
     documentsCreated: 0,
@@ -568,7 +604,7 @@ export async function restoreKnowledgeFromGit(): Promise<KnowledgeRestoreSummary
       const common = {
         title: item.title,
         status: "ACTIVE" as const,
-        storagePath: item.gitPath,
+        storagePath: restoredDocumentStoragePaths.get(item.key)!,
         mimeType: item.mimeType,
         originalName: item.originalName,
         contentMarkdown: item.contentMarkdown,

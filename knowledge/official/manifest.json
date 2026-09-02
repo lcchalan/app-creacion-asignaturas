@@ -45,7 +45,7 @@
       "status": "ACTIVE",
       "gitPath": "knowledge/official/fpdsm.docx",
       "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "originalName": "Formato_plan_docente_Sistema_modular.docx",
+      "originalName": "formato-plan-docente-modular-v1.docx",
       "checksum": "f2b025222c7cf17a04a3d18c5c9eb83695f95a8bb2ab68b52c5f81b1d842d0e7",
       "contentMarkdown": "Plantilla oficial que define la estructura, apartados, tablas, campos obligatorios, matriz de contribución, planificación semanal, evaluación, datos docentes y bibliografía del Plan Docente modular",
       "priority": 3,
@@ -53,16 +53,15 @@
         "Grado"
       ],
       "modalities": [
-        "A distancia",
         "En línea"
       ],
       "durations": [
         8
       ],
       "subjectTypes": [
-        "Tipo A - Conceptual",
-        "Tipo B - Activa",
-        "Tipo C - Integradora"
+        "Activa",
+        "Conceptual",
+        "Integradora"
       ],
       "appliesToAll": false,
       "resourceKind": "PLAN_TEMPLATE",

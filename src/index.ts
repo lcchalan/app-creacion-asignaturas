@@ -1,6 +1,7 @@
 import "dotenv/config";
 import OpenAI from "openai";
 import { wrapPersistentOpenAI } from "./ai/persistent-openai.js";
+import { unexpectedUserFacingError, userFacingServiceError } from "./http/user-facing-error.js";
 import {
   aiJobStatusForUser,
   enterAiJobExecution,
@@ -146,6 +147,7 @@ import {
   type KnowledgeResourceKind,
 } from "./academic/knowledge-lifecycle.js";
 import { inspectPlanTemplateProfile, type PlanTemplateProfile } from "./academic/plan-template-profile.js";
+import { teachingPlanQuestionBankReadinessCheck } from "./academic/teaching-plan-review-readiness.js";
 import { syncOfficialKnowledgeSafely } from "./services/official-knowledge-sync.js";
 import {
   nextTeachingPlanStage,
@@ -760,7 +762,20 @@ async function prepareNewTeachingPlanReviewWorkflow(project: {
 }
 
 async function assertTeachingPlanTeacherCanEdit(teachingPlanId: string) {
-  const workflow = await database.teachingPlanReviewWorkflow.findUnique({ where: { teachingPlanId } });
+  const plan = await database.teachingPlan.findUnique({
+    where: { id: teachingPlanId },
+    select: {
+      administrativelyClosedAt: true,
+      reviewWorkflow: { select: { status: true } },
+    },
+  });
+  if (plan?.administrativelyClosedAt) {
+    throw Object.assign(
+      new Error("El ciclo actual del Plan Docente fue cerrado administrativamente y permanece disponible solo para consulta. Administración debe habilitar un nuevo ciclo para continuar."),
+      { statusCode: 409, code: "TEACHING_PLAN_CYCLE_ADMIN_CLOSED" },
+    );
+  }
+  const workflow = plan?.reviewWorkflow;
   if (!workflow || workflow.status === "CHANGES_REQUESTED" || workflow.status === "CANCELLED") return;
   const message = workflow.status === "APPROVED"
     ? "El Plan Docente ya cuenta con aprobación institucional. Para modificarlo debe iniciar una nueva versión académica."
@@ -1321,6 +1336,7 @@ const teachingPlanWeekEditSchema = z.object({
     code: z.enum(["AC1", "AC2", "AC3", "AC4", "AC5"]),
     activity: z.string().trim().min(3).max(3000),
     workStrategies: z.string().trim().min(3).max(5000),
+    deliverable: z.string().trim().max(3000).default(""),
     instrumentConfig: teachingPlanInstrumentConfigSchema,
   }).nullable().optional(),
 });
@@ -1680,6 +1696,7 @@ async function replaceTeachingPlanEvaActivities(
             actualGrade: evaluated?.grade ?? null,
             weight: evaluated?.weight ?? null,
             workStrategies: evaluated?.workStrategies ?? null,
+            deliverable: evaluated?.deliverable || null,
             workStrategyItems: listItems(evaluated?.workStrategies),
           },
           create: {
@@ -1698,6 +1715,7 @@ async function replaceTeachingPlanEvaActivities(
             actualGrade: evaluated?.grade ?? null,
             weight: evaluated?.weight ?? null,
             workStrategies: evaluated?.workStrategies ?? null,
+            deliverable: evaluated?.deliverable || null,
             workStrategyItems: listItems(evaluated?.workStrategies),
           },
         });
@@ -1758,6 +1776,7 @@ function teachingPlanActivityApiView(activity: {
   actualGrade: number | null;
   weight: number | null;
   workStrategies: string | null;
+  deliverable: string | null;
   workStrategyItems: string[];
   instrument: null | {
     id: string;
@@ -1780,6 +1799,7 @@ function teachingPlanActivityApiView(activity: {
     resource: activity.resource || activity.resources[0] || null,
     activityHours: activity.hours,
     workStrategies: activity.workStrategyItems.length ? activity.workStrategyItems : listItems(activity.workStrategies),
+    deliverable: activity.deliverable || null,
     eva: activity.evaluatedCode && activity.actualGrade !== null ? {
       instrumentMaximumScore: 10,
       activityMaximumGrade: activity.actualGrade,
@@ -2066,8 +2086,8 @@ async function knowledgePlanTemplateProfile(document: KnowledgeFileRecord): Prom
   const isDocx = original.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || /\.docx$/iu.test(original.originalName || "");
   if (!isDocx) {
     return {
-      identificationColumns: 0, scheduleColumns: 0, scheduleIncludesInstrument: false, scheduleIncludesGrade: false,
-      evaluationColumns: 0, evaluationIncludesWorkStrategies: false, profile: "UNKNOWN",
+      identificationColumns: 0, identificationIncludesTotalHours: false, scheduleColumns: 0, scheduleIncludesInstrument: false, scheduleIncludesGrade: false, scheduleFields: [],
+      evaluationColumns: 0, evaluationIncludesWorkStrategies: false, evaluationIncludesDeliverable: false, evaluationFields: [], confidence: 0, warnings: ["El archivo no es DOCX."], profile: "UNKNOWN",
     };
   }
   const bytes = await readFile(new URL(`../${original.storagePath}`, import.meta.url));
@@ -2931,7 +2951,8 @@ async function activeGuideContext(context: PromptContext, projectId?: string) {
   return { prompt, resourceSpecification, institutionalDocuments: guideSourceDocuments, promptContent, inputFiles };
 }
 
-async function activePlanContext(context: PromptContext) {
+async function activePlanContext(context: PromptContext, templateSnapshotId: string | null = null) {
+  // V33.0.5.1: preserve teaching plan template snapshot during corrections
   const allDocuments = await database.knowledgeDocument.findMany({
     where: { key: { not: "indicadores-generales" } },
     orderBy: [{ priority: "asc" }, { activatedAt: "asc" }],
@@ -2940,7 +2961,10 @@ async function activePlanContext(context: PromptContext) {
     && item.appliesToPlan
     && (item.appliesToAll || appliesToContext(item, context))
     && (!item.effectiveFrom || item.effectiveFrom <= new Date()));
-  const template = preferredSingularKnowledgeVersion(documents.filter((item) => item.resourceKind === "PLAN_TEMPLATE"));
+  const activeTemplate = preferredSingularKnowledgeVersion(documents.filter((item) => item.resourceKind === "PLAN_TEMPLATE"));
+  const template = templateSnapshotId
+    ? await teachingPlanTemplateSnapshot(templateSnapshotId, context)
+    : activeTemplate;
   const prompt = preferredSingularKnowledgeVersion(documents.filter((item) => item.resourceKind === "PLAN_PROMPT"));
   const institutionalDocuments = documents.filter((item) => item.resourceKind === "INSTITUTIONAL_DOCUMENT");
 
@@ -3053,6 +3077,7 @@ async function assertTeachingPlanUsesCurrentTemplate(snapshotId: string | null, 
   return teachingPlanTemplateSnapshot(snapshotId, context);
 }
 
+// V33.0.6.1: project.teachingPlan representa exclusivamente el ciclo actual; los ciclos historicos permanecen en project.teachingPlans.
 async function buildAndPersistCanonicalTeachingPlan(projectId: string) {
   const project = await database.project.findUnique({
     where: { id: projectId },
@@ -4505,7 +4530,7 @@ URL adicional: ${body.url || "No indicada"}`,
           select: {
             id: true, name: true, subjectCode: true, subjectName: true,
             professorName: true, academicPeriod: true, status: true,
-            totalWeeks: true, updatedAt: true, ownerId: true,
+            totalWeeks: true, updatedAt: true, ownerId: true, currentTeachingPlanId: true,
             weeks: { select: { status: true } },
             academicOffering: { select: {
               programId: true, modalityId: true,
@@ -4513,7 +4538,9 @@ URL adicional: ${body.url || "No indicada"}`,
               modality: { select: { id: true, name: true } },
             } },
             teachingPlan: { select: {
-              id: true, version: true, teacherReviewedAt: true,
+              id: true, cycleNumber: true, version: true, status: true, teacherReviewedAt: true,
+              administrativelyClosedAt: true, administrativeCloseReason: true, administrativeCloseNotes: true,
+              administrativelyClosedBy: { select: { id: true, displayName: true } },
               reviewWorkflow: { select: {
                 id: true, status: true,
                 stages: { orderBy: { sortOrder: "asc" }, select: {
@@ -4522,6 +4549,17 @@ URL adicional: ${body.url || "No indicada"}`,
                 } },
               } },
             } },
+            teachingPlans: {
+              orderBy: { cycleNumber: "desc" },
+              select: {
+                id: true, cycleNumber: true, version: true, status: true,
+                createdAt: true, updatedAt: true, generatedAt: true,
+                administrativelyClosedAt: true, administrativeCloseReason: true, administrativeCloseNotes: true,
+                reusedFromTeachingPlanId: true,
+                administrativelyClosedBy: { select: { id: true, displayName: true } },
+                reviewWorkflow: { select: { id: true, status: true, startedAt: true, completedAt: true } },
+              },
+            },
           },
         }),
         database.generationInstruction.findMany({ orderBy: [{ key: "asc" }, { version: "desc" }] }),
@@ -4596,6 +4634,136 @@ URL adicional: ${body.url || "No indicada"}`,
       });
       return;
     }
+
+    const teachingPlanCycleCloseAdminMatch = requestUrl.pathname.match(
+      /^\/api\/admin\/projects\/([0-9a-f-]+)\/teaching-plan\/cycle\/close$/i,
+    );
+    if (request.method === "POST" && teachingPlanCycleCloseAdminMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const projectId = z.string().uuid().parse(teachingPlanCycleCloseAdminMatch[1]);
+      const body = z.object({
+        reason: z.string().trim().min(5, "Registre un motivo de al menos 5 caracteres.").max(500),
+        notes: z.string().trim().max(2000).optional().nullable(),
+      }).parse(await readJsonBody(request));
+      const project = await database.project.findUnique({
+        where: { id: projectId },
+        include: {
+          teachingPlan: { include: { reviewWorkflow: { select: { id: true, status: true } } } },
+        },
+      });
+      if (!project) { json(response, 404, { error: "La asignatura no existe." }); return; }
+      if (!project.teachingPlan) {
+        json(response, 409, { error: "La asignatura no tiene un ciclo actual de Plan Docente para cerrar.", code: "TEACHING_PLAN_CYCLE_NOT_FOUND" });
+        return;
+      }
+      if (project.teachingPlan.administrativelyClosedAt) {
+        json(response, 409, { error: "El ciclo actual del Plan Docente ya fue cerrado administrativamente.", code: "TEACHING_PLAN_CYCLE_ALREADY_CLOSED" });
+        return;
+      }
+      const closedAt = new Date();
+      const saved = await database.$transaction(async (transaction) => {
+        const plan = await transaction.teachingPlan.update({
+          where: { id: project.teachingPlan!.id },
+          data: {
+            administrativelyClosedAt: closedAt,
+            administrativelyClosedById: admin.id,
+            administrativeCloseReason: body.reason,
+            administrativeCloseNotes: body.notes || null,
+          },
+        });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id,
+          action: "TEACHING_PLAN_CYCLE_ADMIN_CLOSED",
+          entityType: "TeachingPlan",
+          entityId: project.teachingPlan!.id,
+          details: {
+            projectId: project.id,
+            cycleNumber: project.teachingPlan!.cycleNumber,
+            academicStatus: project.teachingPlan!.status,
+            workflowStatus: project.teachingPlan!.reviewWorkflow?.status || null,
+            reason: body.reason,
+            notes: body.notes || null,
+          },
+        } });
+        return plan;
+      });
+      json(response, 200, {
+        ok: true,
+        cycle: {
+          id: saved.id,
+          cycleNumber: saved.cycleNumber,
+          status: saved.status,
+          administrativelyClosedAt: saved.administrativelyClosedAt?.toISOString() || null,
+          administrativeCloseReason: saved.administrativeCloseReason,
+        },
+      });
+      return;
+    }
+
+    const teachingPlanCycleEnableNextAdminMatch = requestUrl.pathname.match(
+      /^\/api\/admin\/projects\/([0-9a-f-]+)\/teaching-plan\/cycle\/enable-next$/i,
+    );
+    if (request.method === "POST" && teachingPlanCycleEnableNextAdminMatch) {
+      const admin = await requireUser(request);
+      if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
+      const projectId = z.string().uuid().parse(teachingPlanCycleEnableNextAdminMatch[1]);
+      const project = await database.project.findUnique({
+        where: { id: projectId },
+        include: {
+          teachingPlan: true,
+          weeks: { select: { status: true, draftContent: true, approvedContent: true } },
+        },
+      });
+      if (!project) { json(response, 404, { error: "La asignatura no existe." }); return; }
+      const latestCycle = await database.teachingPlan.findFirst({
+        where: { projectId },
+        orderBy: { cycleNumber: "desc" },
+        select: { id: true, cycleNumber: true, administrativelyClosedAt: true },
+      });
+      if (!project.currentTeachingPlanId) {
+        if (latestCycle?.administrativelyClosedAt) {
+          json(response, 200, { ok: true, alreadyEnabled: true, nextCycleNumber: latestCycle.cycleNumber + 1 });
+          return;
+        }
+        json(response, 409, { error: "No existe un ciclo cerrado del Plan Docente desde el cual habilitar un nuevo proceso.", code: "TEACHING_PLAN_CYCLE_NOT_CLOSED" });
+        return;
+      }
+      if (!project.teachingPlan?.administrativelyClosedAt) {
+        json(response, 409, { error: "Primero cierre administrativamente el ciclo actual del Plan Docente.", code: "TEACHING_PLAN_CYCLE_NOT_CLOSED" });
+        return;
+      }
+      const guideStarted = project.weeks.some((week) =>
+        week.status !== "PENDING" || Boolean(week.draftContent) || Boolean(week.approvedContent));
+      if (guideStarted) {
+        json(response, 409, {
+          error: "La Guía Didáctica ya tiene contenido asociado al ciclo actual del Plan Docente. No se habilitó un nuevo ciclo para evitar romper su trazabilidad.",
+          code: "TEACHING_PLAN_CYCLE_GUIDE_ALREADY_STARTED",
+        });
+        return;
+      }
+      const nextCycleNumber = (latestCycle?.cycleNumber ?? project.teachingPlan.cycleNumber) + 1;
+      await database.$transaction(async (transaction) => {
+        await transaction.project.update({
+          where: { id: project.id },
+          data: { currentTeachingPlanId: null, currentStep: 4 },
+        });
+        await transaction.auditLog.create({ data: {
+          userId: admin.id,
+          action: "TEACHING_PLAN_NEXT_CYCLE_ENABLED",
+          entityType: "Project",
+          entityId: project.id,
+          details: {
+            previousTeachingPlanId: project.teachingPlan!.id,
+            previousCycleNumber: project.teachingPlan!.cycleNumber,
+            nextCycleNumber,
+          },
+        } });
+      });
+      json(response, 200, { ok: true, nextCycleNumber });
+      return;
+    }
+
     if (request.method === "GET" && requestUrl.pathname === "/api/admin/academic-offer/template") {
       const admin = await requireUser(request);
       if (!isAdmin(admin)) { json(response, 403, { error: "Acceso exclusivo del administrador." }); return; }
@@ -6501,7 +6669,7 @@ URL adicional: ${body.url || "No indicada"}`,
         where: { id: adaptationAnalyzeMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: {
           academicOffering: { include: academicOfferingInclude },
-          teachingPlan: true,
+          teachingPlan: { include: { reviewWorkflow: true } },
           weeks: { select: { status: true, draftContent: true, approvedContent: true } },
           legacyDocuments: { where: { active: true }, orderBy: { createdAt: "desc" } },
         },
@@ -6571,8 +6739,11 @@ URL adicional: ${body.url || "No indicada"}`,
           weeks: project.totalWeeks, subjectType: project.subjectType,
           subjectTypeLabel: project.academicOffering.subjectType.name,
         };
+        const lockedTemplateSnapshotId = project.teachingPlan && (project.teachingPlan.teacherReviewedAt || project.teachingPlan.reviewWorkflow)
+          ? project.teachingPlan.templateSnapshotId
+          : null;
         const [planContext, functionalSpecifications] = await Promise.all([
-          activePlanContext(context),
+          activePlanContext(context, lockedTemplateSnapshotId),
           activeFunctionalSpecifications(context, "PLAN_ADAPTATION"),
         ]);
         if (!functionalSpecifications.length) {
@@ -6866,8 +7037,11 @@ ${planContext.instructions}`,
         throw Object.assign(new Error(`No se puede aprobar: ${pending.length} cambio(s) siguen pendientes, rechazados o solicitados para regeneración.`), { statusCode: 422 });
       }
       if (proposal.target === "GUIDE") {
-        const teachingPlan = await database.teachingPlan.findUnique({ where: { projectId: proposal.projectId } });
-        if (!teachingPlan) throw Object.assign(new Error("El Plan Docente modular debe existir antes de aprobar la adaptación de la guía."), { statusCode: 409 });
+        const planProject = await database.project.findUnique({
+          where: { id: proposal.projectId },
+          select: { currentTeachingPlanId: true },
+        });
+        if (!planProject?.currentTeachingPlanId) throw Object.assign(new Error("El Plan Docente modular debe existir antes de aprobar la adaptación de la guía."), { statusCode: 409 });
       }
       const approvedAt = new Date();
       const approved = await database.$transaction(async (transaction) => {
@@ -7017,6 +7191,7 @@ ${body.instructions}` : ""}`;
           academicOffering: { include: academicOfferingInclude },
           bibliographyEntries: { orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }] },
           weeks: { select: { status: true, draftContent: true, approvedContent: true } },
+          teachingPlan: { include: { reviewWorkflow: { select: { id: true, status: true } } } },
         },
       });
       if (!project) {
@@ -7041,6 +7216,18 @@ ${body.instructions}` : ""}`;
           ok: true,
           reviewedAt: project.institutionalDataReviewedAt?.toISOString() ?? new Date().toISOString(),
           planPreserved: true,
+        });
+        return;
+      }
+      const institutionallyFixedPlan = Boolean(project.teachingPlan && (
+        project.teachingPlan.teacherReviewedAt ||
+        project.teachingPlan.reviewWorkflow ||
+        project.teachingPlan.administrativelyClosedAt
+      ));
+      if (institutionallyFixedPlan) {
+        json(response, 409, {
+          error: "El Plan Docente ya forma parte de un ciclo institucional. Para realizar cambios estructurales en la ficha base, cierre administrativamente el proceso actual e inicie un nuevo ciclo.",
+          code: "PLAN_DOCENTE_CICLO_INSTITUCIONAL",
         });
         return;
       }
@@ -7072,7 +7259,13 @@ ${body.instructions}` : ""}`;
             shortCv: body.teacherProfile.shortCv,
           },
         });
-        await transaction.teachingPlan.deleteMany({ where: { projectId: project.id } });
+        if (project.teachingPlan) {
+          await transaction.project.update({
+            where: { id: project.id },
+            data: { currentTeachingPlanId: null },
+          });
+          await transaction.teachingPlan.delete({ where: { id: project.teachingPlan.id } });
+        }
         await transaction.matrix.deleteMany({ where: { projectId: project.id } });
         await transaction.projectWeek.deleteMany({ where: { projectId: project.id } });
         await transaction.canonicalGuideDocument.deleteMany({ where: { projectId: project.id } });
@@ -7140,7 +7333,7 @@ ${body.instructions}` : ""}`;
         where: { id: teachingPlanGenerateMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
         include: {
           academicOffering: { include: academicOfferingInclude },
-          teachingPlan: true,
+          teachingPlan: { include: { reviewWorkflow: true } },
           weeks: { select: { status: true, draftContent: true, approvedContent: true } },
         },
       });
@@ -7176,10 +7369,14 @@ ${body.instructions}` : ""}`;
         weeks: project.totalWeeks, subjectType: project.subjectType,
         subjectTypeLabel: offering.subjectType.name,
       };
+      const lockedTemplateSnapshotId = project.teachingPlan && (project.teachingPlan.teacherReviewedAt || project.teachingPlan.reviewWorkflow)
+        ? project.teachingPlan.templateSnapshotId
+        : null;
       const [planContext, planGenerationSpecifications] = await Promise.all([
-        activePlanContext(context),
+        activePlanContext(context, lockedTemplateSnapshotId),
         activeFunctionalSpecifications(context, "PLAN_GENERATION"),
       ]);
+      const resolvedTemplateSnapshotId = lockedTemplateSnapshotId || planContext.template.id;
       const adaptationProposal = project.workflowMode === "ADAPTATION_16_TO_8"
         ? await latestApprovedAdaptationProposal(project.id, "PLAN")
         : null;
@@ -7240,7 +7437,14 @@ ${approvedAdaptationContext(adaptationProposal)}`
 
 ${functionalSpecificationContext(planGenerationSpecifications)}
 
-${planContext.instructions}`,
+${planContext.instructions}
+
+REGLA SEMÁNTICA OBLIGATORIA PARA ACTIVIDADES EVALUADAS:
+- Actividad: acción académica que debe realizar el estudiante.
+- Estrategias de trabajo: directrices, pasos, procedimiento u orientaciones que indican CÓMO REALIZA el estudiante el trabajo.
+- Entregable: producto, resultado o evidencia concreta y verificable que el estudiante debe PRESENTAR como resultado de la actividad.
+- Instrumento de evaluación: medio con el que se valora el entregable o desempeño.
+El entregable indica QUÉ PRESENTA el estudiante. Las estrategias de trabajo indican CÓMO REALIZA el trabajo. No los confunda ni copie el mismo texto en ambos campos.`,
         input: [{
           role: "user",
           content: generationContent,
@@ -7293,33 +7497,52 @@ ${planContext.instructions}`,
         ...(adaptationProposal?.specificationSnapshotIds || []),
       ])];
       const savedPlan = await database.$transaction(async (transaction) => {
-        const previous = await transaction.teachingPlan.findUnique({ where: { projectId: project.id } });
-        const plan = await transaction.teachingPlan.upsert({
-          where: { projectId: project.id },
-          update: {
-            content: generated as unknown as Prisma.InputJsonValue,
-            version: { increment: 1 }, status: "DRAFT", generatedAt: new Date(),
-            templateSnapshotId: planContext.template.id,
-            promptSnapshotId: planContext.prompt.id,
-            evaluationPolicySnapshotId: evaluationPolicy.id,
-            documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
-            specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
-            teacherReviewedAt: null,
-            teacherReviewNotes: null,
-            methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
-            planningApprovedAt: null,
-          },
-          create: {
-            projectId: project.id, content: generated as unknown as Prisma.InputJsonValue,
-            version: 1, status: "DRAFT", templateSnapshotId: planContext.template.id,
-            promptSnapshotId: planContext.prompt.id,
-            evaluationPolicySnapshotId: evaluationPolicy.id,
-            documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
-            specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
-            methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
-            planningApprovedAt: null,
-          },
-        });
+        const previous = project.teachingPlan
+          ? await transaction.teachingPlan.findUnique({ where: { id: project.teachingPlan.id } })
+          : null;
+        const plan = previous
+          ? await transaction.teachingPlan.update({
+              where: { id: previous.id },
+              data: {
+                content: generated as unknown as Prisma.InputJsonValue,
+                version: { increment: 1 }, status: "DRAFT", generatedAt: new Date(),
+                templateSnapshotId: resolvedTemplateSnapshotId,
+                promptSnapshotId: planContext.prompt.id,
+                evaluationPolicySnapshotId: evaluationPolicy.id,
+                documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
+                specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
+                teacherReviewedAt: null,
+                teacherReviewNotes: null,
+                methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
+                planningApprovedAt: null,
+              },
+            })
+          : await (async () => {
+              const latestCycle = await transaction.teachingPlan.findFirst({
+                where: { projectId: project.id },
+                orderBy: { cycleNumber: "desc" },
+                select: { cycleNumber: true },
+              });
+              const created = await transaction.teachingPlan.create({
+                data: {
+                  projectId: project.id,
+                  cycleNumber: (latestCycle?.cycleNumber ?? 0) + 1,
+                  content: generated as unknown as Prisma.InputJsonValue,
+                  version: 1, status: "DRAFT", templateSnapshotId: resolvedTemplateSnapshotId,
+                  promptSnapshotId: planContext.prompt.id,
+                  evaluationPolicySnapshotId: evaluationPolicy.id,
+                  documentSnapshotIds: planContext.institutionalDocuments.map((item) => item.id),
+                  specificationSnapshotIds: teachingPlanSpecificationSnapshotIds,
+                  methodologyApprovedAt: generationOptions.mode === "PLANNING" ? new Date() : null,
+                  planningApprovedAt: null,
+                },
+              });
+              await transaction.project.update({
+                where: { id: project.id },
+                data: { currentTeachingPlanId: created.id },
+              });
+              return created;
+            })();
         await replaceTeachingPlanEvaActivities(transaction, plan.id, generated);
         await transaction.matrix.deleteMany({ where: { projectId: project.id } });
         await transaction.matrix.create({
@@ -7351,18 +7574,18 @@ ${planContext.instructions}`,
         });
         return plan;
       });
-      await buildAndPersistCanonicalTeachingPlan(project.id);
+      const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
       json(response, 201, {
         ok: true, teachingPlan: {
           content: generated, version: savedPlan.version, status: savedPlan.status,
           reviewedAt: null, reviewNotes: "", reviewChecks,
           methodologyApprovedAt: savedPlan.methodologyApprovedAt?.toISOString() || null,
           planningApprovedAt: savedPlan.planningApprovedAt?.toISOString() || null,
-          templateProfile: planContext.templateProfile,
-          templateSnapshot: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
-          activeTemplate: { id: planContext.template.id, title: planContext.template.title, version: planContext.template.version, checksum: planContext.template.checksum },
+          templateProfile: canonicalBundle.templateProfile,
+          templateSnapshot: canonicalBundle.canonical.format.snapshot,
+          activeTemplate: canonicalBundle.canonical.format.active,
           evaluationPolicy: teachingPlanEvaluationPolicyApiView(evaluationPolicy),
-          templateOutdated: false,
+          templateOutdated: canonicalBundle.canonical.format.outdated,
         },
         matrixRows: rows,
         downloadFormats: await teachingPlanDownloadFormats(),
@@ -7540,6 +7763,7 @@ ${planContext.instructions}`,
             ...activity,
             activity: linkedEvaluationDetail?.description || body.evaluatedActivity.activity,
             workStrategies: body.evaluatedActivity.workStrategies,
+            deliverable: body.evaluatedActivity.deliverable,
             instrument: body.evaluatedActivity.instrumentConfig.title,
             instrumentConfig: body.evaluatedActivity.instrumentConfig,
           };
@@ -8065,6 +8289,115 @@ Indicaciones del profesor: ${body.instructions}`;
         }
       });
       json(response, 200, { ok: true, corrections: await teachingPlanTeacherCorrections(workflow.id) });
+      return;
+    }
+
+    const teachingPlanAppliedFormatMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/applied-format$/i,
+    );
+    if (request.method === "GET" && teachingPlanAppliedFormatMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: {
+          id: teachingPlanAppliedFormatMatch[1],
+          ownerId: user.id,
+          status: { not: "ARCHIVED" },
+        },
+        include: {
+          teachingPlan: {
+            include: { canonicalDocument: true },
+          },
+        },
+      });
+      if (!project?.teachingPlan) {
+        json(response, 404, { error: "El Plan Docente todavía no ha sido generado." });
+        return;
+      }
+
+      let canonicalSnapshot: Record<string, unknown> | null = null;
+      const canonical = project.teachingPlan.canonicalDocument;
+      if (canonical?.document) {
+        const parsed = canonicalTeachingPlanDocumentSchema.safeParse(canonical.document);
+        if (parsed.success) canonicalSnapshot = parsed.data.format.snapshot;
+      }
+
+      let storedSnapshot: Record<string, unknown> | null = null;
+      if (!canonicalSnapshot && project.teachingPlan.templateSnapshotId) {
+        const template = await database.knowledgeDocument.findUnique({
+          where: { id: project.teachingPlan.templateSnapshotId },
+        });
+        if (template) {
+          storedSnapshot = {
+            id: template.id,
+            title: template.title,
+            version: template.version,
+            checksum: template.checksum,
+          };
+        }
+      }
+
+      json(response, 200, {
+        ok: true,
+        snapshot: canonicalSnapshot || storedSnapshot,
+        source: canonicalSnapshot ? "CANONICAL" : storedSnapshot ? "TEACHING_PLAN_SNAPSHOT" : "UNAVAILABLE",
+      });
+      return;
+    }
+
+    const teachingPlanValidationMatch = requestUrl.pathname.match(
+      /^\/api\/projects\/([0-9a-f-]+)\/teaching-plan\/validation$/i,
+    );
+    if (request.method === "GET" && teachingPlanValidationMatch) {
+      const user = await requireUser(request);
+      const project = await database.project.findFirst({
+        where: { id: teachingPlanValidationMatch[1], ownerId: user.id, status: { not: "ARCHIVED" } },
+        include: { teachingPlan: true },
+      });
+      if (!project?.teachingPlan) {
+        json(response, 404, { error: "El Plan Docente todavía no ha sido generado." });
+        return;
+      }
+
+      const plan = normalizedTeachingPlanContent(teachingPlanContentSchema.parse(project.teachingPlan.content));
+      const questionnaires = plan.evaluatedActivities
+        .filter((activity) => activity.instrumentConfig?.type === "QUESTIONNAIRE" && activity.instrumentConfig.questionnaire)
+        .map((activity) => {
+          const context = teachingPlanQuestionnaireContext(plan, activity.code);
+          return {
+            code: activity.code,
+            week: activity.week,
+            activity: activity.activity,
+            questionnaireQuestionCount: activity.instrumentConfig!.questionnaire!.questionCount,
+            authorizedTopics: context.authorizedTopics,
+          };
+        });
+
+      const [banks, institutionalMinimum] = await Promise.all([
+        questionnaires.length
+          ? database.teachingPlanQuestionBank.findMany({
+              where: {
+                teachingPlanId: project.teachingPlan.id,
+                evaluatedCode: { in: questionnaires.map((activity) => activity.code) },
+              },
+              include: { _count: { select: { questions: true } } },
+            })
+          : Promise.resolve([]),
+        teachingPlanQuestionBankMinimum(),
+      ]);
+
+      const check = teachingPlanQuestionBankReadinessCheck({
+        questionnaires,
+        banks: banks.map((bank) => ({
+          evaluatedCode: bank.evaluatedCode,
+          status: bank.status,
+          questionCount: bank._count.questions,
+          minimumRequired: bank.minimumRequired,
+          topicScope: bank.topicScope,
+        })),
+        institutionalMinimum,
+      });
+
+      json(response, 200, { ok: true, check });
       return;
     }
 
@@ -8740,7 +9073,7 @@ Indicaciones del profesor: ${body.instructions}`;
       const canonicalBundle = await buildAndPersistCanonicalTeachingPlan(project.id);
       let logo: Awaited<ReturnType<typeof extractTemplateLogo>>;
       try { const original = await knowledgeOriginalFile(canonicalBundle.template); const source = await readFile(new URL(`../${original.storagePath}`, import.meta.url)); logo = await extractTemplateLogo(source); } catch { logo = undefined; }
-      const docxBytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo));
+      const docxBytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo, canonicalBundle.templateProfile));
       let pdfBytes: Buffer;
       try {
         pdfBytes = Buffer.from(await docxToPdfBytes(docxBytes));
@@ -8804,7 +9137,7 @@ Indicaciones del profesor: ${body.instructions}`;
       } catch {
         logo = undefined;
       }
-      const bytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo));
+      const bytes = await buildTeachingPlanWord(canonicalTeachingPlanToWordInput(canonicalBundle.canonical, logo, canonicalBundle.templateProfile));
       const name = `plan-docente-${project.subjectCode}`.replace(/[^a-zA-Z0-9_-]/g, "_");
       response.writeHead(200, {
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -10082,12 +10415,14 @@ ${bibliographyContext}`,
   } catch (error) {
     console.error("Error al procesar la solicitud:", error);
 
+    const serviceError = userFacingServiceError(error);
     const prismaCode = (error as { code?: string }).code;
-    const statusCode = Number(
+    const fallbackStatusCode = Number(
       (error as { statusCode?: number }).statusCode ??
       (error instanceof z.ZodError ? 400 : prismaCode === "P2002" ? 409 : prismaCode === "P2025" ? 404 : prismaCode === "P2003" ? 409 : 500),
     );
-    const publicMessage = error instanceof z.ZodError
+    const statusCode = serviceError?.statusCode ?? fallbackStatusCode;
+    const validationMessage = error instanceof z.ZodError
       ? error.issues[0]?.message ?? "Los datos enviados no son válidos."
       : prismaCode === "P2002"
         ? "Ya existe un registro con el mismo código, nombre o combinación académica."
@@ -10095,20 +10430,37 @@ ${bibliographyContext}`,
           ? "El registro solicitado no existe."
           : prismaCode === "P2003"
             ? "El registro está relacionado con otros datos y no puede eliminarse."
-            : error instanceof Error ? error.message : "Error interno del servidor";
+            : error instanceof Error ? error.message : "No fue posible completar la solicitud.";
+
+    const publicError = serviceError ?? (statusCode >= 500
+      ? unexpectedUserFacingError()
+      : {
+          statusCode,
+          code: error instanceof z.ZodError ? "VALIDATION_ERROR" : String((error as { code?: string }).code || "REQUEST_REJECTED"),
+          eyebrow: "Validación del proceso",
+          title: "No se puede continuar",
+          error: validationMessage,
+          guidance: "Revise la información indicada y vuelva a intentarlo.",
+          actionLabel: "Corregir",
+          retryable: false,
+        });
+
     if (!response.headersSent) {
       response.writeHead(statusCode, {
         "Content-Type": "application/json; charset=utf-8",
+        "Cache-Control": "no-store",
       });
     }
 
-    response.end(
-      JSON.stringify({
-        error: statusCode >= 400 && statusCode < 500
-          ? publicMessage
-          : "Error interno del servidor",
-      }),
-    );
+    response.end(JSON.stringify({
+      error: publicError.error,
+      code: publicError.code,
+      eyebrow: publicError.eyebrow,
+      title: publicError.title,
+      guidance: publicError.guidance,
+      actionLabel: publicError.actionLabel,
+      retryable: publicError.retryable,
+    }));
   }
 });
 

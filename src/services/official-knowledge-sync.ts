@@ -474,7 +474,7 @@ export async function syncOfficialKnowledgeFromDatabase() {
   const previous = await previousManifest<OfficialKnowledgeManifest>(OFFICIAL_MANIFEST_PATH);
   const currentPaths = new Set<string>();
   const manifestDocuments: OfficialKnowledgeManifestDocument[] = [];
-  const canonicalUpdates: Array<{ id: string; storagePath: string; checksum: string }> = [];
+  // V33.0.5.2: canonical Git copy must not replace historical storagePath
   let copied = 0;
   let recoveredFromOfficial = 0;
 
@@ -486,6 +486,12 @@ export async function syncOfficialKnowledgeFromDatabase() {
     const targetPath = absoluteProjectPath(canonicalPath);
     const sourcePath = check.status === "OFFICIAL_FALLBACK" ? targetPath : storedSourcePath;
 
+    const sourceBytes = await readFile(sourcePath);
+    const sourceChecksum = sha256(sourceBytes);
+    if (document.checksum && document.checksum !== sourceChecksum) {
+      throw new Error(`El archivo fisico de «${document.title} · v${document.version}» no coincide con su checksum historico. BD=${document.checksum}; archivo=${sourceChecksum}; ruta=${document.storagePath}. No se sincronizara una version distinta hacia Git.`);
+    }
+
     if (sourcePath !== targetPath) {
       await copyFile(sourcePath, targetPath);
       copied += 1;
@@ -493,26 +499,16 @@ export async function syncOfficialKnowledgeFromDatabase() {
       recoveredFromOfficial += 1;
     }
 
-    const bytes = await readFile(targetPath);
+    const bytes = sourcePath === targetPath ? sourceBytes : await readFile(targetPath);
     const checksum = sha256(bytes);
 
     currentPaths.add(canonicalPath);
-    canonicalUpdates.push({ id: document.id, storagePath: canonicalPath, checksum });
     manifestDocuments.push(
       manifestDocumentFrom({
         ...document,
         storagePath: canonicalPath,
         checksum,
       }),
-    );
-  }
-
-  if (canonicalUpdates.length) {
-    await database.$transaction(
-      canonicalUpdates.map((item) => database.knowledgeDocument.update({
-        where: { id: item.id },
-        data: { storagePath: item.storagePath, checksum: item.checksum },
-      })),
     );
   }
 
@@ -538,7 +534,7 @@ export async function syncOfficialKnowledgeFromDatabase() {
     documents: manifest.documents.length,
     copied,
     recoveredFromOfficial,
-    relinkedDatabaseRecords: canonicalUpdates.length,
+    relinkedDatabaseRecords: 0,
     removed,
     manifestPath: "knowledge/official/manifest.json",
     specifications: specificationSync.specifications,

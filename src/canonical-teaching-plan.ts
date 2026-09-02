@@ -19,7 +19,7 @@ import {
 import type { PlanTemplateProfile } from "./academic/plan-template-profile.js";
 import type { TeachingPlanWordInput } from "./teaching-plan-word.js";
 
-export const CANONICAL_TEACHING_PLAN_SCHEMA_VERSION = "1.1.0" as const;
+export const CANONICAL_TEACHING_PLAN_SCHEMA_VERSION = "1.2.0" as const;
 export const CANONICAL_TEACHING_PLAN_SCHEMA_PATH = "/schemas/teaching-plan-canonical-v1.schema.json" as const;
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
@@ -30,7 +30,7 @@ const canonicalTemplateSnapshotSchema = z.strictObject({
   title: z.string().min(1),
   version: z.number().int().positive(),
   checksum: z.string().nullable(),
-  profile: z.enum(["CURRENT_MODULAR", "LEGACY_MODULAR"]),
+  profile: z.enum(["CURRENT_MODULAR", "LEGACY_MODULAR", "DYNAMIC_MODULAR"]),
 });
 
 const canonicalBibliographyEntrySchema = z.strictObject({
@@ -110,6 +110,7 @@ const canonicalTeachingPlanBaseSchema = z.strictObject({
     acdHours: z.number().int().nonnegative(),
     apeHours: z.number().int().nonnegative(),
     aaHours: z.number().int().nonnegative(),
+    totalHours: z.number().int().nonnegative(),
     semester: z.string().nullable(),
     prerequisites: z.array(z.string()),
     learningOutcomes: z.array(z.string().min(1)).min(1),
@@ -374,6 +375,7 @@ export function buildCanonicalTeachingPlan(source: CanonicalTeachingPlanSource):
       acdHours: source.offering.acdHours,
       apeHours: source.offering.apeHours,
       aaHours: source.offering.aaHours,
+      totalHours: source.offering.acdHours + source.offering.apeHours + source.offering.aaHours,
       semester: source.offering.semester,
       prerequisites: source.offering.prerequisites,
       learningOutcomes: source.offering.learningOutcomes,
@@ -421,6 +423,7 @@ export function buildCanonicalTeachingPlan(source: CanonicalTeachingPlanSource):
 export function canonicalTeachingPlanToWordInput(
   document: CanonicalTeachingPlan,
   logo?: TeachingPlanWordInput["logo"],
+  detectedTemplateProfile?: PlanTemplateProfile,
 ): TeachingPlanWordInput {
   return {
     project: {
@@ -435,15 +438,17 @@ export function canonicalTeachingPlanToWordInput(
       totalWeeks: document.metadata.totalWeeks,
     },
     period: document.academicOffer.period,
-    templateProfile: {
-      identificationColumns: document.format.snapshot.profile === "CURRENT_MODULAR" ? 4 : 0,
-      scheduleColumns: document.format.snapshot.profile === "CURRENT_MODULAR" ? 7 : 9,
-      scheduleIncludesInstrument: document.format.snapshot.profile === "LEGACY_MODULAR",
-      scheduleIncludesGrade: document.format.snapshot.profile === "LEGACY_MODULAR",
-      evaluationColumns: document.format.snapshot.profile === "CURRENT_MODULAR" ? 7 : 6,
-      evaluationIncludesWorkStrategies: document.format.snapshot.profile === "CURRENT_MODULAR",
-      profile: document.format.snapshot.profile,
-    },
+    templateProfile: detectedTemplateProfile ?? (document.format.snapshot.profile === "CURRENT_MODULAR" ? {
+      identificationColumns: 4, identificationIncludesTotalHours: false, scheduleColumns: 7, scheduleIncludesInstrument: false, scheduleIncludesGrade: false,
+      scheduleFields: ["WEEK", "CONTENTS", "ACD_HOURS", "APE_HOURS", "AA_HOURS", "ACTIVITIES", "RESOURCES"],
+      evaluationColumns: 7, evaluationIncludesWorkStrategies: true, evaluationIncludesDeliverable: false,
+      evaluationFields: ["COMPONENT", "ACTIVITY", "WORK_STRATEGIES", "INSTRUMENT", "WEEK", "GRADE", "WEIGHT"], confidence: 100, warnings: [], profile: "CURRENT_MODULAR",
+    } : document.format.snapshot.profile === "LEGACY_MODULAR" ? {
+      identificationColumns: 0, identificationIncludesTotalHours: false, scheduleColumns: 9, scheduleIncludesInstrument: true, scheduleIncludesGrade: true,
+      scheduleFields: ["WEEK", "CONTENTS", "ACD_HOURS", "APE_HOURS", "AA_HOURS", "ACTIVITIES", "RESOURCES", "ASSESSMENT_INSTRUMENT", "GRADE"],
+      evaluationColumns: 6, evaluationIncludesWorkStrategies: false, evaluationIncludesDeliverable: false,
+      evaluationFields: ["COMPONENT", "ACTIVITY", "INSTRUMENT", "WEEK", "GRADE", "WEIGHT"], confidence: 100, warnings: [], profile: "LEGACY_MODULAR",
+    } : undefined),
     offering: {
       credits: document.academicOffer.credits,
       acdHours: document.academicOffer.acdHours,

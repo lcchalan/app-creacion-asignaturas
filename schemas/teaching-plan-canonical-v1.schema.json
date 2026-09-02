@@ -4,131 +4,736 @@
   "title": "Plan Docente canónico v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "schemaVersion", "documentType", "documentId", "projectId", "language", "status", "planVersion", "format", "metadata", "academicOffer", "contributionMappings", "teacher", "bibliography", "content", "evaluationPolicy", "questionBanks", "traceability"],
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "documentType",
+    "documentId",
+    "projectId",
+    "language",
+    "status",
+    "planVersion",
+    "format",
+    "metadata",
+    "academicOffer",
+    "contributionMappings",
+    "teacher",
+    "bibliography",
+    "content",
+    "evaluationPolicy",
+    "questionBanks",
+    "traceability"
+  ],
   "properties": {
-    "$schema": { "const": "/schemas/teaching-plan-canonical-v1.schema.json" },
-    "schemaVersion": { "const": "1.1.0" },
-    "documentType": { "const": "teaching-plan" },
-    "documentId": { "type": "string", "format": "uuid" },
-    "projectId": { "type": "string", "format": "uuid" },
-    "language": { "const": "es" },
-    "status": { "enum": ["draft", "in_review", "changes_requested", "approved", "archived"] },
-    "planVersion": { "type": "integer", "minimum": 1 },
+    "$schema": {
+      "const": "/schemas/teaching-plan-canonical-v1.schema.json"
+    },
+    "schemaVersion": {
+      "const": "1.2.0"
+    },
+    "documentType": {
+      "const": "teaching-plan"
+    },
+    "documentId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "projectId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "language": {
+      "const": "es"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "in_review",
+        "changes_requested",
+        "approved",
+        "archived"
+      ]
+    },
+    "planVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
     "format": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["snapshot", "active", "outdated"],
+      "required": [
+        "snapshot",
+        "active",
+        "outdated"
+      ],
       "properties": {
-        "snapshot": { "$ref": "#/$defs/templateSnapshot" },
-        "active": { "oneOf": [{ "$ref": "#/$defs/templateSnapshot" }, { "type": "null" }] },
-        "outdated": { "type": "boolean" }
+        "snapshot": {
+          "$ref": "#/$defs/templateSnapshot"
+        },
+        "active": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/templateSnapshot"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outdated": {
+          "type": "boolean"
+        }
       }
     },
     "metadata": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["projectName", "academicLevel", "faculty", "career", "professorName", "professorEmail", "subject", "modality", "academicPeriod", "totalWeeks"],
+      "required": [
+        "projectName",
+        "academicLevel",
+        "faculty",
+        "career",
+        "professorName",
+        "professorEmail",
+        "subject",
+        "modality",
+        "academicPeriod",
+        "totalWeeks"
+      ],
       "properties": {
-        "projectName": { "type": "string", "minLength": 1 },
-        "academicLevel": { "type": "string", "minLength": 1 },
-        "faculty": { "type": "string", "minLength": 1 },
-        "career": { "type": "string", "minLength": 1 },
-        "professorName": { "type": "string", "minLength": 1 },
-        "professorEmail": { "type": "string", "format": "email" },
+        "projectName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "academicLevel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "faculty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "career": {
+          "type": "string",
+          "minLength": 1
+        },
+        "professorName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "professorEmail": {
+          "type": "string",
+          "format": "email"
+        },
         "subject": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["code", "sisCode", "metacourseUrl", "name", "typeCode", "typeName", "category"],
+          "required": [
+            "code",
+            "sisCode",
+            "metacourseUrl",
+            "name",
+            "typeCode",
+            "typeName",
+            "category"
+          ],
           "properties": {
-            "code": { "type": "string" },
-            "sisCode": { "type": ["string", "null"] },
-            "metacourseUrl": { "type": ["string", "null"] },
-            "name": { "type": "string", "minLength": 1 },
-            "typeCode": { "type": "string", "minLength": 1 },
-            "typeName": { "type": "string", "minLength": 1 },
-            "category": { "enum": ["CONCEPTUAL", "ACTIVE", "INTEGRATING"] }
+            "code": {
+              "type": "string"
+            },
+            "sisCode": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "metacourseUrl": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "typeCode": {
+              "type": "string",
+              "minLength": 1
+            },
+            "typeName": {
+              "type": "string",
+              "minLength": 1
+            },
+            "category": {
+              "enum": [
+                "CONCEPTUAL",
+                "ACTIVE",
+                "INTEGRATING"
+              ]
+            }
           }
         },
-        "modality": { "type": "string", "minLength": 1 },
-        "academicPeriod": { "type": "string", "minLength": 1 },
-        "totalWeeks": { "type": "integer", "minimum": 1 }
+        "modality": {
+          "type": "string",
+          "minLength": 1
+        },
+        "academicPeriod": {
+          "type": "string",
+          "minLength": 1
+        },
+        "totalWeeks": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "academicOffer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["offeringCode", "credits", "acdHours", "apeHours", "aaHours", "semester", "prerequisites", "learningOutcomes", "unitContents", "period"],
+      "required": [
+        "offeringCode",
+        "credits",
+        "acdHours",
+        "apeHours",
+        "aaHours",
+        "totalHours",
+        "semester",
+        "prerequisites",
+        "learningOutcomes",
+        "unitContents",
+        "period"
+      ],
       "properties": {
-        "offeringCode": { "type": "string", "minLength": 1 },
-        "credits": { "type": ["number", "null"] },
-        "acdHours": { "type": "integer", "minimum": 0 },
-        "apeHours": { "type": "integer", "minimum": 0 },
-        "aaHours": { "type": "integer", "minimum": 0 },
-        "semester": { "type": ["string", "null"] },
-        "prerequisites": { "type": "array", "items": { "type": "string" } },
-        "learningOutcomes": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-        "unitContents": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "offeringCode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "credits": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "acdHours": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "apeHours": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "aaHours": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "semester": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "learningOutcomes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unitContents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "period": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["startsAt", "endsAt", "bimestralEvaluationStartAt", "bimestralEvaluationEndAt", "recoveryEvaluationStartAt", "recoveryEvaluationEndAt"],
+          "required": [
+            "startsAt",
+            "endsAt",
+            "bimestralEvaluationStartAt",
+            "bimestralEvaluationEndAt",
+            "recoveryEvaluationStartAt",
+            "recoveryEvaluationEndAt"
+          ],
           "properties": {
-            "startsAt": { "$ref": "#/$defs/nullableDateTime" },
-            "endsAt": { "$ref": "#/$defs/nullableDateTime" },
-            "bimestralEvaluationStartAt": { "$ref": "#/$defs/nullableDateTime" },
-            "bimestralEvaluationEndAt": { "$ref": "#/$defs/nullableDateTime" },
-            "recoveryEvaluationStartAt": { "$ref": "#/$defs/nullableDateTime" },
-            "recoveryEvaluationEndAt": { "$ref": "#/$defs/nullableDateTime" }
+            "startsAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            },
+            "endsAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            },
+            "bimestralEvaluationStartAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            },
+            "bimestralEvaluationEndAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            },
+            "recoveryEvaluationStartAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            },
+            "recoveryEvaluationEndAt": {
+              "$ref": "#/$defs/nullableDateTime"
+            }
           }
+        },
+        "totalHours": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
-    "contributionMappings": { "type": "array", "minItems": 1 },
-    "teacher": { "type": "object", "required": ["name", "email", "profile"], "additionalProperties": false, "properties": { "name": { "type": "string" }, "email": { "type": "string", "format": "email" }, "profile": { "type": "object" } } },
-    "bibliography": { "type": "object", "required": ["guideReference", "guideReferenceImportance", "basicText", "complementaryText", "reaText", "entries"], "additionalProperties": false, "properties": { "guideReference": { "type": "string" }, "guideReferenceImportance": { "type": "string" }, "basicText": { "type": "string" }, "complementaryText": { "type": "string" }, "reaText": { "type": "string" }, "entries": { "type": "array" } } },
-    "content": { "type": "object", "required": ["presentation", "guideTitle", "guideDescription", "sequences", "evaluatedActivities"], "properties": { "presentation": { "type": "string" }, "guideTitle": { "type": "string" }, "guideDescription": { "type": "string" }, "sequences": { "type": "array", "minItems": 1 }, "evaluatedActivities": { "type": "array", "minItems": 5, "maxItems": 5 }, "curricularAdaptations": { "type": "string" } } },
-    "evaluationPolicy": { "type": "object", "required": ["id", "category", "version", "title", "rules"], "additionalProperties": false, "properties": { "id": { "type": "string", "format": "uuid" }, "category": { "enum": ["CONCEPTUAL", "ACTIVE", "INTEGRATING"] }, "version": { "type": "integer", "minimum": 1 }, "title": { "type": "string" }, "rules": { "type": "array", "minItems": 5, "maxItems": 5 } } },
-    "questionBanks": { "type": "array", "items": { "$ref": "#/$defs/questionBank" } },
-    "traceability": { "type": "object", "required": ["templateSnapshotId", "promptSnapshot", "documentSnapshotIds", "specificationSnapshotIds", "generatedAt", "createdAt", "updatedAt", "teacherReviewedAt", "methodologyApprovedAt", "planningApprovedAt"], "additionalProperties": false, "properties": { "templateSnapshotId": { "type": "string", "format": "uuid" }, "promptSnapshot": { "type": ["object", "null"] }, "documentSnapshotIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }, "specificationSnapshotIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }, "generatedAt": { "$ref": "#/$defs/dateTime" }, "createdAt": { "$ref": "#/$defs/dateTime" }, "updatedAt": { "$ref": "#/$defs/dateTime" }, "teacherReviewedAt": { "$ref": "#/$defs/nullableDateTime" }, "methodologyApprovedAt": { "$ref": "#/$defs/nullableDateTime" }, "planningApprovedAt": { "$ref": "#/$defs/nullableDateTime" } } }
+    "contributionMappings": {
+      "type": "array",
+      "minItems": 1
+    },
+    "teacher": {
+      "type": "object",
+      "required": [
+        "name",
+        "email",
+        "profile"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "profile": {
+          "type": "object"
+        }
+      }
+    },
+    "bibliography": {
+      "type": "object",
+      "required": [
+        "guideReference",
+        "guideReferenceImportance",
+        "basicText",
+        "complementaryText",
+        "reaText",
+        "entries"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "guideReference": {
+          "type": "string"
+        },
+        "guideReferenceImportance": {
+          "type": "string"
+        },
+        "basicText": {
+          "type": "string"
+        },
+        "complementaryText": {
+          "type": "string"
+        },
+        "reaText": {
+          "type": "string"
+        },
+        "entries": {
+          "type": "array"
+        }
+      }
+    },
+    "content": {
+      "type": "object",
+      "required": [
+        "presentation",
+        "guideTitle",
+        "guideDescription",
+        "sequences",
+        "evaluatedActivities"
+      ],
+      "properties": {
+        "presentation": {
+          "type": "string"
+        },
+        "guideTitle": {
+          "type": "string"
+        },
+        "guideDescription": {
+          "type": "string"
+        },
+        "sequences": {
+          "type": "array",
+          "minItems": 1
+        },
+        "evaluatedActivities": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5
+        },
+        "curricularAdaptations": {
+          "type": "string"
+        }
+      }
+    },
+    "evaluationPolicy": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "version",
+        "title",
+        "rules"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "category": {
+          "enum": [
+            "CONCEPTUAL",
+            "ACTIVE",
+            "INTEGRATING"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "rules": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5
+        }
+      }
+    },
+    "questionBanks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/questionBank"
+      }
+    },
+    "traceability": {
+      "type": "object",
+      "required": [
+        "templateSnapshotId",
+        "promptSnapshot",
+        "documentSnapshotIds",
+        "specificationSnapshotIds",
+        "generatedAt",
+        "createdAt",
+        "updatedAt",
+        "teacherReviewedAt",
+        "methodologyApprovedAt",
+        "planningApprovedAt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "templateSnapshotId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "promptSnapshot": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "documentSnapshotIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "specificationSnapshotIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "generatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "teacherReviewedAt": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "methodologyApprovedAt": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "planningApprovedAt": {
+          "$ref": "#/$defs/nullableDateTime"
+        }
+      }
+    }
   },
   "$defs": {
-    "dateTime": { "type": "string", "format": "date-time" },
-    "nullableDateTime": { "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }] },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "nullableDateTime": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/dateTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "templateSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "title", "version", "checksum", "profile"],
+      "required": [
+        "id",
+        "title",
+        "version",
+        "checksum",
+        "profile"
+      ],
       "properties": {
-        "id": { "type": "string", "format": "uuid" },
-        "title": { "type": "string", "minLength": 1 },
-        "version": { "type": "integer", "minimum": 1 },
-        "checksum": { "type": ["string", "null"] },
-        "profile": { "enum": ["CURRENT_MODULAR", "LEGACY_MODULAR"] }
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "checksum": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "profile": {
+          "enum": [
+            "CURRENT_MODULAR",
+            "LEGACY_MODULAR",
+            "DYNAMIC_MODULAR"
+          ]
+        }
       }
     },
-    "questionOption": { "type": "object", "additionalProperties": false, "required": ["id", "text", "matchText"], "properties": { "id": { "type": "string", "minLength": 1 }, "text": { "type": "string", "minLength": 1 }, "matchText": { "type": "string" } } },
-    "question": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "sortOrder", "type", "topic", "prompt", "options", "answerKey", "feedbackCorrect", "feedbackIncorrect", "source", "version"],
+    "questionOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "matchText"
+      ],
       "properties": {
-        "id": { "type": "string", "format": "uuid" }, "sortOrder": { "type": "integer", "minimum": 1 },
-        "type": { "enum": ["MULTIPLE_CHOICE_SINGLE", "MULTIPLE_CHOICE_MULTIPLE", "TRUE_FALSE", "FILL_BLANK", "MATCHING", "ORDERING"] },
-        "topic": { "type": "string", "minLength": 1 }, "prompt": { "type": "string", "minLength": 1 },
-        "options": { "type": "array", "items": { "$ref": "#/$defs/questionOption" } }, "answerKey": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-        "feedbackCorrect": { "type": "string", "minLength": 1 }, "feedbackIncorrect": { "type": "string", "minLength": 1 },
-        "source": { "enum": ["AI", "AI_REGENERATED", "TEACHER_EDITED"] }, "version": { "type": "integer", "minimum": 1 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "matchText": {
+          "type": "string"
+        }
+      }
+    },
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sortOrder",
+        "type",
+        "topic",
+        "prompt",
+        "options",
+        "answerKey",
+        "feedbackCorrect",
+        "feedbackIncorrect",
+        "source",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "sortOrder": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "type": {
+          "enum": [
+            "MULTIPLE_CHOICE_SINGLE",
+            "MULTIPLE_CHOICE_MULTIPLE",
+            "TRUE_FALSE",
+            "FILL_BLANK",
+            "MATCHING",
+            "ORDERING"
+          ]
+        },
+        "topic": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/questionOption"
+          }
+        },
+        "answerKey": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "feedbackCorrect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "feedbackIncorrect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "enum": [
+            "AI",
+            "AI_REGENERATED",
+            "TEACHER_EDITED"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "questionBank": {
-      "type": "object", "additionalProperties": false,
-      "required": ["id", "evaluatedCode", "minimumRequired", "topicScope", "typeConfiguration", "generationInstructions", "status", "version", "approvedAt", "questions"],
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "evaluatedCode",
+        "minimumRequired",
+        "topicScope",
+        "typeConfiguration",
+        "generationInstructions",
+        "status",
+        "version",
+        "approvedAt",
+        "questions"
+      ],
       "properties": {
-        "id": { "type": "string", "format": "uuid" }, "evaluatedCode": { "enum": ["AC1", "AC2", "AC3", "AC4", "AC5"] },
-        "minimumRequired": { "type": "integer", "minimum": 1 }, "topicScope": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-        "typeConfiguration": { "type": "array", "minItems": 1, "maxItems": 6, "items": { "type": "object", "additionalProperties": false, "required": ["type", "quantity"], "properties": { "type": { "enum": ["MULTIPLE_CHOICE_SINGLE", "MULTIPLE_CHOICE_MULTIPLE", "TRUE_FALSE", "FILL_BLANK", "MATCHING", "ORDERING"] }, "quantity": { "type": "integer", "minimum": 1, "maximum": 200 } } } },
-        "generationInstructions": { "type": "string" }, "status": { "enum": ["DRAFT", "GENERATED", "APPROVED", "NEEDS_REVIEW"] },
-        "version": { "type": "integer", "minimum": 1 }, "approvedAt": { "$ref": "#/$defs/nullableDateTime" },
-        "questions": { "type": "array", "items": { "$ref": "#/$defs/question" } }
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "evaluatedCode": {
+          "enum": [
+            "AC1",
+            "AC2",
+            "AC3",
+            "AC4",
+            "AC5"
+          ]
+        },
+        "minimumRequired": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "topicScope": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "typeConfiguration": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "quantity"
+            ],
+            "properties": {
+              "type": {
+                "enum": [
+                  "MULTIPLE_CHOICE_SINGLE",
+                  "MULTIPLE_CHOICE_MULTIPLE",
+                  "TRUE_FALSE",
+                  "FILL_BLANK",
+                  "MATCHING",
+                  "ORDERING"
+                ]
+              },
+              "quantity": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200
+              }
+            }
+          }
+        },
+        "generationInstructions": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "DRAFT",
+            "GENERATED",
+            "APPROVED",
+            "NEEDS_REVIEW"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/nullableDateTime"
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/question"
+          }
+        }
       }
     }
   }

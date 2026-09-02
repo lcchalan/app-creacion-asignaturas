@@ -928,16 +928,17 @@
                 <button class="button secondary" id="toggle-teaching-plan-validation" type="button" aria-expanded="false">Ver validación</button>
               </div>
               <aside class="teaching-plan-review-panel hidden" id="teaching-plan-review-panel" tabindex="-1">
-                <div class="teaching-plan-review-panel-heading"><h4>Validación del plan</h4><button class="icon-button" id="close-teaching-plan-validation" type="button" aria-label="Cerrar validación">×</button></div>
+                <div class="teaching-plan-review-panel-heading"><h4>Validación automática y revisión docente</h4><button class="icon-button" id="close-teaching-plan-validation" type="button" aria-label="Cerrar validación">×</button></div>
                 <div class="teaching-plan-review-checks" id="teaching-plan-review-checks"></div>
-                <label>Observaciones de la revisión
-                  <textarea id="teacher-plan-review-notes" maxlength="3000" placeholder="Opcional: registre observaciones o decisiones tomadas durante la revisión."></textarea>
+                <label><span>Observaciones de la revisión docente <span class="field-help">(opcional)</span></span>
+                  <textarea id="teacher-plan-review-notes" maxlength="3000" placeholder="Registre, si lo considera necesario, una aclaración o decisión tomada durante su revisión académica."></textarea>
+                  <small class="field-help" id="teacher-plan-review-notes-help">La observación quedará asociada a esta versión del Plan Docente.</small>
                 </label>
                 <label class="teaching-plan-review-confirm">
                   <input id="teacher-plan-review-confirm" type="checkbox">
-                  <span>Confirmo que revisé la información, la programación semanal, las actividades calificadas, la bibliografía y los datos del docente.</span>
+                  <span>Confirmo que he revisado el contenido académico del Plan Docente y que la planificación, las actividades, la evaluación, la bibliografía y la información docente son correctas.</span>
                 </label>
-                <button class="button approve" id="confirm-teaching-plan-review" type="button">Confirmar revisión del plan</button>
+                <button class="button approve" id="confirm-teaching-plan-review" type="button">Confirmar revisión docente</button>
                 <div class="teaching-plan-review-status" id="teaching-plan-review-status"></div>
               </aside>
               <section class="teaching-plan-download-footer" aria-label="Descargas del Plan Docente">
@@ -1067,7 +1068,8 @@
           <p class="notice compact">El instrumento se configura sobre 10 puntos para EVA. La calificación real de la actividad se calcula mediante regla de tres.</p>
           <p class="notice compact evaluated-activity-source-note">La descripción de la actividad evaluada se edita arriba, en la fila marcada como calificada. Ese texto es la fuente única y se refleja automáticamente en la sección E.</p>
           <input type="hidden" name="evaluatedActivity">
-          <label>Estrategias de trabajo · un ítem por línea *<textarea name="workStrategies" rows="4" maxlength="5000" placeholder="Una estrategia por línea"></textarea></label>
+          <label>Entregable · evidencia o producto que debe presentar el estudiante *<textarea name="deliverable" rows="3" maxlength="3000" placeholder="Ej.: Informe de análisis del caso en PDF"></textarea></label>
+          <label>Estrategias de trabajo · un ítem por línea *<textarea name="workStrategies" rows="4" maxlength="5000" placeholder="Describa pasos, directrices u orientaciones; una por línea"></textarea></label>
           <div class="two-cols">
             <label>Tipo de instrumento *<select name="instrumentType"><option value="QUESTIONNAIRE">Cuestionario</option><option value="RUBRIC">Rúbrica</option><option value="CHECKLIST">Lista de cotejo</option><option value="RATING_SCALE">Escala de valoración</option><option value="OTHER">Otro</option></select></label>
             <label>Nombre del instrumento *<input name="instrumentTitle" maxlength="300"></label>

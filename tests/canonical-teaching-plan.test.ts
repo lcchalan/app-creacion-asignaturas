@@ -64,7 +64,7 @@ function source(): CanonicalTeachingPlanSource {
       content: {
         presentation: "Presentación académica suficientemente extensa para validar el contrato canónico.", guideTitle: "Guía de Base de Datos", guideDescription: "Descripción académica suficiente para la validación.",
         sequences: [{ learningOutcome: "Aplica fundamentos", methodology: "Aprendizaje activo", tac: ["Aula virtual"], weeks }],
-        evaluatedActivities: rules.map((rule) => ({ ...rule, activity: `Actividad ${rule.code}`, workStrategies: "Trabajo guiado", instrument: "Rúbrica" })),
+        evaluatedActivities: rules.map((rule) => ({ ...rule, activity: `Actividad ${rule.code}`, workStrategies: "Trabajo guiado", deliverable: `Evidencia ${rule.code}`, instrument: "Rúbrica" })),
         curricularAdaptations: "Adaptaciones curriculares institucionales suficientemente extensas para validar el documento.",
       },
     },
@@ -86,6 +86,8 @@ test("crea un JSON canónico del Plan Docente independiente del formato de salid
   assert.equal(document.format.outdated, true);
   assert.equal(document.content.sequences[0]?.weeks.length, 8);
   assert.equal(document.evaluationPolicy.rules.reduce((sum, item) => sum + item.grade, 0), 10);
+  assert.equal(document.academicOffer.totalHours, 16);
+  assert.equal(document.content.evaluatedActivities[0]?.deliverable, "Evidencia AC1");
   assert.equal(canonicalTeachingPlanDocumentSchema.parse(document).documentId, ids.plan);
 });
 

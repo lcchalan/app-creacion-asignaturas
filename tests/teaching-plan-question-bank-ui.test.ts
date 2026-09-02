@@ -53,7 +53,12 @@ test("el banco presenta numeración académica, clave visual y cierre al aprobar
   assert.match(client, /correct-answer/);
   assert.match(styles, /question-bank-option-row\.correct-answer/);
   assert.match(client, /showMessage\("Banco guardado\."\)/);
-  assert.match(client, /showMessage\("Banco guardado\."\);\s*closeQuestionBankModal\(\)/s);
+  const bankSavedAt = client.indexOf('showMessage("Banco guardado.");');
+  const validationRefreshAt = client.indexOf("refreshTeachingPlanReviewReadiness", bankSavedAt);
+  const bankClosedAt = client.indexOf("closeQuestionBankModal();", bankSavedAt);
+  assert.ok(bankSavedAt >= 0);
+  assert.ok(bankClosedAt > bankSavedAt);
+  if (validationRefreshAt >= 0) assert.ok(bankClosedAt > validationRefreshAt);
 });
 
 test("el docente puede responder correcciones sin volver al inicio del Plan", () => {
